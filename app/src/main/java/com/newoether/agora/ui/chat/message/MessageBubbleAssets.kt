@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.newoether.agora.ui.components.LatexImageTransformer
-import com.newoether.agora.ui.components.isDisplayLatexLink
+import com.newoether.agora.ui.components.latexSourceForLink
 import com.newoether.agora.ui.chat.caseInsensitiveMatchRanges
 import com.newoether.agora.ui.chat.visibleMarkdownMatchRanges
 import com.newoether.agora.ui.theme.ChatType
@@ -139,17 +139,6 @@ internal fun ASTNode.needsListParagraphSpacer(): Boolean {
         .any { it.type == MarkdownElementTypes.PARAGRAPH }
 }
 
-internal fun isScrollableDisplayLatexImage(content: String, node: ASTNode): Boolean {
-    val linkNode = node.findDescendantOfType(MarkdownElementTypes.LINK_DESTINATION) ?: return false
-    val link = content.substring(linkNode.startOffset, linkNode.endOffset)
-    return isDisplayLatexLink(link)
-}
-
-private fun ASTNode.findDescendantOfType(type: org.intellij.markdown.IElementType): ASTNode? {
-    if (this.type == type) return this
-    return children.firstNotNullOfOrNull { child -> child.findDescendantOfType(type) }
-}
-
 @Composable
 internal fun rememberChatMarkdownAssets(
     textColor: Color,
@@ -242,6 +231,21 @@ internal fun rememberChatMarkdownAssets(
             },
             inlineImage = { model -> ChatMarkdownInlineImage(model) },
             paragraph = { model ->
+                val displayLatexLink = displayLatexParagraphLink(model.content, model.node)
+                val displayLatexSource = displayLatexLink?.let(::latexSourceForLink)
+                if (displayLatexLink != null && displayLatexSource != null) {
+                    DisplayLatexBlock(
+                        link = displayLatexLink,
+                        source = displayLatexSource,
+                        style = model.typography.paragraph,
+                        modifier = if (model.node.needsListParagraphSpacer()) {
+                            Modifier.padding(top = LocalMarkdownPadding.current.block)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    return@markdownComponents
+                }
                 SearchHighlightedMarkdownText(
                     model = model,
                     style = model.typography.paragraph,
@@ -253,6 +257,7 @@ internal fun rememberChatMarkdownAssets(
                     spec = LocalSearchHighlightSpec.current,
                     highlightColor = searchHighlightColor,
                     activeHighlightColor = activeSearchHighlightColor,
+                    promoteWideLatex = true,
                 )
             },
             heading1 = { model ->
@@ -395,7 +400,7 @@ internal fun rememberChatMarkdownAssets(
     // identical instead of sending thought/code tails through an unfaded fallback renderer.
     val thoughtMarkdownComponents = customMarkdownComponents
 
-    val latexTextSize = with(LocalDensity.current) { 22.sp.toPx() }
+    val latexTextSize = with(LocalDensity.current) { 20.sp.toPx() }
     val latexImageTransformer = remember(textColor, inlineImages, onMediaClick, latexTextSize) {
         LatexImageTransformer(
             textSize = latexTextSize,
@@ -420,7 +425,7 @@ internal fun rememberChatMarkdownAssets(
             typography = customTypography,
             padding = customMarkdownPadding,
             components = customMarkdownComponents,
-            annotator = literalHtmlMarkdownAnnotator,
+            annotator = chatMarkdownAnnotator,
             imageTransformer = latexImageTransformer,
             flavour = markdownFlavour,
             plainTextStyle = markdownBodyStyle,
@@ -443,7 +448,7 @@ internal fun rememberChatMarkdownAssets(
             typography = thoughtTypography,
             padding = thoughtMarkdownPadding,
             components = thoughtMarkdownComponents,
-            annotator = literalHtmlMarkdownAnnotator,
+            annotator = chatMarkdownAnnotator,
             imageTransformer = latexImageTransformer,
             flavour = markdownFlavour,
             plainTextStyle = thoughtMarkdownBodyStyle,
@@ -612,6 +617,7 @@ internal fun SearchHighlightedMarkdownText(
     spec: SearchHighlightSpec? = null,
     highlightColor: Color = SearchHighlightBackground,
     activeHighlightColor: Color = ActiveSearchHighlightBackground,
+    promoteWideLatex: Boolean = false,
 ) {
     val settings = annotatorSettings()
     val citationTokens = LocalCitationInlineTokens.current
@@ -642,12 +648,13 @@ internal fun SearchHighlightedMarkdownText(
             color = fadeColor,
             fade = nodeFade,
         )
-        AnimatedMarkdownText(
+        LatexAwareMarkdownText(
             content = renderedText,
             node = model.node,
             modifier = modifier,
             style = style,
             sourceContent = model.content,
+            promoteWideLatex = promoteWideLatex,
         )
         return
     }
@@ -695,7 +702,7 @@ internal fun SearchHighlightedMarkdownText(
         layoutResult = layoutResult,
         coordinates = coordinates,
     )
-    AnimatedMarkdownText(
+    LatexAwareMarkdownText(
         content = renderedText,
         node = model.node,
         modifier = modifier
@@ -703,6 +710,7 @@ internal fun SearchHighlightedMarkdownText(
         style = style,
         onTextLayout = { layoutResult = it },
         sourceContent = model.content,
+        promoteWideLatex = promoteWideLatex,
     )
 }
 

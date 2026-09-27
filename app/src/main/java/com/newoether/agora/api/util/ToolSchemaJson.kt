@@ -17,8 +17,8 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 object ToolSchemaJson {
 
-    /** The schema of a tool's whole parameter object. */
-    fun of(parameters: ToolParameters): JsonObject = JsonObject(
+    /** The schema of a tool's whole parameter object; an external schema is returned unchanged. */
+    fun of(parameters: ToolParameters): JsonObject = parameters.schema ?: JsonObject(
         buildMap {
             put("type", JsonPrimitive(parameters.type))
             put("properties", propertiesOf(parameters.properties))

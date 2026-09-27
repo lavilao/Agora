@@ -68,7 +68,7 @@ class AskUserController {
     private val _deferredAnswers = MutableSharedFlow<DeferredAnswer>(extraBufferCapacity = 32)
 
     /**
-     * Answers to non-blocking requests. The chat runtime collects this and sends each one through
+     * Answers to non-blocking requests. The process container's one delivery collects this and sends each one through
      * the queue, so an answer given while the model is still working lands in the next turn.
      */
     val deferredAnswers: SharedFlow<DeferredAnswer> = _deferredAnswers.asSharedFlow()
@@ -153,12 +153,21 @@ class AskUserController {
      * blank questions are named in it so the model knows they went unanswered.
      */
     fun submitAll(answers: List<Pair<Long, Answer>>) {
+        // The whole set leaves the card in one atomic update, so the card never shows a half-sent
+        // state and a request can be claimed by only one Send. A blocking answer stays until its
+        // caller collects it.
+        var answered = emptyList<Pair<Request, Answer>>()
+        _requests.update { requests ->
+            val waiting = requests.associateBy { it.id }
+            answered = answers.mapNotNull { (id, given) -> waiting[id]?.let { it to given } }
+            val answeredIds = answered.mapTo(HashSet()) { it.first.id }
+            requests.filterNot { it.id in answeredIds }
+        }
+        if (answered.isEmpty()) return
         val deferred = LinkedHashMap<String, MutableList<Pair<Request, Answer>>>()
-        for ((id, given) in answers) {
-            val request = _requests.value.firstOrNull { it.id == id } ?: continue
+        for ((request, given) in answered) {
+            val id = request.id
             val answer = given.copy(text = given.text?.takeIf { it.isNotBlank() })
-            // The card leaves now, while a blocking answer stays until its caller collects it.
-            dropRequest(id)
             if (request.blocking) {
                 waiters[id]?.complete(if (answer.answered) answer else Answer.Unanswered)
                 continue

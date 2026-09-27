@@ -118,6 +118,20 @@ class NativeConversationGraphImportContractTest {
     }
 
     @Test
+    fun previewCountsTasksFromTasksEntryAndLegacyFromConversationsJson() {
+        val graphImporter = importer(mockk())
+        val tasks = v5Source().stream(NativeBackupFormat.TASKS_ENTRY)!!.use {
+            graphImporter.countConversationGraph(it)
+        }
+        assertEquals(1, tasks.tasks)
+        assertEquals(0, tasks.conversations)
+        val legacy = legacySource().stream(NativeBackupFormat.CONVERSATIONS_ENTRY)!!.use {
+            graphImporter.countConversationGraph(it)
+        }
+        assertEquals(2, legacy.conversations)
+        assertEquals(1, legacy.tasks)
+    }
+    @Test
     fun v5PreviewCountsMatchMergedGraph() = runTest {
         val cacheDir = tempFolder.newFolder("cache-count")
         NativeConversationGraphSource.open(v5Source(), version = 5, cacheDir = cacheDir).use {

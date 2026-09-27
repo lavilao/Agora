@@ -39,7 +39,14 @@ internal class ConversationExportSnapshotReader(
         private val snapshotThreadSequence = AtomicInteger()
     }
 
-    suspend fun readSnapshot(onRecord: suspend (SnapshotRecord) -> Unit) {
+    /**
+     * [includeBody] decides per conversation whether its runs, messages and loops are read; when it
+     * returns false only the conversation header is emitted.
+     */
+    suspend fun readSnapshot(
+        includeBody: suspend (ChatEntity) -> Boolean = { true },
+        onRecord: suspend (SnapshotRecord) -> Unit,
+    ) {
         val snapshotExecutor = Executors.newFixedThreadPool(SNAPSHOT_THREAD_COUNT) { runnable ->
             Thread(
                 {
@@ -61,6 +68,7 @@ internal class ConversationExportSnapshotReader(
                     for (conversation in snapshotDao.getAllConversationsList()) {
                         currentCoroutineContext().ensureActive()
                         onRecord(SnapshotRecord.Conversation(conversation))
+                        if (!includeBody(conversation)) continue
                         for (run in snapshotDao.getRunsForConversationSnapshot(conversation.id)) {
                             currentCoroutineContext().ensureActive()
                             onRecord(SnapshotRecord.Run(run))

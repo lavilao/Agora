@@ -11,7 +11,7 @@
     <string name="task_run_now">Run Now</string>
     <string name="task_delete">Delete Task</string>
     <string name="task_delete_confirm">Delete “%1$s” and all of its execution history?</string>
-    <string name="import_conversation_graph_counts">Conversations (%1$d) · Tasks (%2$d) · Loops (%3$d)</string>
+    <string name="import_conversation_graph_counts">Conversations (%1$d) · Tasks (%2$d)</string>
     <string name="task_enabled">Run on Schedule</string>
     <string name="task_enabled_desc">Off means the task only runs when you tap Run now.</string>
     <string name="task_enabled_needs_schedule">Pick a schedule first.</string>

@@ -3,7 +3,7 @@ package com.newoether.agora.ui.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.QuestionAnswer
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -41,7 +41,7 @@ fun SettingsInteractionPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                             },
                             leadingContent = {
                                 Icon(
-                                    Icons.Default.QuestionAnswer,
+                                    Icons.AutoMirrored.Outlined.HelpOutline,
                                     null,
                                     tint = MaterialTheme.colorScheme.primary,
                                 )

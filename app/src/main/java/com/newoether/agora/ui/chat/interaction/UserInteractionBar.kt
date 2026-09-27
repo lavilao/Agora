@@ -1,19 +1,20 @@
 package com.newoether.agora.ui.chat.interaction
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,13 +38,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,8 +70,7 @@ import com.newoether.agora.viewmodel.ShellConfirmationController
 private val ContentMaxWidth = 840.dp
 internal val ScrollableContentMaxHeight = 200.dp
 private const val AppearDurationMs = 180
-private const val PageDurationMs = 220
-private const val PageFadeOutMs = 160
+private const val PageDurationMs = 350
 
 /** One page of the interaction card. [key] identifies it across list changes. */
 private sealed interface DeckPage {
@@ -100,12 +103,14 @@ private val BottomOrigin = TransformOrigin(0.5f, 1f)
  * capsule opens it again. Folding never answers anything. The host owns the folded set
  * [minimizedIn] per conversation, so switching away and back keeps it.
  *
- * Each conversation gets its own card. Switching to another conversation that is also waiting
- * lets the old card leave first and then brings the new one in, so it never looks like paging
- * inside one card. A leaving card keeps its own requests and folded state until it is gone.
+ * The card appears and leaves by scaling from the composer. Switching to another conversation that
+ * is also waiting lets the old card leave first and then brings the new one in, so it never looks
+ * like paging inside one card. A leaving card keeps its own requests until it is gone.
  *
- * [onHeightChanged] reports the measured height in pixels so the host can lift whatever sits above
- * the composer, and reports zero when there is nothing to answer.
+ * [onHeightChanged] reports, in pixels, how far the host should lift whatever sits above the
+ * composer: the measured card height scaled by the card's appear/leave progress, so the lift grows
+ * and shrinks with the card and is exactly zero once nothing is shown. It is the only writer.
+ * [onCardGone] tells the host that the card of a conversation has finished leaving.
  */
 @Composable
 internal fun UserInteractionBar(
@@ -121,48 +126,67 @@ internal fun UserInteractionBar(
     drafts: QuestionDrafts,
     pageIn: Map<String, String>,
     onPageChange: (String, String) -> Unit,
+    onCardGone: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val motionPolicy = LocalAgoraMotionPolicy.current
     val visible = interactions.isNotEmpty()
-    // The measured height never reaches zero on its own, because the bar leaves by scaling rather
-    // than shrinking. Reporting zero here is what lets the host drop its lifted controls back down.
-    LaunchedEffect(visible) {
-        if (!visible) onHeightChanged(0f)
+    // The exit animation still needs a card to draw, so the last non-empty list stays around.
+    var shown by remember { mutableStateOf(conversationId to interactions) }
+    if (visible) shown = conversationId to interactions
+    val spec = if (motionPolicy.allowContinuousMotion) tween<Float>(AppearDurationMs) else snap()
+    // The card appears and leaves by scaling, so its measured height never shrinks on its own. The
+    // lift is that height times the same appear/leave progress, which makes it follow the card and
+    // end at exactly zero. This is the one place the lift is reported from, so no late measurement
+    // of a leaving card can leave the host lifted.
+    val liftFraction by animateFloatAsState(if (visible) 1f else 0f, spec, label = "interaction-lift")
+    var cardHeight by remember { mutableFloatStateOf(0f) }
+    val latestOnHeightChanged by rememberUpdatedState(onHeightChanged)
+    LaunchedEffect(Unit) {
+        snapshotFlow { cardHeight * liftFraction }.collect { latestOnHeightChanged(it) }
     }
-    AnimatedContent(
-        targetState = conversationId to interactions,
-        // One card per conversation; an empty list is no card at all.
-        contentKey = { (owner, waiting) -> owner.takeIf { waiting.isNotEmpty() } },
-        transitionSpec = {
-            if (!motionPolicy.allowContinuousMotion) {
-                EnterTransition.None togetherWith ExitTransition.None using null
-            } else {
-                // A card replacing another waits until the old one has gone.
-                val delay = if (initialState.second.isEmpty()) 0 else AppearDurationMs
-                val enterSpec = tween<Float>(AppearDurationMs, delayMillis = delay)
-                val exitSpec = tween<Float>(AppearDurationMs)
-                (
-                    fadeIn(enterSpec) +
-                        scaleIn(enterSpec, initialScale = 0.9f, transformOrigin = BottomOrigin)
-                    ) togetherWith (
-                    fadeOut(exitSpec) +
-                        scaleOut(exitSpec, targetScale = 0.9f, transformOrigin = BottomOrigin)
-                    ) using null
-            }
-        },
-        contentAlignment = Alignment.BottomCenter,
+    val latestOnCardGone by rememberUpdatedState(onCardGone)
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(spec) + scaleIn(spec, initialScale = 0.9f, transformOrigin = BottomOrigin),
+        exit = fadeOut(spec) + scaleOut(spec, targetScale = 0.9f, transformOrigin = BottomOrigin),
         modifier = modifier.fillMaxWidth(),
-        label = "interaction-card",
-    ) { (owner, waiting) ->
-        if (waiting.isNotEmpty()) {
+    ) {
+        // One card per conversation. Both sides are waiting here; an empty side is the
+        // AnimatedVisibility above.
+        AnimatedContent(
+            targetState = shown,
+            contentKey = { (owner, _) -> owner },
+            transitionSpec = {
+                if (!motionPolicy.allowContinuousMotion) {
+                    EnterTransition.None togetherWith ExitTransition.None using null
+                } else {
+                    // The new card waits until the old one has gone.
+                    val enterSpec = tween<Float>(AppearDurationMs, delayMillis = AppearDurationMs)
+                    (
+                        fadeIn(enterSpec) +
+                            scaleIn(enterSpec, initialScale = 0.9f, transformOrigin = BottomOrigin)
+                        ) togetherWith (
+                        fadeOut(spec) +
+                            scaleOut(spec, targetScale = 0.9f, transformOrigin = BottomOrigin)
+                        ) using null
+                }
+            },
+            contentAlignment = Alignment.BottomCenter,
+            modifier = Modifier.fillMaxWidth(),
+            label = "interaction-card",
+        ) { (owner, waiting) ->
+            // Leaves composition only once this card has finished leaving.
+            DisposableEffect(owner) {
+                onDispose { latestOnCardGone(owner) }
+            }
             InteractionDeck(
                 interactions = waiting,
                 autoWrapCodeBlocks = autoWrapCodeBlocks,
                 onSubmitQuestions = onSubmitQuestions,
                 onSkipQuestion = onSkipQuestion,
                 onShellDecision = onShellDecision,
-                onHeightChanged = onHeightChanged,
+                onCardMeasured = { height -> cardHeight = height },
                 minimized = owner in minimizedIn,
                 onMinimizedChange = { folded -> onMinimizedChange(owner, folded) },
                 drafts = drafts,
@@ -180,7 +204,7 @@ private fun InteractionDeck(
     onSubmitQuestions: (List<Pair<Long, AskUserController.Answer>>) -> Unit,
     onSkipQuestion: (Long) -> Unit,
     onShellDecision: (Long, Boolean, Boolean) -> Unit,
-    onHeightChanged: (Float) -> Unit,
+    onCardMeasured: (Float) -> Unit,
     minimized: Boolean,
     onMinimizedChange: (Boolean) -> Unit,
     drafts: QuestionDrafts,
@@ -191,18 +215,30 @@ private fun InteractionDeck(
     val questions = interactions.filterIsInstance<UserInteraction.Question>().flatMap { it.requests }
     val pages = listOfNotNull<DeckPage>(shell?.let(DeckPage::Shell)) +
         questions.map(DeckPage::Question)
-    val keys = pages.map { it.key }
+    // The card holds on to every draft it has shown. The host forgets a draft as soon as its
+    // request is answered, but a card on its way out must keep showing what was picked.
+    val shownDrafts = remember { HashMap<Long, QuestionDraft>() }
+    val draftOf: (AskUserController.Request) -> QuestionDraft = { request ->
+        shownDrafts.getOrPut(request.id) { drafts.of(request) }
+    }
+    // The fixed button row decides the shell command, so the checkbox state lives out here.
+    val alwaysAllow = remember { mutableStateMapOf<Long, Boolean>() }
     if (pages.isEmpty()) return
+    val keys = pages.map { it.key }
     // The host remembers the page by key, so a request joining or leaving the card never moves the
     // user off the page they were on; a page that left falls back to the first one.
     val current = pages.firstOrNull { it.key == pageKey } ?: pages.first()
+    val index = keys.indexOf(current.key)
+    val position = if (pages.size > 1) "${index + 1} / ${pages.size}" else null
+    val back: (() -> Unit)? = if (index > 0) ({ onPageChange(keys[index - 1]) }) else null
+    val next: (() -> Unit)? = if (index < pages.lastIndex) ({ onPageChange(keys[index + 1]) }) else null
     val motion = LocalAgoraMotionPolicy.current
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .onSizeChanged { onHeightChanged(it.height.toFloat()) },
+            .onSizeChanged { onCardMeasured(it.height.toFloat()) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(modifier = Modifier.widthIn(max = ContentMaxWidth).padding(horizontal = 12.dp)) {
@@ -211,8 +247,26 @@ private fun InteractionDeck(
                 minimized = minimized,
                 onMinimizedChange = onMinimizedChange,
             ) {
-                // Pages change content inside the one card: a short slide in the reading
-                // direction with a fade, while the outline follows the new page's height.
+                // The header and the buttons stay put and simply show the current page; only the
+                // content between them slides a full width, while the card follows its height.
+                when (current) {
+                    is DeckPage.Shell -> CardHeader(
+                        icon = { tint ->
+                            Icon(InteractionKind.Approval.icon, null, modifier = Modifier.size(18.dp), tint = tint)
+                        },
+                        title = stringResource(InteractionKind.Approval.titleRes),
+                        detail = current.pending.server,
+                        position = position,
+                    )
+                    is DeckPage.Question -> CardHeader(
+                        icon = { tint ->
+                            Icon(InteractionKind.Question.icon, null, modifier = Modifier.size(18.dp), tint = tint)
+                        },
+                        title = stringResource(InteractionKind.Question.titleRes),
+                        position = position,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
                 AnimatedContent(
                     targetState = current,
                     contentKey = { it.key },
@@ -225,57 +279,48 @@ private fun InteractionDeck(
                             // A page that left the card (answered) counts as behind the new one.
                             val forward = from < 0 || to >= from
                             val sign = (if (forward) 1 else -1) * (if (rtl) -1 else 1)
-                            (
-                                // The new page arrives fast and settles; the old one
-                                // starts slowly and speeds away.
-                                slideInHorizontally(tween(PageDurationMs, easing = LinearOutSlowInEasing)) {
-                                    sign * it / 2
-                                } + fadeIn(tween(PageDurationMs, easing = LinearOutSlowInEasing))
-                                ) togetherWith (
-                                slideOutHorizontally(tween(PageDurationMs, easing = FastOutLinearInEasing)) {
-                                    -sign * it / 2
-                                } + fadeOut(tween(PageFadeOutMs, easing = FastOutLinearInEasing))
-                                ) using SizeTransform(clip = false) { _, _ ->
-                                tween<IntSize>(PageDurationMs)
-                            }
+                            slideInHorizontally(tween(PageDurationMs)) { sign * it } togetherWith
+                                slideOutHorizontally(tween(PageDurationMs)) { -sign * it } using
+                                SizeTransform(clip = true) { _, _ -> tween<IntSize>(PageDurationMs) }
                         }
                     },
                     label = "interaction page",
-                ) { shownPage ->
-                    // The outgoing page may already be gone from the lists; it then renders
-                    // alone, with inert buttons, for the few frames it takes to fade away.
-                    val index = keys.indexOf(shownPage.key)
-                    val live = index >= 0
-                    val position = if (live && pages.size > 1) "${index + 1} / ${pages.size}" else null
-                    val back: (() -> Unit)? = if (live && index > 0) ({ onPageChange(keys[index - 1]) }) else null
-                    val next: (() -> Unit)? =
-                        if (live && index < pages.lastIndex) ({ onPageChange(keys[index + 1]) }) else null
+                ) { page ->
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        when (shownPage) {
-                            is DeckPage.Shell -> ShellCardContent(
-                                pending = shownPage.pending,
+                        when (page) {
+                            is DeckPage.Shell -> ShellBody(
+                                pending = page.pending,
                                 autoWrapCodeBlocks = autoWrapCodeBlocks,
-                                position = position,
-                                onNext = next,
-                                onDecision = { allow, alwaysAllow ->
-                                    if (live) onShellDecision(shownPage.pending.id, allow, alwaysAllow)
-                                },
+                                alwaysAllow = alwaysAllow[page.pending.id] == true,
+                                onAlwaysAllowChange = { alwaysAllow[page.pending.id] = it },
                             )
-                            is DeckPage.Question -> {
-                                val questionIndex = questions.indexOfFirst { it.id == shownPage.request.id }
-                                QuestionCardContent(
-                                    requests = if (questionIndex >= 0) questions else listOf(shownPage.request),
-                                    drafts = drafts,
-                                    index = questionIndex.coerceAtLeast(0),
-                                    position = position,
-                                    onBack = back,
-                                    onNext = next,
-                                    onSubmit = { answers -> if (live) onSubmitQuestions(answers) },
-                                    onSkip = { id -> if (live) onSkipQuestion(id) },
-                                )
-                            }
+                            is DeckPage.Question -> QuestionBody(
+                                request = page.request,
+                                draft = draftOf(page.request),
+                            )
                         }
                     }
+                }
+                Spacer(Modifier.height(6.dp))
+                when (current) {
+                    is DeckPage.Shell -> ShellActions(
+                        onNext = next,
+                        onDecision = { allow ->
+                            onShellDecision(
+                                current.pending.id,
+                                allow,
+                                allow && alwaysAllow[current.pending.id] == true,
+                            )
+                        },
+                    )
+                    is DeckPage.Question -> QuestionActions(
+                        requests = questions,
+                        draftOf = draftOf,
+                        onBack = back,
+                        onNext = next,
+                        onSubmit = onSubmitQuestions,
+                        onSkip = onSkipQuestion,
+                    )
                 }
             }
         }
@@ -284,23 +329,12 @@ private fun InteractionDeck(
 }
 
 @Composable
-private fun ShellCardContent(
+private fun ShellBody(
     pending: ShellConfirmationController.PendingShellCommand,
     autoWrapCodeBlocks: Boolean,
-    position: String?,
-    onNext: (() -> Unit)?,
-    onDecision: (Boolean, Boolean) -> Unit,
+    alwaysAllow: Boolean,
+    onAlwaysAllowChange: (Boolean) -> Unit,
 ) {
-    var alwaysAllow by remember(pending.id) { mutableStateOf(false) }
-    CardHeader(
-        icon = { tint ->
-            Icon(InteractionKind.Approval.icon, null, modifier = Modifier.size(18.dp), tint = tint)
-        },
-        title = stringResource(InteractionKind.Approval.titleRes),
-        detail = pending.server,
-        position = position,
-    )
-    Spacer(Modifier.height(10.dp))
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -314,7 +348,7 @@ private fun ShellCardContent(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable { alwaysAllow = !alwaysAllow }
+            .clickable { onAlwaysAllowChange(!alwaysAllow) }
             // Inset so the rounded highlight never cuts into the checkbox.
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -327,7 +361,13 @@ private fun ShellCardContent(
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
-    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun ShellActions(
+    onNext: (() -> Unit)?,
+    onDecision: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -335,13 +375,13 @@ private fun ShellCardContent(
         onNext?.let { TextButton(onClick = it) { Text(stringResource(R.string.ask_user_next)) } }
         Spacer(Modifier.weight(1f))
         TextButton(
-            onClick = { onDecision(false, false) },
+            onClick = { onDecision(false) },
             colors = ButtonDefaults.textButtonColors(
                 contentColor = MaterialTheme.colorScheme.error,
             ),
         ) { Text(stringResource(R.string.shell_confirm_deny)) }
         Spacer(Modifier.width(4.dp))
-        Button(onClick = { onDecision(true, alwaysAllow) }) {
+        Button(onClick = { onDecision(true) }) {
             Text(stringResource(R.string.shell_confirm_allow))
         }
     }

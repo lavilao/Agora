@@ -130,7 +130,9 @@ class DrawerSearchLoadingSourceContractTest {
         assertTrue(searchResultItem.contains("overflow = TextOverflow.Ellipsis"))
         assertTrue(searchState.contains("var isSearching by mutableStateOf(false)"))
         assertTrue(searchState.contains("isSearching = true"))
-        assertTrue(normalizedSearchState.contains("} finally {\n            isSearching = false"))
+        // Only the newest run clears the indicator; a cancelled run finishing late cannot hide it.
+        assertTrue(normalizedSearchState.contains("val generation = ++searchGeneration"))
+        assertTrue(normalizedSearchState.contains("} finally {\n            if (generation == searchGeneration) isSearching = false"))
         assertTrue(searchBar.contains("searching: Boolean = false"))
         assertTrue(searchBar.contains("visible = searching"))
         assertTrue(searchBar.contains("CircularProgressIndicator("))

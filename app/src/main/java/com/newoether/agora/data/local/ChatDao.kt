@@ -86,8 +86,47 @@ interface ChatDao :
     @Upsert
     suspend fun upsertConversation(conversation: ChatEntity)
 
-    @Query("UPDATE conversations SET dataChangedAt = :at WHERE id = :conversationId")
+    /**
+     * Marks exported conversation data as changed. The value always moves forward, so an
+     * incremental backup never mistakes a same-millisecond write for an unchanged conversation.
+     */
+    @Query(
+        "UPDATE conversations SET dataChangedAt = MAX(dataChangedAt + 1, :at) WHERE id = :conversationId"
+    )
     suspend fun touchConversationData(conversationId: String, at: Long): Int
+    // Loop rows are exported inside their conversation item, so every loop write that can change
+    // an exported field also marks the conversation changed.
+    @Transaction
+    suspend fun upsertLoop(loop: LoopEntity) {
+        upsertLoopRow(loop)
+        touchConversationData(loop.conversationId, System.currentTimeMillis())
+    }
+    @Transaction
+    suspend fun deactivateLoopIfUnchanged(
+        conversationId: String,
+        expectedRevision: Long,
+        expectedCycleCount: Int,
+        expectedIntervalMs: Long,
+        expectedNextFireAt: Long,
+        normalizedMaxCycles: Int,
+    ): Int {
+        val changed = deactivateLoopRowIfUnchanged(
+            conversationId = conversationId,
+            expectedRevision = expectedRevision,
+            expectedCycleCount = expectedCycleCount,
+            expectedIntervalMs = expectedIntervalMs,
+            expectedNextFireAt = expectedNextFireAt,
+            normalizedMaxCycles = normalizedMaxCycles,
+        )
+        if (changed > 0) touchConversationData(conversationId, System.currentTimeMillis())
+        return changed
+    }
+    @Transaction
+    suspend fun deleteLoop(conversationId: String) {
+        if (deleteLoopRow(conversationId) > 0) {
+            touchConversationData(conversationId, System.currentTimeMillis())
+        }
+    }
 
     @Query("UPDATE conversations SET title = :title, dataChangedAt = :at WHERE id = :conversationId")
     suspend fun updateConversationTitle(conversationId: String, title: String, at: Long): Int
@@ -104,10 +143,17 @@ interface ChatDao :
         unread: Boolean,
     ): Int
 
-    @Query("UPDATE conversations SET modelId = :newModelId WHERE modelId = :oldModelId")
+    @Query(
+        """
+        UPDATE conversations
+        SET modelId = :newModelId, dataChangedAt = MAX(dataChangedAt + 1, :at)
+        WHERE modelId = :oldModelId
+        """
+    )
     suspend fun replaceConversationModelReferences(
         oldModelId: String,
         newModelId: String?,
+        at: Long,
     ): Int
 
     @Query("UPDATE new_chat_persist SET modelId = :newModelId WHERE id = 0 AND modelId = :oldModelId")
@@ -439,6 +485,7 @@ interface ChatDao :
         }
         assigned.forEach { insertMessage(it) }
         touchRun(runId, maxOf(run.lastCheckpointAt, assigned.maxOf { it.timestamp }))
+        check(touchConversationData(run.conversationId, System.currentTimeMillis()) == 1)
         return ToolRoundCommit(assigned, inserted = true)
     }
 
@@ -648,7 +695,7 @@ interface ChatDao :
         oldModelId: String,
         newModelId: String?,
     ) {
-        replaceConversationModelReferences(oldModelId, newModelId)
+        replaceConversationModelReferences(oldModelId, newModelId, System.currentTimeMillis())
         replaceNewChatModelReference(oldModelId, newModelId)
         replaceTaskModelReferences(oldModelId, newModelId)
     }
@@ -656,14 +703,28 @@ interface ChatDao :
     @Query(
         """
         UPDATE conversations
-        SET modelId = :newProvider || substr(modelId, length(:oldProvider) + 1)
+        SET modelId = :newProvider || substr(modelId, length(:oldProvider) + 1),
+            dataChangedAt = MAX(dataChangedAt + 1, :at)
         WHERE substr(modelId, 1, length(:oldProvider) + 1) = :oldProvider || ':'
         """
     )
     suspend fun renameConversationProviderModelReferences(
         oldProvider: String,
         newProvider: String,
+        at: Long,
     ): Int
+    /** Marks conversations whose messages name [oldProvider] before those names are rewritten. */
+    @Query(
+        """
+        UPDATE conversations
+        SET dataChangedAt = MAX(dataChangedAt + 1, :at)
+        WHERE id IN (
+            SELECT conversationId FROM messages
+            WHERE substr(modelName, 1, length(:oldProvider) + 1) = :oldProvider || ':'
+        )
+        """
+    )
+    suspend fun touchConversationsWithMessageProvider(oldProvider: String, at: Long): Int
 
     @Query(
         """
@@ -692,9 +753,11 @@ interface ChatDao :
 
     @Transaction
     suspend fun renameConfiguredProviderModelReferences(oldProvider: String, newProvider: String) {
-        renameConversationProviderModelReferences(oldProvider, newProvider)
+        val at = System.currentTimeMillis()
+        renameConversationProviderModelReferences(oldProvider, newProvider, at)
         renameNewChatProviderModelReference(oldProvider, newProvider)
         renameTaskProviderModelReferences(oldProvider, newProvider)
+        touchConversationsWithMessageProvider(oldProvider, at)
         renameMessageProviderModelReferences(oldProvider, newProvider)
     }
 }

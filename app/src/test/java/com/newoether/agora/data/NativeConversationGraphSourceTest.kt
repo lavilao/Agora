@@ -60,6 +60,9 @@ class NativeConversationGraphSourceTest {
         val source = NativeConversationGraphSource.open(archive, version = 5, cacheDir = cacheDir)
         try {
             assertEquals(1, spoolNames(cacheDir).size)
+            // Each item is decompressed once, not once per graph field.
+            assertEquals(1, archive.streamCount(one))
+            assertEquals(1, archive.streamCount(two))
             val first = source.open().use { it.readBytes() }.decodeToString()
             val second = source.open().use { it.readBytes() }.decodeToString()
             assertEquals(first, second)
@@ -187,10 +190,15 @@ class NativeConversationGraphSourceTest {
 
     private class FakeEntrySource(entries: Map<String, String>) : NativeGraphEntrySource {
         private val data = entries.mapValues { it.value.encodeToByteArray() }
+        private val streams = mutableMapOf<String, Int>()
+        fun streamCount(name: String): Int = streams[name] ?: 0
         override fun has(name: String): Boolean = data.containsKey(name)
         override fun bytes(name: String): ByteArray? = data[name]?.copyOf()
         override fun stream(name: String): InputStream? =
-            data[name]?.let { ByteArrayInputStream(it) }
+            data[name]?.let {
+                streams[name] = streamCount(name) + 1
+                ByteArrayInputStream(it)
+            }
     }
 
     private fun indexJson(vararg items: Pair<Pair<String, Long>, List<String>>): String {

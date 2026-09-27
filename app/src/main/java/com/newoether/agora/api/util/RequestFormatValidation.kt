@@ -81,8 +81,13 @@ internal fun validateToolDefinitions(tools: List<ToolDefinition>?): List<String>
         if (unknownRequired.isNotEmpty()) {
             violations += "tool ${function.name} requires undefined properties"
         }
-        function.parameters.properties.forEach { (propertyName, property) ->
-            violations += propertyViolations(function.name, propertyName, property)
+        // An external (MCP) schema is sent verbatim and may use JSON Schema forms the typed model
+        // cannot express, such as a map object with only additionalProperties; its nesting is the
+        // server's contract, so only the typed schemas Agora builds itself are checked below the top.
+        if (function.parameters.schema == null) {
+            function.parameters.properties.forEach { (propertyName, property) ->
+                violations += propertyViolations(function.name, propertyName, property)
+            }
         }
     }
     return violations

@@ -2,6 +2,7 @@ package com.newoether.agora.viewmodel
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -209,6 +210,26 @@ class AskUserControllerTest {
         )
         assertTrue(controller.requests.value.isEmpty())
         collector.cancel()
+    }
+
+    @Test
+    fun `one send removes the whole set in a single update`() = runTest {
+        val controller = AskUserController()
+        val first = controller.open("c1", "First?", listOf("A"), allowMultiple = false, blocking = false)
+        val second = controller.open("c1", "Second?", listOf("B"), allowMultiple = false, blocking = false)
+        val third = controller.open("c1", "Third?", listOf("C"), allowMultiple = false, blocking = false)
+        val sizes = mutableListOf<Int>()
+        val observer = launch(
+            kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler),
+        ) { controller.requests.collect { sizes += it.size } }
+
+        controller.submitAll(
+            listOf(first, second, third).map { it.id to AskUserController.Answer(listOf("x"), answered = true) },
+        )
+
+        // Unconfined collection sees every emission: the card goes from three to none directly.
+        assertEquals(listOf(3, 0), sizes)
+        observer.cancel()
     }
 
     @Test

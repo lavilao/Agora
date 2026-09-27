@@ -655,7 +655,7 @@ fun ChatApp(
                         onShareMessages = { viewModel.shareMessages(it) },
                     )
 
-                    ChatSwitchingOverlay(isSwitching, isTransitioningToNewChat)
+                    ChatSwitchingOverlay(isSwitching, isTransitioningToNewChat, topBarH, bottomBarHeight)
                 }
             }
 

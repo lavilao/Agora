@@ -5,6 +5,12 @@ import kotlinx.serialization.Serializable
 internal object NativeBackupFormat {
     const val CURRENT_VERSION = 5
     const val MIN_SUPPORTED_VERSION = 1
+    /**
+     * Written to the manifest of every backup whose conversation items can be reused by the next
+     * incremental export. Older backups predate complete dataChangedAt tracking, so they lack it
+     * and the next export rebuilds every conversation.
+     */
+    const val INCREMENTAL_BASELINE_REVISION = 1
 
     const val MANIFEST_ENTRY = "manifest.json"
     const val CONVERSATIONS_ENTRY = "conversations.json"

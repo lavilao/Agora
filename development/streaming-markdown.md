@@ -13,7 +13,16 @@ Markdown algorithm or switch to a different terminal renderer merely because str
 Standalone/display LaTeX uses that same shared Markdown component graph. It remains start-aligned and
 renders at its intrinsic formula width inside a message-width horizontal viewport. A formula wider
 than that viewport scrolls horizontally so all content remains inspectable; a formula that fits has
-no effective scroll range. Inline LaTeX and ordinary Markdown images retain their existing layout.
+no effective scroll range. Every formula on its own line (display, height-promoted, or an inline
+formula wider than 80% of its paragraph width, decided at display time from that paragraph's width)
+renders as one single-line selectable Text holding one inline placeholder, so a covering selection
+highlights the whole formula. Every formula's alternate text is its exact original source slice,
+delimiters included, carried in its `latex://` link, so selection copies the original text and never
+a URL. Formula bitmaps render at `20 sp` and are padded with transparent rows so the TeX math axis
+sits on the bitmap's vertical center, which `TextCenter` placeholder alignment puts on the text
+center. Other inline LaTeX and ordinary Markdown images retain their existing layout; once a paragraph
+splits for a wide formula, its other images use their block presentation and search positions are
+not reported for that paragraph.
 During active streaming, display-formula scrolling uses the same interaction commit gate as code-block
 scrolling so an in-progress gesture is not replaced by a newer parsed Markdown snapshot.
 

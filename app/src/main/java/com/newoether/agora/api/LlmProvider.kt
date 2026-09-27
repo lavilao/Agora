@@ -155,11 +155,18 @@ data class ToolFunction(
     val parameters: ToolParameters
 )
 
-@Serializable
+@Serializable(with = ToolParametersSerializer::class)
 data class ToolParameters(
     val type: String = "object",
     val properties: Map<String, ToolProperty>,
-    val required: List<String> = emptyList()
+    val required: List<String> = emptyList(),
+    /**
+     * The parameter schema exactly as an external tool source (an MCP server) declared it. When set,
+     * every provider sends this schema instead of one rebuilt from [properties], so nested fields,
+     * maps, enums and other JSON Schema keywords survive; [properties] and [required] then only
+     * summarize its top level for token estimates and validation.
+     */
+    val schema: JsonObject? = null,
 )
 
 @Serializable

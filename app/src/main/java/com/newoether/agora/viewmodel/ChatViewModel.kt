@@ -670,23 +670,10 @@ class ChatViewModel(
     fun failSwitchingScroll(requestId: Long, reason: String) =
         selectionController.failSwitchingScroll(requestId, reason)
 
-    private val deferredAskUserAnswers by lazy {
-        DeferredAskUserAnswerDelivery(
-            askUser = askUser,
-            registry = generationRegistry,
-            scope = viewModelScope,
-            conversationModelId = { id -> convRepo.getConversation(id)?.modelId },
-            fallbackModelId = { settings.selectedModel.value },
-        )
-    }
-
     init {
         startInitJobs()
         unreadGenerationAcknowledger.start()
         conversationUi.start()
-
-        // Answers to non-blocking questions arrive here and leave through the send queue.
-        deferredAskUserAnswers.start()
 
         // Loop cycles for the open conversation use the regular Send path; the bridge waits for
         // that exact durable turn and returns a typed result to the automation lease owner.

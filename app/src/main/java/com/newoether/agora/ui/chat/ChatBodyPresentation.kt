@@ -172,16 +172,24 @@ internal fun BoxScope.ChatSelectionOverlay(
 }
 
 @Composable
-internal fun ChatSwitchingOverlay(isSwitching: Boolean, isTransitioningToNewChat: Boolean) {
+internal fun ChatSwitchingOverlay(
+    isSwitching: Boolean,
+    isTransitioningToNewChat: Boolean,
+    topBarHeight: Dp,
+    bottomBarHeight: Dp,
+) {
     AnimatedVisibility(
         visible = isSwitching && !isTransitioningToNewChat,
         enter = fadeIn(animationSpec = tween(200)),
         exit = fadeOut(animationSpec = tween(200))
     ) {
+        // The background covers the whole body; the indicator centers in the visible range between
+        // the top bar and the bottom bar, whose measured height follows the IME like the welcome.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                .padding(top = topBarHeight, bottom = bottomBarHeight),
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator(

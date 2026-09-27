@@ -366,10 +366,15 @@ class GeminiProvider(
 
         // Add memory function declarations as a separate tool entry
         val functionDeclarations = config.tools?.map { td ->
+            val externalSchema = td.function.parameters.schema
             GeminiFunctionDeclaration(
                 name = td.function.name,
                 description = td.function.description,
-                parameters = ToolSchemaJson.of(td.function.parameters)
+                // `parameters` takes Gemini's OpenAPI subset and rejects JSON Schema keywords such
+                // as additionalProperties, so an external (MCP) schema goes through
+                // parametersJsonSchema, which accepts JSON Schema.
+                parameters = if (externalSchema == null) ToolSchemaJson.of(td.function.parameters) else null,
+                parametersJsonSchema = externalSchema,
             )
         }
         if (!functionDeclarations.isNullOrEmpty()) {

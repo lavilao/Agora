@@ -58,10 +58,10 @@ import com.newoether.agora.R
 import com.newoether.agora.model.ChatConversation
 import com.newoether.agora.model.ContextBudget
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
+import com.newoether.agora.ui.motion.rememberIdentityClipWidth
 import com.newoether.agora.ui.theme.ChatType
 
 private const val TITLE_CAPSULE_MAX_WIDTH_DP = 260
-private const val TITLE_CLIP_DURATION_MILLIS = 400
 
 /**
  * The chat screen's top bar: a title capsule (drawer menu + brand/conversation
@@ -311,64 +311,12 @@ internal fun ChatTopBar(
                     5.dp + 44.dp + 5.dp + targetTitleContentWidth + 20.dp,
                     TITLE_CAPSULE_MAX_WIDTH_DP.dp,
                 )
-                val latestTargetTitleCapsuleWidth by rememberUpdatedState(targetTitleCapsuleWidth)
-                var titleClipWidth by remember { mutableStateOf(targetTitleCapsuleWidth) }
-                var settledTitlePresentation by remember { mutableStateOf(titlePresentation) }
-                var titleMotionRunning by remember { mutableStateOf(false) }
-                val titleTransitionPending = settledTitlePresentation != titlePresentation
-                LaunchedEffect(titlePresentation, allowSpatialTransitions) {
-                    val titleChanged = settledTitlePresentation != titlePresentation
-                    if (!allowSpatialTransitions || !titleChanged) {
-                        titleClipWidth = latestTargetTitleCapsuleWidth
-                        settledTitlePresentation = titlePresentation
-                        return@LaunchedEffect
-                    }
-                    titleMotionRunning = true
-                    try {
-                        val clipStartNanos = withFrameNanos { it }
-                        val clipDeadlineNanos = clipStartNanos +
-                            TITLE_CLIP_DURATION_MILLIS * 1_000_000L
-                        var segmentStartNanos = clipStartNanos
-                        var segmentStartWidth = titleClipWidth
-                        var segmentTargetWidth = latestTargetTitleCapsuleWidth
-                        while (true) {
-                            val frameNanos = withFrameNanos { it }
-                            val latestTarget = latestTargetTitleCapsuleWidth
-                            if (frameNanos >= clipDeadlineNanos) {
-                                titleClipWidth = latestTarget
-                                break
-                            }
-                            if (latestTarget != segmentTargetWidth) {
-                                segmentStartNanos = frameNanos
-                                segmentStartWidth = titleClipWidth
-                                segmentTargetWidth = latestTarget
-                            }
-                            val segmentDurationNanos =
-                                (clipDeadlineNanos - segmentStartNanos).coerceAtLeast(1L)
-                            val segmentFraction = (
-                                (frameNanos - segmentStartNanos).toFloat() /
-                                    segmentDurationNanos.toFloat()
-                                ).coerceIn(0f, 1f)
-                            val easedFraction = FastOutSlowInEasing.transform(segmentFraction)
-                            titleClipWidth = segmentStartWidth +
-                                (segmentTargetWidth - segmentStartWidth) * easedFraction
-                        }
-                        settledTitlePresentation = titlePresentation
-                    } finally {
-                        titleMotionRunning = false
-                    }
-                }
-                LaunchedEffect(
-                    targetTitleCapsuleWidth,
-                    titleTransitionPending,
-                    titleMotionRunning,
-                    allowSpatialTransitions,
-                ) {
-                    if (!titleTransitionPending && !titleMotionRunning) {
-                        titleClipWidth = targetTitleCapsuleWidth
-                    }
-                }
-                val visibleTitleCapsuleWidth = titleClipWidth
+                // Only the rounded clip moves; the title content keeps its final layout.
+                val visibleTitleCapsuleWidth = rememberIdentityClipWidth(
+                    identity = titlePresentation,
+                    targetWidth = targetTitleCapsuleWidth,
+                    allowSpatialTransitions = allowSpatialTransitions,
+                )
                 val visibleTitleCapsuleWidthPx = with(density) {
                     visibleTitleCapsuleWidth.toPx()
                 }

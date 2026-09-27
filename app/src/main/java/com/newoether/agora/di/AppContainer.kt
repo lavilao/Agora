@@ -149,6 +149,16 @@ class AppContainer(
             // The interaction bar only exists inside the chat screen, so a question asked from
             // anywhere else needs the notification to stay answerable.
             AskUserNotifier.start(appScope, appContext, it)
+            // Answers to non-blocking questions leave through the send queue. The controller is
+            // process-wide, so its answers get exactly one process-wide collector; one per chat
+            // screen delivered each answer once per live screen.
+            com.newoether.agora.viewmodel.DeferredAskUserAnswerDelivery(
+                askUser = it,
+                registry = conversationStateRegistry,
+                scope = appScope,
+                conversationModelId = { id -> conversationRepository.getConversation(id)?.modelId },
+                fallbackModelId = { settingsRepository.selectedModel.value },
+            ).start()
         }
     }
 

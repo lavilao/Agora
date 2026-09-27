@@ -33,7 +33,7 @@ import com.newoether.agora.model.ContextBudget
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 
 private val BarHeight = 12.dp
-private val LegendDotSize = 8.dp
+private val LegendDotSize = 10.dp
 
 /** Keeps neighbouring segments readable as separate blocks instead of one continuous fill. */
 private val SegmentGap = 2.dp
@@ -101,7 +101,7 @@ internal fun ContextCompositionBar(
             reservedFraction = (reserved ?: 0).toFloat() / budget,
             reservedColor = reservedColor,
         )
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             LegendRow(systemColor, stringResource(R.string.context_part_system), system)
             LegendRow(toolColor, stringResource(R.string.context_part_tools), tools)
             LegendRow(messageColor, stringResource(R.string.context_part_messages), messages)
@@ -195,14 +195,14 @@ private fun LegendRow(color: Color, label: String, tokens: Int) {
         Spacer(Modifier.width(8.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.width(12.dp))
         Text(
             text = ContextBudget.compactLabel(tokens),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -647,6 +647,59 @@ closing back to `0.5` or below rearms the next opening. Dragged and programmatic
 state. Existing Back handling remains independent. Direct and queued Send preserve focus, IME
 visibility, and expanded Composer state.
 
+## 26. Chat context usage popup
+The context popup opened from the composer's context ring heads with the usage text
+`~used / budget tokens` in `titleSmall`, followed on the same row by the right-aligned usage
+percentage in `titleSmall`. The percentage is `round((System + Tools + Messages) / budget * 100)` as a
+whole locale-formatted percent; the compaction reserve is never counted as usage. The former
+`Context` title and the footer usage line are not shown; `Context` remains the ring's accessibility
+label. The composition bar is unchanged. Legend rows are spaced `6 dp` apart, use `bodyMedium` for
+both label and value, and carry `10 dp` color dots. Verification covers the percent rounding, reserve
+exclusion, and zero-budget result.
+## 27. Interaction card exit, lift, and option shape
+A card that leaves, including after Send answers every question, keeps the page and fold it showed
+until it has finished leaving; the host clears the conversation's saved page and fold only after
+the card is gone and only when that conversation has nothing left to answer. The lift applied to the
+scroll-to-bottom control has one writer: the measured card height multiplied by the card's own
+appear/leave progress (the card's `180 ms` enter/exit tween, snapped under Reduced Motion), so the
+lift grows and shrinks with the card and is exactly zero once no card is shown. Question option rows
+clip their highlight and ripple to a corner radius of `min(height / 2, 24 dp)`: a capsule for a
+single-line option, `24 dp` for a wrapped one. Verification covers the leaving page, the monotonic
+lift ending at zero, the post-exit gone callback, and both option radii.
+## 28. Composer model selector motion
+The Chat bottom-bar model selector follows the section 24 motion language through the same shared
+clip owner (`ui/motion/IdentityClipWidth.kt`, also used by the top-bar title). A change of the
+displayed label Crossfades the label over `200 ms` with `FastOutSlowInEasing`. The button is always
+laid out at its independently measured final width: label width plus `8 dp` padding on each side,
+at least the Material button minimum width and at most the space left in the controls capsule. One start-anchored rounded clip
+(`50%` corners) cuts the whole button, including its ripple, at the visible edge, which moves over
+`400 ms` with `FastOutSlowInEasing`, rebases toward a newer target within the same deadline, and
+ends exactly on the latest target. The selector's slot takes the clip width, so the controls after
+it follow the visible edge. `animateContentSize` does not participate. Initial composition presents
+the final width without motion; Reduced Motion snaps the clip and keeps the Crossfade. Verification
+covers the shared owner's deadline, mid-motion rebasing, target-only updates, initial presentation,
+and Reduced Motion snap. Each Crossfade label keeps its own width while it fades, so an outgoing
+longer label is cut only by the clip; a label ellipsizes only past the space left.
+## 29. Composer controls width, user bubble, and small indicators
+The composer controls capsule may grow from the bar's inner start edge up to the send button minus a
+fixed `8 dp` gap, in ordinary and externally owned conversations alike. Every control in it has a
+fixed width except the model selector label, which is the only flexible child; there is no fixed
+label cap. User message bubbles (`UserBubbleShape`) give the top-start, top-end, and bottom-start
+corners one shared radius, `min(27 dp, half the bubble's smaller side)`, and keep an `8 dp` bottom-end
+tail (never larger than that radius). The three large corners always match, including short or
+narrow bubbles; `RoundedCornerShape` is not used because it shrinks each side's corner pair on its
+own. The radius does not grow with bubble height. A bubble is at least `54 dp` wide (its single-line height), so a
+one-character message is a circle; content narrower than that is centered. Content padding is `15 dp` in both reading and edit mode
+(the edit field adds only an `8 dp` gap above its indicator and drops the text field's `56 dp`
+minimum height, so a single line keeps its indicator `8 dp` below the text); its bottom inset is `4 dp`
+because the Cancel/Send buttons already carry `10 dp` of invisible height below their labels, less
+`1 dp` tuned by eye. The `15 dp` reading padding makes `27 dp` half of a single-line bubble. Attachments inside the bubble (images, video,
+files, PDFs) use `15 dp` corners, equal to the content padding (user choice over the strictly
+concentric `12 dp`); the composer attachment preview keeps its own `8 dp`. The `ask_user` interaction
+capsule and its Settings toggle use the outlined help icon (a question mark in a circle). The drawer
+search indicator shows exactly while the newest search runs: a cancelled search never clears it.
+The conversation switching overlay keeps its full-body background and centers its indicator between
+the top bar and the measured bottom bar, so it follows the IME like the welcome text.
 ## 15. Verification
 
 Focused verification must cover the onboarding action's fixed 32 dp inset and 48 dp height, absence

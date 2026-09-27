@@ -39,4 +39,12 @@ class ContextCompositionBarTest {
         assertEquals(0, contextReservedTokens(tokenBudget = 100_000, thresholdPercent = 140))
         assertEquals(0, contextReservedTokens(tokenBudget = 0, thresholdPercent = 80))
     }
+    @Test
+    fun `usage percent is used over the whole budget, rounded, reserve not counted`() {
+        // 462.7K of 512K, the same whether or not 51.2K is reserved for compaction.
+        assertEquals(90, contextUsagePercent(estimatedTokens = 462_700, tokenBudget = 512_000))
+        assertEquals(1, contextUsagePercent(estimatedTokens = 5, tokenBudget = 1_000))
+        assertEquals(0, contextUsagePercent(estimatedTokens = 4, tokenBudget = 1_000))
+        assertEquals(0, contextUsagePercent(estimatedTokens = 10, tokenBudget = 0))
+    }
 }

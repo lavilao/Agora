@@ -1,6 +1,7 @@
 package com.newoether.agora.ui.chat.interaction
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -49,6 +50,14 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.toRect
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
@@ -133,38 +142,36 @@ internal class QuestionDrafts {
 }
 
 /**
- * One question page of the interaction card.
- *
- * Every waiting question shares the card: Back and Next move between pages, and Send on the last
- * page hands all of them over in one [onSubmit], marking any left blank. Skip declines every
- * question on the card. [position] is the "current / total" count across the whole card.
+ * The sliding content of one question page: the question, its options and the typed answer.
  *
  * Options are optional: a question without them is an open question. Even with options the user can
  * type instead, because the model's list is its guess at what the answers are, and a wrong guess must
  * not force the user to pick one of it.
  */
 @Composable
-internal fun QuestionCardContent(
+internal fun QuestionBody(
+    request: AskUserController.Request,
+    draft: QuestionDraft,
+) {
+    QuestionPage(request = request, draft = draft)
+}
+
+/**
+ * The fixed button row under the question pages.
+ *
+ * Every waiting question shares the card: Back and Next move between pages, and Send on the last
+ * page hands all of them over in one [onSubmit], marking any left blank. Skip declines every
+ * question on the card.
+ */
+@Composable
+internal fun QuestionActions(
     requests: List<AskUserController.Request>,
-    drafts: QuestionDrafts,
-    index: Int,
-    position: String?,
+    draftOf: (AskUserController.Request) -> QuestionDraft,
     onBack: (() -> Unit)?,
     onNext: (() -> Unit)?,
     onSubmit: (List<Pair<Long, AskUserController.Answer>>) -> Unit,
     onSkip: (Long) -> Unit,
 ) {
-    val request = requests[index.coerceIn(0, requests.lastIndex)]
-    CardHeader(
-        icon = { tint ->
-            Icon(InteractionKind.Question.icon, null, modifier = Modifier.size(18.dp), tint = tint)
-        },
-        title = stringResource(InteractionKind.Question.titleRes),
-        position = position,
-    )
-    Spacer(Modifier.height(10.dp))
-    QuestionPage(request = request, draft = drafts.of(request))
-    Spacer(Modifier.height(6.dp))
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End,
@@ -183,8 +190,8 @@ internal fun QuestionCardContent(
         } else {
             Button(
                 // A question left blank on an earlier page is marked unanswered, not invented.
-                onClick = { onSubmit(requests.map { it.id to drafts.of(it).answerFor(it) }) },
-                enabled = requests.any { drafts.of(it).answered },
+                onClick = { onSubmit(requests.map { it.id to draftOf(it).answerFor(it) }) },
+                enabled = requests.any { draftOf(it).answered },
             ) { Text(stringResource(R.string.ask_user_send)) }
         }
     }
@@ -199,17 +206,14 @@ private fun QuestionPage(
     val motion = LocalAgoraMotionPolicy.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    // Choosing to type opens the field inside the scrolling content, focuses it for the keyboard
-    // and scrolls it into view; [revealed] marks that choice so it happens once the field exists.
+    // Choosing to type opens the field inside the scrolling content and focuses it for the
+    // keyboard. [revealed] marks that choice; the field is scrolled into view once it has finished
+    // expanding, because while it grows its bounds are still too small to scroll to.
     val field = remember { BringIntoViewRequester() }
     val focus = remember { FocusRequester() }
     var revealed by remember { mutableStateOf(false) }
     LaunchedEffect(revealed) {
-        if (revealed) {
-            focus.requestFocus()
-            field.bringIntoView()
-            revealed = false
-        }
+        if (revealed) focus.requestFocus()
     }
     fun setOwnAnswer(on: Boolean) {
         if (on == draft.ownAnswer) return
@@ -276,6 +280,14 @@ private fun QuestionPage(
                 ExitTransition.None
             },
         ) {
+            val expanded = transition.currentState == EnterExitState.Visible &&
+                transition.targetState == EnterExitState.Visible
+            LaunchedEffect(expanded, revealed) {
+                if (expanded && revealed) {
+                    field.bringIntoView()
+                    revealed = false
+                }
+            }
             Column {
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
@@ -299,6 +311,19 @@ private fun QuestionPage(
     }
 }
 
+/**
+ * A single-line option reads as a capsule; a taller, wrapped option keeps a 24 dp corner so its
+ * highlight does not turn into a lozenge.
+ */
+internal val OptionShape: Shape = object : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val radius = minOf(size.height / 2f, with(density) { OptionMaxCornerRadius.toPx() })
+        return Outline.Rounded(RoundRect(size.toRect(), CornerRadius(radius, radius)))
+    }
+}
+
+private val OptionMaxCornerRadius = 24.dp
+
 @Composable
 private fun OptionRow(
     option: String,
@@ -309,7 +334,7 @@ private fun OptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(OptionShape)
             .clickable(onClick = onToggle)
             // Inset so the rounded highlight never cuts into the control.
             .padding(horizontal = 8.dp),

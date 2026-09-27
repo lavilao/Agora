@@ -64,7 +64,7 @@ class DataExporterSnapshotSourceContractTest {
         assertFalse(capture.contains("copyStreamToZipEntry("))
         val export = exporter.substringAfter("suspend fun export(")
         val captureCall = export.indexOf(
-            "captureConversationSnapshot(settingsManager.conversationSettings.first())",
+            "captureConversationSnapshot(settingsManager.conversationSettings.first(), baseline)",
         )
         val destinationOpen = export.indexOf("context.contentResolver.openOutputStream(uri)")
         val archiveWrite = export.indexOf("writeConversationArchive(")

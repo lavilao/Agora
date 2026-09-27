@@ -46,22 +46,17 @@ internal fun BoxScope.ChatUserInteractionBar(
         AppForegroundTracker.setPresentedConversation(conversationId)
         onDispose { AppForegroundTracker.setPresentedConversation(null) }
     }
-    // Folding is remembered per conversation and survives switching away, until that
-    // conversation has nothing left to answer.
+    // Folding and the current page are remembered per conversation and survive switching away,
+    // until that conversation's card has left with nothing left to answer. They are cleared only
+    // once the card is gone, because the leaving card still shows the page and fold it had.
     var minimizedIn by rememberSaveable(saver = MinimizedSaver) { mutableStateOf(emptySet<String>()) }
     val minimizedKey = conversationId.orEmpty()
-    LaunchedEffect(minimizedKey, interactions.isEmpty()) {
-        if (interactions.isEmpty()) minimizedIn = minimizedIn - minimizedKey
-    }
     // Picks, typing and the current page belong to the requests, not to the card on screen, so they
     // live here for every conversation at once: switching away and back or rotating keeps them,
     // and a request that is answered, skipped or withdrawn takes its draft with it.
     val drafts = rememberSaveable(saver = QuestionDrafts.Saver) { QuestionDrafts() }
     drafts.retainOnly(questions)
     var pageIn by rememberSaveable(saver = PageSaver) { mutableStateOf(emptyMap<String, String>()) }
-    LaunchedEffect(minimizedKey, interactions.isEmpty()) {
-        if (interactions.isEmpty()) pageIn = pageIn - minimizedKey
-    }
     UserInteractionBar(
         conversationId = minimizedKey,
         interactions = interactions,
@@ -73,6 +68,13 @@ internal fun BoxScope.ChatUserInteractionBar(
         drafts = drafts,
         pageIn = pageIn,
         onPageChange = { owner, key -> pageIn = pageIn + (owner to key) },
+        onCardGone = { owner ->
+            // A card that left because its conversation was switched away still has requests.
+            if (owner == minimizedKey && interactions.isEmpty()) {
+                minimizedIn = minimizedIn - owner
+                pageIn = pageIn - owner
+            }
+        },
         onSubmitQuestions = { answers -> viewModel.askUser.submitAll(answers) },
         onSkipQuestion = { id -> viewModel.askUser.dismiss(id) },
         onShellDecision = { id, allow, alwaysAllowServer ->

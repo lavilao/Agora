@@ -216,17 +216,17 @@ class ImportExportManager(
                     skillManager,
                     conversationSettingsTransfers,
                 )
-                val manifest = importer.readManifest(uri)
-                if (manifest == null) {
+                // One open answers both questions: is this a backup, and what does it hold.
+                val preview = importer.preview(uri)
+                if (preview.manifest.version == 0) {
                     emitSnackbar(SnackbarEvent(app.getString(R.string.import_invalid_file)))
                     return@launch
                 }
-                val preview = importer.preview(uri)
                 if (!preview.hasImportableData) {
                     emitSnackbar(SnackbarEvent(app.getString(R.string.import_no_data)))
                     return@launch
                 }
-                _importManifest.value = manifest
+                _importManifest.value = preview.manifest
                 _importPreview.value = preview
             } catch (e: Exception) {
                 emitSnackbar(SnackbarEvent(app.getString(R.string.import_failed, e.localizedMessage ?: "")))

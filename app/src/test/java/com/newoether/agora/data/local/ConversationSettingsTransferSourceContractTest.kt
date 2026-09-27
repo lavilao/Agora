@@ -82,15 +82,18 @@ class ConversationSettingsTransferSourceContractTest {
         val dataImporter = sourceFile(
             "app/src/main/java/com/newoether/agora/data/DataImporter.kt",
         ).replace("\r\n", "\n")
-        val conversations = dataImporter.substringAfter(
-            "if (convDecision != null && convDecision != ImportStrategy.SKIP) {",
-        ).substringBefore("if (memDecision != null && memDecision != ImportStrategy.SKIP) {")
-        val finishPrevious = conversations.indexOf(
+        // Staging finishes any earlier transfer and restores media before the graph is written.
+        val staging = dataImporter.substringAfter("private suspend fun stageConversationGraph(")
+            .substringBefore("suspend fun import(")
+        val finishPrevious = staging.indexOf(
             "conversationSettingsTransfers.completePendingImport()",
         )
-        val restoreMedia = conversations.indexOf(
-            "conversationMediaRestorer.restoreConversationMedia(opened)",
+        val restoreMedia = staging.indexOf(
+            "conversationMediaRestorer.restoreConversationMedia(archive)",
         )
+        val conversations = dataImporter.substringAfter("suspend fun import(")
+            .substringAfter("if (staged != null) {")
+            .substringBefore("if (memDecision != null && memDecision != ImportStrategy.SKIP) {")
         val importGraphCall = conversations.indexOf(
             "conversationGraphImporter.importConversationGraph(",
         )
@@ -100,7 +103,7 @@ class ConversationSettingsTransferSourceContractTest {
         )
         assertTrue(finishPrevious >= 0)
         assertTrue(restoreMedia > finishPrevious)
-        assertTrue(importGraphCall > restoreMedia)
+        assertTrue(importGraphCall >= 0)
         assertTrue(markCommitted > importGraphCall)
         assertTrue(completeSettings > markCommitted)
         assertTrue(conversations.contains("if (!graphCommitted)"))

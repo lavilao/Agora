@@ -106,13 +106,18 @@ class CostModelContextEstimator(val costs: ContextCostModel) {
             toolCost += textRaw(tool.type)
             toolCost += textRaw(tool.function.name)
             toolCost += textRaw(tool.function.description)
-            toolCost += textRaw(tool.function.parameters.type)
-            tool.function.parameters.properties.toSortedMap().forEach { (name, property) ->
-                toolCost += textRaw(name)
-                toolCost += toolPropertyRaw(property)
-            }
-            tool.function.parameters.required.sorted().forEach { required ->
-                toolCost += textRaw(required)
+            val externalSchema = tool.function.parameters.schema
+            if (externalSchema != null) {
+                toolCost += textRaw(externalSchema.toString())
+            } else {
+                toolCost += textRaw(tool.function.parameters.type)
+                tool.function.parameters.properties.toSortedMap().forEach { (name, property) ->
+                    toolCost += textRaw(name)
+                    toolCost += toolPropertyRaw(property)
+                }
+                tool.function.parameters.required.sorted().forEach { required ->
+                    toolCost += textRaw(required)
+                }
             }
         }
         val nativeTools = listOfNotNull(

@@ -45,15 +45,15 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      # `packages` must be one space-separated line, not a YAML multiline block.
+      # A `|` block becomes a single string with literal newlines, which
+      # sdkmanager then treats as ONE package name ("platform-tools\nplatforms;..."),
+      # hence "Failed to find package 'platform-tools\nplatforms;...'". Agora's own
+      # official workflow gets this right (and uses @v4), so matching that here.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
-          packages: |
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
-            ndk;28.2.13676358
-            cmake;3.22.1
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;28.2.13676358 cmake;3.22.1"
           log-accepted-licenses: true
 
       - name: Create local.properties

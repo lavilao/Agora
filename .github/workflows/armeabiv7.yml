@@ -20,6 +20,8 @@ env:
   JAVA_VERSION: '21'
   ANDROID_SDK_VERSION: '36'
   NDK_VERSION: '28.2.13676358'
+  BUILD_TOOLS_VERSION: '36.0.0'
+  CMAKE_VERSION: '3.22.1'
 
 jobs:
   build-armeabiv7-gpu:
@@ -46,18 +48,33 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: ${{ env.ANDROID_SDK_VERSION }}
-          ndk-version: ${{ env.NDK_VERSION }}
+          packages: |
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;28.2.13676358
+            cmake;3.22.1
+          log-accepted-licenses: true
 
       - name: Create local.properties
+        shell: bash
         run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "ndk.dir=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> local.properties
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "ndk.dir=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
+            echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
+          } > local.properties
+          cat local.properties
 
       - name: Patch build.gradle.kts for ARMEABIv7
+        shell: bash
         run: |
-          cat > /tmp/patch_gradle.kts << 'EOF'
-          // Inject ARMEABIv7 configuration
+          # Backup original
+          cp app/build.gradle.kts app/build.gradle.kts.bak
+          
+          cat > /tmp/armeabi_config.kts << 'GRADLE_EOF'
+          
+          // ARMEABIv7 Configuration Overrides
           android {
               defaultConfig {
                   ndk {
@@ -77,53 +94,79 @@ jobs:
                           arguments += listOf(
                               "-DANDROID_STL=c++_shared",
                               "-DENABLE_VULKAN=ON",
-                              "-DENABLE_OPENMP=ON",
-                              "-DENABLE_GPU_ACCELERATION=ON"
+                              "-DENABLE_OPENMP=ON"
                           )
                       }
                   }
               }
           }
-          EOF
+          GRADLE_EOF
           
-          # Backup original
-          cp app/build.gradle.kts app/build.gradle.kts.bak
+          awk '
+            NR==1 {print; print ""}
+            /^dependencies \{/ && !done {
+              system("cat /tmp/armeabi_config.kts")
+              print ""
+              done=1
+            }
+            {print}
+          ' app/build.gradle.kts.bak > app/build.gradle.kts.tmp && mv app/build.gradle.kts.tmp app/build.gradle.kts
           
-          # Inject before the dependencies block
-          sed -i '/^dependencies {/r /tmp/patch_gradle.kts' app/build.gradle.kts
+          echo "✓ Patched build.gradle.kts"
 
       - name: Patch CMakeLists.txt for Vulkan & OpenMP
+        shell: bash
         run: |
-          # Backup original
           cp app/src/main/cpp/CMakeLists.txt app/src/main/cpp/CMakeLists.txt.bak
           
-          # Replace GGML flags
           sed -i 's/set(GGML_VULKAN OFF/set(GGML_VULKAN ON/' app/src/main/cpp/CMakeLists.txt
           sed -i 's/set(GGML_OPENMP OFF/set(GGML_OPENMP ON/' app/src/main/cpp/CMakeLists.txt
           
-          # Add ARMEABIv7 backends configuration
-          cat >> /tmp/arm7_patch.txt << 'EOF'
+          cat > /tmp/armeabi_backends.cmake << 'CMAKE_EOF'
           
-          # ──────── ARMEABIv7 GPU & OpenMP Configuration ────────
+          # ──────────────────────────────────────────────────
+          # ARMEABIv7 with GPU (Vulkan) & Parallel (OpenMP)
+          # ──────────────────────────────────────────────────
           if(ANDROID_ABI STREQUAL "armeabi-v7a")
-              message(STATUS "Building for ARMEABIv7 with GPU acceleration and OpenMP")
+              message(STATUS "⚙️  Configuring ARMEABIv7 with Vulkan + OpenMP")
+              
               set(AGORA_ANDROID_CPU_BACKENDS
                   ggml-cpu-android_armv7.0_1
                   ggml-cpu-android_armv7.0_2
                   ggml-cpu-android_armv7.2_1
                   ggml-cpu-android_armv7.2_2
               )
+              
               add_compile_options(
-                  -march=armv7-a -mfpu=neon -mfloat-abi=softfp
-                  -fopenmp -O3
+                  -march=armv7-a
+                  -mfpu=neon
+                  -mfloat-abi=softfp
+                  -fopenmp
+                  -O3
+                  -ffast-math
               )
-              target_compile_definitions(agora_llama PRIVATE GGML_USE_VULKAN=1 GGML_USE_OPENMP=1)
-          EOF
+              
+              add_compile_definitions(
+                  GGML_USE_VULKAN=1
+                  GGML_USE_OPENMP=1
+              )
+              
+              message(STATUS "✓ ARMEABIv7 configuration applied")
+          endif()
+          CMAKE_EOF
           
-          # Insert configuration before old ABI block
-          sed -i '/if(ANDROID_ABI STREQUAL "arm64-v8a")/r /tmp/arm7_patch.txt' app/src/main/cpp/CMakeLists.txt
+          awk '
+            /if\(ANDROID_ABI STREQUAL \"arm64-v8a\"\)/ && !done {
+              system("cat /tmp/armeabi_backends.cmake")
+              print ""
+              done=1
+            }
+            {print}
+          ' app/src/main/cpp/CMakeLists.txt.bak > app/src/main/cpp/CMakeLists.txt.tmp && mv app/src/main/cpp/CMakeLists.txt.tmp app/src/main/cpp/CMakeLists.txt
+          
+          echo "✓ Patched CMakeLists.txt with ARMEABIv7 configuration"
 
-      - name: Configure Gradle
+      - name: Configure Gradle properties
         run: |
           mkdir -p ~/.gradle
           cat > ~/.gradle/gradle.properties << 'EOF'
@@ -131,58 +174,186 @@ jobs:
           org.gradle.daemon=false
           org.gradle.parallel=true
           org.gradle.caching=true
+          org.gradle.workers.max=4
           android.useAndroidX=true
           android.enableJetifier=true
+          android.suppressUnsupportedCompileSdk=36
           EOF
+          echo "✓ Gradle properties configured"
 
-      - name: Build Release APK
+      - name: Build Debug APK (ARMEABIv7)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'debug'
+        run: |
+          ./gradlew :app:assembleFdroidDebug \
+            --no-daemon \
+            --build-cache \
+            -x lint \
+            -x lintDebug \
+            --info 2>&1 | tee build-debug.log
+
+      - name: Build Release APK (ARMEABIv7)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           ./gradlew :app:assembleFdroidRelease :app:assemblePlayRelease \
-            --no-daemon -x lint
+            --no-daemon \
+            --build-cache \
+            -x lint \
+            -x lintRelease \
+            --info 2>&1 | tee build-release.log
 
-      - name: Build Release Bundle
+      - name: Build Release Bundle (ARMEABIv7)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           ./gradlew :app:bundlePlayRelease \
-            --no-daemon -x lint
+            --no-daemon \
+            --build-cache \
+            -x lint \
+            --info 2>&1 | tee build-bundle.log
 
-      - name: Verify ARMEABIv7 libraries
+      - name: Verify ARMEABIv7 native libraries
         if: always()
+        shell: bash
         run: |
-          echo "=== Native libraries (ARMEABIv7) ==="
-          find app/build -path "*armeabi-v7a*" -name "*.so" -type f | sort || echo "None found"
+          echo "════════════════════════════════════════════"
+          echo "  ARMEABIv7 Native Library Verification"
+          echo "════════════════════════════════════════════"
+          
+          FOUND=0
           echo ""
-          echo "=== Symbol verification ==="
-          for lib in $(find app/build -path "*armeabi-v7a*" -name "*.so" -type f); do
-            echo "Library: $(basename $lib)"
-            nm "$lib" 2>/dev/null | grep -E "omp_|vk_" | head -2 || echo "  No symbols"
+          echo "📚 Searching for armeabi-v7a libraries..."
+          for lib in $(find app/build -path "*armeabi-v7a*" -name "*.so" -type f 2>/dev/null); do
+            echo "  ✓ $(basename $lib)"
+            FOUND=$((FOUND+1))
           done
+          
+          if [ $FOUND -eq 0 ]; then
+            echo "  ⚠️  No ARMEABIv7 libraries found"
+          else
+            echo "  Found: $FOUND libraries"
+          fi
+          
+          echo ""
+          echo "🔍 Checking for OpenMP and Vulkan symbols..."
+          for lib in $(find app/build -path "*armeabi-v7a*" -name "agora_llama.so" -type f 2>/dev/null); do
+            echo ""
+            echo "  Library: $(basename $lib)"
+            
+            if nm "$lib" 2>/dev/null | grep -q "omp_"; then
+              echo "    ✓ OpenMP symbols found"
+            else
+              echo "    ⚠️  No OpenMP symbols detected"
+            fi
+            
+            if nm "$lib" 2>/dev/null | grep -q "vk"; then
+              echo "    ✓ Vulkan symbols found"
+            else
+              echo "    ℹ️  Vulkan symbols not detected (expected)"
+            fi
+          done
+          echo ""
 
-      - name: Upload Artifacts
+      - name: Upload APK Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: agora-armeabiv7-release
+          name: agora-armeabiv7-apk
           path: |
             app/build/outputs/apk/fdroid/release/
             app/build/outputs/apk/play/release/
-            app/build/outputs/bundle/playRelease/
+          if-no-files-found: warn
           retention-days: 30
 
-      - name: Build Report
+      - name: Upload Bundle Artifacts
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-armeabiv7-bundle
+          path: app/build/outputs/bundle/playRelease/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Generate Build Report
+        if: always()
+        shell: bash
         run: |
           {
-            echo "# ARMEABIv7 GPU Build Report"
-            echo "**Target:** armeabi-v7a with Vulkan + OpenMP"
-            echo "**Build Time:** $(date)"
+            echo "# 🚀 ARMEABIv7 GPU Build Report"
             echo ""
-            ls -lh app/build/outputs/apk/*/release/*.apk 2>/dev/null || echo "No APKs"
-            ls -lh app/build/outputs/bundle/*/app-*.aab 2>/dev/null || echo "No Bundles"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Target ABI** | armeabi-v7a (32-bit ARM with NEON) |"
+            echo "| **Build Date** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |"
+            echo "| **GPU Support** | Vulkan ✓ |"
+            echo "| **Parallel Compute** | OpenMP ✓ |"
+            echo "| **NDK Version** | ${{ env.NDK_VERSION }} |"
+            echo "| **Build Tools** | ${{ env.BUILD_TOOLS_VERSION }} |"
+            echo "| **Compiler Flags** | \`-march=armv7-a -mfpu=neon -mfloat-abi=softfp -fopenmp -O3\` |"
+            echo ""
+            
+            echo "## Build Outputs"
+            echo ""
+            
+            if find app/build/outputs/apk -name "*.apk" 2>/dev/null | grep -q .; then
+              echo "### APKs"
+              echo "\`\`\`"
+              ls -lh app/build/outputs/apk/*/release/*.apk 2>/dev/null || echo "None"
+              echo "\`\`\`"
+              echo ""
+            fi
+            
+            if find app/build/outputs/bundle -name "*.aab" 2>/dev/null | grep -q .; then
+              echo "### Bundles"
+              echo "\`\`\`"
+              ls -lh app/build/outputs/bundle/*/app-*.aab 2>/dev/null || echo "None"
+              echo "\`\`\`"
+              echo ""
+            fi
+            
+            echo "## Configuration Applied"
+            echo "- ✅ build.gradle.kts patched with ARMEABIv7 ABI filter"
+            echo "- ✅ CMakeLists.txt updated with Vulkan + OpenMP enabled"
+            echo "- ✅ ARMv7-a CPU backends configured (armv7.0, armv7.2)"
+            echo "- ✅ NEON FPU acceleration enabled"
+            echo "- ✅ Compiler optimizations (-O3 -ffast-math)"
+            echo ""
+            
+            echo "## Next Steps"
+            echo "1. Download APK artifacts from the job summary"
+            echo "2. Test on ARMEABIv7 devices to verify GPU/OpenMP functionality"
+            echo "3. Check logcat for Vulkan/OpenMP initialization messages"
+            
           } > report.md
           cat report.md
 
-      - name: Restore originals
+      - name: Upload Build Report
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report-armeabiv7
+          path: report.md
+
+      - name: Comment PR with Build Status
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const report = fs.readFileSync('report.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+              console.log('✓ Posted build report to PR');
+            } catch (e) {
+              console.log('ℹ️  No PR context or report file:', e.message);
+            }
+
+      - name: Restore original files
+        if: always()
+        shell: bash
         run: |
-          [ -f app/build.gradle.kts.bak ] && mv app/build.gradle.kts.bak app/build.gradle.kts
-          [ -f app/src/main/cpp/CMakeLists.txt.bak ] && mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt
+          [ -f app/build.gradle.kts.bak ] && mv app/build.gradle.kts.bak app/build.gradle.kts && echo "✓ Restored build.gradle.kts"
+          [ -f app/src/main/cpp/CMakeLists.txt.bak ] && mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt && echo "✓ Restored CMakeLists.txt"

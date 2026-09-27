@@ -22,6 +22,7 @@ env:
   NDK_VERSION: '28.2.13676358'
   BUILD_TOOLS_VERSION: '36.0.0'
   CMAKE_VERSION: '3.22.1'
+  TARGET_ABI: 'armeabi-v7a'
 
 jobs:
   build-armeabiv7-gpu:
@@ -37,7 +38,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          submodules: recursive   # llama.cpp is a submodule; CMake needs it at configure time
+          submodules: recursive
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -46,11 +47,6 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      # `packages` must be one space-separated line, not a YAML multiline block.
-      # A `|` block becomes a single string with literal newlines, which
-      # sdkmanager then treats as ONE package name ("platform-tools\nplatforms;..."),
-      # hence "Failed to find package 'platform-tools\nplatforms;...'". Agora's own
-      # official workflow gets this right (and uses @v4), so matching that here.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
@@ -70,125 +66,52 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # ──────────────────────────────────────────────────────────────────────
-      # PATCH 1: app/build.gradle.kts — force armeabi-v7a only + pass the
-      # CMake arguments that the original file doesn't.
-      #
-      # The original defaultConfig has `abiFilters += listOf("arm64-v8a")` and
-      # only passes -DANDROID_STL=c++_shared. We need to:
-      #   1. Clear arm64-v8a and add armeabi-v7a.
-      #   2. Add -DGGML_CPU_ARM_ARCH=armv7-a so ggml-cpu picks the right -march
-      #      flag (this works because llama.cpp's ggml-cpu/CMakeLists.txt has
-      #      `if (GGML_CPU_ARM_ARCH) list(APPEND ARCH_FLAGS -march=${GGML_CPU_ARM_ARCH})`,
-      #      and there's no `set(GGML_CPU_ARM_ARCH ... FORCE)` to override it).
-      #   3. Keep -DGGML_VULKAN=ON and -DGGML_OPENMP=ON for belt-and-suspenders
-      #      (the CMakeLists.txt sed replacements below are the primary path
-      #      because `set(... CACHE ... FORCE)` overrides -D args).
-      #
-      # The injected `android { ... }` block is at the top level, so it MERGES
-      # with the existing `android { ... }` block — Kotlin DSL allows calling
-      # the extension configuration block multiple times. `+=` accumulates,
-      # `clear()` empties the existing collection.
-      # ──────────────────────────────────────────────────────────────────────
       - name: Patch build.gradle.kts for ARMEABIv7
         shell: bash
         run: |
           set -euo pipefail
           cp app/build.gradle.kts app/build.gradle.kts.bak
 
-          cat > /tmp/armeabi_config.kts << 'GRADLE_EOF'
+          python3 - <<'PY'
+          from pathlib import Path
 
-          // ARMEABIv7 Configuration Overrides (injected by CI)
-          android {
-              defaultConfig {
-                  ndk {
-                      abiFilters.clear()
-                      abiFilters += listOf("armeabi-v7a")
-                  }
-                  externalNativeBuild {
-                      cmake {
-                          cppFlags += listOf(
-                              "-std=c++17",
-                              "-march=armv7-a",
-                              "-mfpu=neon",
-                              "-mfloat-abi=softfp",
-                              "-fopenmp",
-                              "-O3"
-                          )
-                          arguments += listOf(
-                              "-DANDROID_STL=c++_shared",
-                              "-DGGML_VULKAN=ON",
-                              "-DGGML_OPENMP=ON",
-                              "-DGGML_CPU_ARM_ARCH=armv7-a"
-                          )
-                      }
-                  }
-              }
-          }
-          GRADLE_EOF
+          app_path = Path("app/build.gradle.kts")
+          app = app_path.read_text()
 
-          # Inject BEFORE the `dependencies {` line. The original file has
-          # `dependencies {` at top level (verified), so this anchor is safe.
-          awk '
-            NR==1 {print; print ""}
-            /^dependencies \{/ && !done {
-              system("cat /tmp/armeabi_config.kts")
-              print ""
-              done=1
-            }
-            {print}
-          ' app/build.gradle.kts.bak > app/build.gradle.kts.tmp && mv app/build.gradle.kts.tmp app/build.gradle.kts
+          target_abi_line = 'val targetAbi = providers.gradleProperty("agora.abi").orNull ?: "arm64-v8a"\n'
+          if 'val targetAbi =' not in app:
+              marker = "import java.util.Properties\n"
+              if marker not in app:
+                  raise SystemExit("cannot locate app/build.gradle.kts import marker")
+              app = app.replace(marker, marker + target_abi_line, 1)
 
-          if ! grep -q "ARMEABIv7 Configuration Overrides" app/build.gradle.kts; then
-            echo "❌ ERROR: could not inject ARMEABIv7 config into build.gradle.kts." >&2
-            echo "   The '^dependencies {' anchor line was not found as expected." >&2
-            exit 1
-          fi
-          echo "✓ Patched build.gradle.kts"
+          old_abi = 'abiFilters += listOf("arm64-v8a")'
+          new_abi = 'abiFilters += listOf(targetAbi)'
+          if old_abi in app:
+              app = app.replace(old_abi, new_abi, 1)
+          elif new_abi not in app:
+              raise SystemExit("cannot locate abiFilters line in build.gradle.kts")
 
-      # ──────────────────────────────────────────────────────────────────────
-      # PATCH 2: app/src/main/cpp/CMakeLists.txt — make armeabi-v7a actually
-      # buildable.
-      #
-      # The original file has FOUR things that break armeabi-v7a:
-      #
-      #   (a) `set(GGML_VULKAN OFF CACHE BOOL "" FORCE)` — Vulkan off.
-      #   (b) `set(GGML_OPENMP OFF CACHE BOOL "" FORCE)` — OpenMP off.
-      #   (c) `set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)` — registers
-      #       `ggml-cpu-android_armv8.*` variants that hardcode -march=armv8-a
-      #       (64-bit). Compiling armv8-a code for the 32-bit armeabi-v7a ABI
-      #       is a hard clang error: "target CPU does not support ARM mode".
-      #       The `FORCE` keyword ALSO overrides any -DGGML_CPU_ALL_VARIANTS=OFF
-      #       passed via gradle, so we MUST sed-patch the source.
-      #   (d) The `if(arm64-v8a) ... elseif(x86_64) ... else() FATAL_ERROR`
-      #       chain at the bottom. For armeabi-v7a, it hits `else()` and
-      #       aborts CMake with `message(FATAL_ERROR "Unsupported Android ABI:
-      #       armeabi-v7a")`. Gradle's externalNativeBuild then fails.
-      #
-      # The previous version of this step ALSO injected a separate
-      # `if(ANDROID_ABI STREQUAL "armeabi-v7a") { ... }` block before the
-      # if/elseif chain, with a list of fake `ggml-cpu-android_armv7.*`
-      # backend names. That didn't work because:
-      #   - llama.cpp does NOT register any `android_armv7.*` variants
-      #     (confirmed: 0 matches in ggml/src/CMakeLists.txt). So the
-      #     `foreach(backend ...) if(NOT TARGET ${backend}) FATAL_ERROR`
-      #     loop would still abort CMake.
-      #   - The injected block ran BEFORE the original if/elseif chain, so
-      #     the original `else() FATAL_ERROR` still fired for armeabi-v7a.
-      #
-      # The fix:
-      #   - sed (a) and (b) to ON (kept from the previous version; the gradle
-      #     -D args alone don't work because of `FORCE`).
-      #   - sed (c) to OFF so ggml-cpp registers just the base `ggml-cpu`
-      #     target. With `GGML_CPU_ARM_ARCH=armv7-a` (from gradle), the base
-      #     target compiles with -march=armv7-a. No more armv8-a/32-bit ABI
-      #     mismatch.
-      #   - sed (d): replace the `else() message(FATAL_ERROR ...)` with
-      #     `elseif(ANDROID_ABI STREQUAL "armeabi-v7a") set(AGORA_ANDROID_CPU_BACKENDS "")`.
-      #     Empty list → the `foreach(backend ...)` loop is a no-op. The base
-      #     `ggml-cpu` target still gets built and packaged by AGP via the
-      #     default CMAKE_LIBRARY_OUTPUT_DIRECTORY.
-      # ──────────────────────────────────────────────────────────────────────
+          old_args = '                arguments += listOf("-DANDROID_STL=c++_shared")'
+          new_args = '''                arguments += listOf("-DANDROID_STL=c++_shared")
+                arguments += listOf("-DGGML_VULKAN=ON", "-DGGML_OPENMP=ON")
+                if (targetAbi == "armeabi-v7a") {
+                    arguments += listOf("-DGGML_CPU_ARM_ARCH=armv7-a")
+                }'''
+          if 'DGGML_VULKAN=ON' not in app:
+              if old_args not in app:
+                  raise SystemExit("cannot locate externalNativeBuild arguments line")
+              app = app.replace(old_args, new_args, 1)
+
+          app_path.write_text(app)
+          print("✓ Patched app/build.gradle.kts")
+          PY
+
+          grep -q 'val targetAbi =' app/build.gradle.kts || { echo "❌ targetAbi not added"; exit 1; }
+          grep -q 'listOf(targetAbi)' app/build.gradle.kts || { echo "❌ abiFilters not replaced"; exit 1; }
+          grep -q 'DGGML_VULKAN=ON' app/build.gradle.kts || { echo "❌ Vulkan arg not added"; exit 1; }
+          echo "✓ All build.gradle.kts patches verified"
+
       - name: Patch CMakeLists.txt for Vulkan, OpenMP, and ARMEABIv7
         shell: bash
         run: |
@@ -196,63 +119,93 @@ jobs:
           CMAKE_FILE="app/src/main/cpp/CMakeLists.txt"
           cp "$CMAKE_FILE" "$CMAKE_FILE.bak"
 
-          # (a) Vulkan ON
-          sed -i -E 's/set\(GGML_VULKAN[[:space:]]+OFF/set(GGML_VULKAN ON/' "$CMAKE_FILE"
-          sed -i -E 's/option\((GGML_VULKAN[^)]*)OFF/option(\1ON/' "$CMAKE_FILE"
+          python3 - "$CMAKE_FILE" <<'PY'
+          from pathlib import Path
+          import sys
 
-          # (b) OpenMP ON
-          sed -i -E 's/set\(GGML_OPENMP[[:space:]]+OFF/set(GGML_OPENMP ON/' "$CMAKE_FILE"
-          sed -i -E 's/option\((GGML_OPENMP[^)]*)OFF/option(\1ON/' "$CMAKE_FILE"
+          cmake_path = Path(sys.argv[1])
+          cmake = cmake_path.read_text()
 
-          # (c) GGML_CPU_ALL_VARIANTS OFF — CRITICAL for armeabi-v7a.
-          # The `FORCE` keyword in the original `set(... CACHE ... FORCE)` overrides
-          # any -DGGML_CPU_ALL_VARIANTS=OFF passed via gradle, so the only way to
-          # flip this is to edit the source. With this ON, llama.cpp registers
-          # `android_armv8.*` variants that hardcode -march=armv8-a and fail to
-          # compile for 32-bit armeabi-v7a.
-          sed -i -E 's/set\(GGML_CPU_ALL_VARIANTS[[:space:]]+ON/set(GGML_CPU_ALL_VARIANTS OFF/' "$CMAKE_FILE"
+          cmake = cmake.replace(
+              'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)',
+              'set(GGML_VULKAN ON CACHE BOOL "" FORCE)'
+          )
+          cmake = cmake.replace(
+              'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)',
+              'set(GGML_OPENMP ON CACHE BOOL "" FORCE)'
+          )
 
-          # (d) Replace the `else() message(FATAL_ERROR ...)` branch with an
-          # armeabi-v7a branch that sets an empty backend list. The foreach
-          # loop below then becomes a no-op for armeabi-v7a, and the base
-          # `ggml-cpu` target (always registered via ggml_add_backend(CPU) in
-          # llama.cpp) is used instead.
-          #
-          # We use perl here because sed has no good way to match across the
-          # two-line `else()\n    message(FATAL_ERROR ...)` block. The pattern
-          # matches the literal text in the original file (verified).
-          perl -i -0pe 's/else\(\)\s*\n\s*message\(FATAL_ERROR "Unsupported Android ABI: \$\{ANDROID_ABI\}"\)/elseif(ANDROID_ABI STREQUAL "armeabi-v7a")\n    # armeabi-v7a uses the base ggml-cpu target only (no android_armv8.* variants).\n    set(AGORA_ANDROID_CPU_BACKENDS "")/' "$CMAKE_FILE"
+          old_all_variants = 'set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)'
+          new_all_variants = '''if(ANDROID_ABI STREQUAL "armeabi-v7a")
+    set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
+    set(GGML_CPU_ARM_ARCH "armv7-a" CACHE STRING "" FORCE)
+    set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+else()
+    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)
+endif()'''
+          if 'set(GGML_CPU_ARM_ARCH "armv7-a"' not in cmake:
+              if old_all_variants not in cmake:
+                  raise SystemExit("cannot locate GGML_CPU_ALL_VARIANTS ON line")
+              cmake = cmake.replace(old_all_variants, new_all_variants, 1)
 
-          # Diagnostics: show every GGML flag line in the final file.
-          echo "── GGML flag lines after patching ──"
-          grep -nE 'GGML_(VULKAN|OPENMP|CPU_ALL_VARIANTS)' "$CMAKE_FILE" || echo "(none found)"
+          armv7_branch = '''elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+    set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)
+'''
+          if 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)' not in cmake:
+              marker = 'elseif(ANDROID_ABI STREQUAL "x86_64")\n'
+              if marker not in cmake:
+                  raise SystemExit("cannot locate Android ABI backend dispatch")
+              cmake = cmake.replace(marker, armv7_branch + marker, 1)
 
-          echo "── ABI branches after patching ──"
-          grep -nE 'ANDROID_ABI STREQUAL|message\(FATAL_ERROR "Unsupported Android ABI' "$CMAKE_FILE"
+          cmake_path.write_text(cmake)
+          print("✓ Patched CMakeLists.txt")
+          PY
 
-          # Verify all three critical patches landed.
-          if ! grep -qE 'GGML_VULKAN.*ON' "$CMAKE_FILE"; then
-            echo "❌ ERROR: GGML_VULKAN is not ON." >&2
-            exit 1
-          fi
-          if ! grep -qE 'GGML_OPENMP.*ON' "$CMAKE_FILE"; then
-            echo "❌ ERROR: GGML_OPENMP is not ON." >&2
-            exit 1
-          fi
-          if ! grep -qE 'GGML_CPU_ALL_VARIANTS.*OFF' "$CMAKE_FILE"; then
-            echo "❌ ERROR: GGML_CPU_ALL_VARIANTS is not OFF — armeabi-v7a will fail with armv8-a compile errors." >&2
-            exit 1
-          fi
-          if ! grep -q 'elseif(ANDROID_ABI STREQUAL "armeabi-v7a")' "$CMAKE_FILE"; then
-            echo "❌ ERROR: armeabi-v7a ABI branch was not added — CMake will still abort with FATAL_ERROR." >&2
-            exit 1
-          fi
-          if grep -q 'message(FATAL_ERROR "Unsupported Android ABI' "$CMAKE_FILE"; then
-            echo "❌ ERROR: the FATAL_ERROR for unsupported ABIs is still present." >&2
-            exit 1
-          fi
+          grep -q 'set(GGML_VULKAN ON CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "❌ Vulkan not ON"; exit 1; }
+          grep -q 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "❌ OpenMP not ON"; exit 1; }
+          grep -q 'set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "❌ CPU_ALL_VARIANTS not OFF"; exit 1; }
+          grep -q 'set(GGML_CPU_ARM_ARCH "armv7-a"' "$CMAKE_FILE" || { echo "❌ CPU_ARM_ARCH not set"; exit 1; }
+          grep -q 'set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "❌ LLAMAFILE not OFF"; exit 1; }
+          grep -q 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)' "$CMAKE_FILE" || { echo "❌ armeabi-v7a backend branch not added"; exit 1; }
+          echo "✓ All CMakeLists.txt patches verified"
 
-          echo "✓ Patched CMakeLists.txt with Vulkan + OpenMP + armeabi-v7a support"
+      - name: Patch and run build-proot.sh for ARMEABIv7
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+
+          python3 - build-proot.sh <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          replacements = {
+              'CROSS_PREFIX="aarch64-linux-android26"': 'CROSS_PREFIX="armv7a-linux-androideabi26"',
+              'SYSROOT="$BLD/sysroot/arm64-v8a"': 'SYSROOT="$BLD/sysroot/armeabi-v7a"',
+              'BLD_DIR="$BLD/build-proot-arm64-v8a"': 'BLD_DIR="$BLD/build-proot-armeabi-v7a"',
+              'JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/arm64-v8a"': 'JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/armeabi-v7a"',
+              'FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/arm64-v8a"': 'FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/armeabi-v7a"',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"cannot patch build-proot.sh: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          print("✓ Patched build-proot.sh for armeabi-v7a")
+          PY
+
+          chmod +x build-proot.sh
+          bash build-proot.sh --force
+
+          for lib in libproot_exec.so libproot_loader.so libtalloc.so; do
+            if [ ! -f "app/src/main/jniLibs/armeabi-v7a/$lib" ]; then
+              echo "❌ ERROR: $lib not found" >&2
+              exit 1
+            fi
+          done
+          echo "✓ All proot .so files present"
 
       - name: Configure Gradle properties
         run: |
@@ -267,40 +220,17 @@ jobs:
           android.enableJetifier=true
           android.suppressUnsupportedCompileSdk=36
           EOF
-          echo "✓ Gradle properties configured"
 
-      # ──────────────────────────────────────────────────────────────────────
-      # CRITICAL: `set -o pipefail` is mandatory in all three build steps.
-      #
-      # The previous version used `./gradlew ... 2>&1 | tee build-X.log`
-      # WITHOUT `pipefail`. Bash's default pipeline exit code is the LAST
-      # command's exit code (here `tee`, which always succeeds). So when
-      # gradle failed (e.g. CMake FATAL_ERROR), `tee` still exited 0 and
-      # the workflow step "succeeded" — masking the real failure and
-      # causing the workflow to look green while producing no APK.
-      # ──────────────────────────────────────────────────────────────────────
-
-      # On push/PR this now builds the release variants (what you'd actually
-      # install on the phone); the debug build is opt-in via workflow_dispatch.
       - name: Build Debug APK (ARMEABIv7)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
         run: |
           set -euo pipefail
           ./gradlew :app:assembleFdroidDebug \
-            --no-daemon \
-            --build-cache \
-            -x lint \
-            -x lintDebug \
-            --info 2>&1 | tee build-debug.log
-          # Hard-fail if the expected APK doesn't exist. Catches the previous
-          # "gradle silently produced nothing" failure mode.
+            --no-daemon --build-cache \
+            -Pagora.abi="${{ env.TARGET_ABI }}" \
+            -x lint -x lintDebug --info 2>&1 | tee build-debug.log
           APK="app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk"
-          if [ ! -f "$APK" ]; then
-            echo "❌ ERROR: $APK not found after build." >&2
-            echo "   The gradle build reported success but produced no APK." >&2
-            echo "   Check build-debug.log for the actual error." >&2
-            exit 1
-          fi
+          [ -f "$APK" ] || { echo "❌ $APK not found"; exit 1; }
           echo "✓ Built: $APK ($(du -h "$APK" | cut -f1))"
 
       - name: Build Release APK (ARMEABIv7)
@@ -308,89 +238,35 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew :app:assembleFdroidRelease :app:assemblePlayRelease \
-            --no-daemon \
-            --build-cache \
-            -x lint \
-            -x lintRelease \
-            --info 2>&1 | tee build-release.log
-          # Hard-fail if neither APK exists.
+            --no-daemon --build-cache \
+            -Pagora.abi="${{ env.TARGET_ABI }}" \
+            -x lint -x lintRelease --info 2>&1 | tee build-release.log
           FDROID_APK="app/build/outputs/apk/fdroid/release/app-fdroid-release.apk"
           PLAY_APK="app/build/outputs/apk/play/release/app-play-release.apk"
-          if [ ! -f "$FDROID_APK" ] && [ ! -f "$PLAY_APK" ]; then
-            echo "❌ ERROR: neither $FDROID_APK nor $PLAY_APK was produced." >&2
-            echo "   Check build-release.log for the actual error." >&2
-            exit 1
-          fi
-          [ -f "$FDROID_APK" ] && echo "✓ Built: $FDROID_APK ($(du -h "$FDROID_APK" | cut -f1))"
-          [ -f "$PLAY_APK" ]   && echo "✓ Built: $PLAY_APK ($(du -h "$PLAY_APK" | cut -f1))"
+          [ -f "$FDROID_APK" ] || [ -f "$PLAY_APK" ] || { echo "❌ No APK produced"; exit 1; }
 
       - name: Build Release Bundle (ARMEABIv7)
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           set -euo pipefail
           ./gradlew :app:bundlePlayRelease \
-            --no-daemon \
-            --build-cache \
-            -x lint \
-            --info 2>&1 | tee build-bundle.log
+            --no-daemon --build-cache \
+            -Pagora.abi="${{ env.TARGET_ABI }}" \
+            -x lint --info 2>&1 | tee build-bundle.log
           BUNDLE="app/build/outputs/bundle/playRelease/app-play-release.aab"
-          if [ ! -f "$BUNDLE" ]; then
-            echo "❌ ERROR: $BUNDLE not found after build." >&2
-            echo "   Check build-bundle.log for the actual error." >&2
-            exit 1
-          fi
-          echo "✓ Built: $BUNDLE ($(du -h "$BUNDLE" | cut -f1))"
+          [ -f "$BUNDLE" ] || { echo "❌ $BUNDLE not found"; exit 1; }
 
-      # ──────────────────────────────────────────────────────────────────────
-      # Verify step now HARD-FAILS when no armeabi-v7a .so was produced.
-      # The previous version just printed a warning, which is why a broken
-      # build sailed through to the upload-artifact step (which also just
-      # warned via `if-no-files-found: warn`).
-      # ──────────────────────────────────────────────────────────────────────
       - name: Verify ARMEABIv7 native libraries
         if: always()
         shell: bash
         run: |
-          set -uo pipefail   # not -e; we want to control the exit code explicitly
-          echo "════════════════════════════════════════════"
-          echo "  ARMEABIv7 Native Library Verification"
-          echo "════════════════════════════════════════════"
+          set -uo pipefail
           FOUND=0
-          echo ""
-          echo "📚 Searching for armeabi-v7a libraries..."
           for lib in $(find app/build -path "*armeabi-v7a*" -name "*.so" -type f 2>/dev/null); do
             echo "  ✓ $(basename "$lib")"
             FOUND=$((FOUND+1))
           done
-          if [ "$FOUND" -eq 0 ]; then
-            echo "  ❌ No ARMEABIv7 libraries found — the build is broken."
-            echo "     Check the build steps above for the actual error."
-            exit 1
-          fi
-          echo "  Found: $FOUND libraries"
-          echo ""
-          echo "🔍 Checking for OpenMP and Vulkan symbols in agora_llama.so..."
-          for lib in $(find app/build -path "*armeabi-v7a*" -name "agora_llama.so" -type f 2>/dev/null); do
-            echo ""
-            echo "  Library: $(basename "$lib")"
-            if nm "$lib" 2>/dev/null | grep -q "omp_"; then
-              echo "    ✓ OpenMP symbols found"
-            else
-              echo "    ⚠️  No OpenMP symbols detected"
-            fi
-            if nm "$lib" 2>/dev/null | grep -q "vk"; then
-              echo "    ✓ Vulkan symbols found"
-            else
-              echo "    ℹ️  No Vulkan symbols in agora_llama.so (expected — Vulkan lives in libggml-vulkan.so)"
-            fi
-          done
-          echo ""
-          echo "🔍 Checking for Vulkan backend library..."
-          if find app/build -path "*armeabi-v7a*" -name "libggml-vulkan.so" -type f 2>/dev/null | grep -q .; then
-            echo "  ✓ libggml-vulkan.so present"
-          else
-            echo "  ⚠️  libggml-vulkan.so not found — Vulkan backend may not have built"
-          fi
+          [ "$FOUND" -gt 0 ] || { echo "❌ No ARMEABIv7 libraries found"; exit 1; }
 
       - name: Upload APK Artifacts
         if: always()
@@ -401,7 +277,7 @@ jobs:
             app/build/outputs/apk/fdroid/release/
             app/build/outputs/apk/fdroid/debug/
             app/build/outputs/apk/play/release/
-          if-no-files-found: error   # was `warn` — masked the silent failure
+          if-no-files-found: error
           retention-days: 30
 
       - name: Upload Bundle Artifacts
@@ -410,7 +286,7 @@ jobs:
         with:
           name: agora-armeabiv7-bundle
           path: app/build/outputs/bundle/playRelease/
-          if-no-files-found: error   # was `warn` — masked the silent failure
+          if-no-files-found: error
           retention-days: 30
 
       - name: Generate Build Report
@@ -427,9 +303,6 @@ jobs:
             echo "| **GPU Support** | Vulkan ✓ |"
             echo "| **Parallel Compute** | OpenMP ✓ |"
             echo "| **NDK Version** | ${{ env.NDK_VERSION }} |"
-            echo "| **Build Tools** | ${{ env.BUILD_TOOLS_VERSION }} |"
-            echo "| **Compiler Flags** | \`-march=armv7-a -mfpu=neon -mfloat-abi=softfp -fopenmp -O3\` |"
-            echo "| **CPU Backend** | base \`ggml-cpu\` (GGML_CPU_ALL_VARIANTS=OFF, GGML_CPU_ARM_ARCH=armv7-a) |"
             echo ""
             echo "## Build Outputs"
             echo ""
@@ -438,35 +311,16 @@ jobs:
               echo "\`\`\`"
               ls -lh app/build/outputs/apk/*/*/*.apk 2>/dev/null || echo "None"
               echo "\`\`\`"
-              echo ""
             else
-              echo "### APKs"
-              echo "None — build failed. See logs above."
-              echo ""
+              echo "### APKs — None (build failed)"
             fi
-            if find app/build/outputs/bundle -name "*.aab" 2>/dev/null | grep -q .; then
-              echo "### Bundles"
-              echo "\`\`\`"
-              ls -lh app/build/outputs/bundle/*/app-*.aab 2>/dev/null || echo "None"
-              echo "\`\`\`"
-              echo ""
-            else
-              echo "### Bundles"
-              echo "None — build failed or bundle step skipped."
-              echo ""
-            fi
-            echo "## Configuration Applied"
-            echo "- ✅ build.gradle.kts patched with ARMEABI-v7 ABI filter + CMake args"
-            echo "- ✅ CMakeLists.txt: GGML_VULKAN=ON, GGML_OPENMP=ON"
-            echo "- ✅ CMakeLists.txt: GGML_CPU_ALL_VARIANTS=OFF (avoids armv8-a/32-bit-ABI mismatch)"
-            echo "- ✅ CMakeLists.txt: armeabi-v7a branch added to ABI if/elseif chain"
-            echo "- ✅ NEON FPU acceleration enabled (-mfpu=neon -mfloat-abi=softfp)"
-            echo "- ✅ Compiler optimizations (-O3)"
             echo ""
-            echo "## Notes"
-            echo "- The Redmi 9A's Helio G25 does NOT have a Vulkan driver — Vulkan is compiled in but won't be used at runtime."
-            echo "- OpenMP works on armeabi-v7a and will parallelize CPU inference across the 4 Cortex-A53 cores."
-            echo "- With GGML_CPU_ALL_VARIANTS=OFF, only the base \`ggml-cpu\` backend is built (no per-SoC variants). This is the correct config for 32-bit ARM."
+            echo "## Configuration Applied"
+            echo "- ✅ build.gradle.kts: \`val targetAbi\` + \`-Pagora.abi=armeabi-v7a\`"
+            echo "- ✅ CMakeLists.txt: GGML_VULKAN=ON, GGML_OPENMP=ON"
+            echo "- ✅ CMakeLists.txt: GGML_CPU_ALL_VARIANTS=OFF for armeabi-v7a"
+            echo "- ✅ CMakeLists.txt: GGML_CPU_ARM_ARCH=armv7-a, GGML_LLAMAFILE=OFF"
+            echo "- ✅ build-proot.sh: patched for armeabi-v7a"
           } > report.md
           cat report.md
 
@@ -491,27 +345,17 @@ jobs:
                 repo: context.repo.repo,
                 body: report
               });
-              console.log('✓ Posted build report to PR');
             } catch (e) {
-              console.log('ℹ️  No PR context or report file:', e.message);
+              console.log('ℹ️  No PR context:', e.message);
             }
 
-      # Restore the .bak files so the working tree is clean. Uses proper
-      # if-blocks (not `[ -f x ] && mv ... && echo`) so a missing backup is
-      # treated as "nothing to restore", not as an error.
       - name: Restore original files
         if: always()
         shell: bash
         run: |
           if [ -f app/build.gradle.kts.bak ]; then
             mv app/build.gradle.kts.bak app/build.gradle.kts
-            echo "✓ Restored build.gradle.kts"
-          else
-            echo "ℹ️  No build.gradle.kts.bak found — nothing to restore"
           fi
           if [ -f app/src/main/cpp/CMakeLists.txt.bak ]; then
             mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt
-            echo "✓ Restored CMakeLists.txt"
-          else
-            echo "ℹ️  No CMakeLists.txt.bak found — nothing to restore"
           fi

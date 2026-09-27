@@ -65,7 +65,8 @@ jobs:
             echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
           } > local.properties
           cat local.properties
-
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
       - name: Patch build.gradle.kts for ARMEABIv7
         shell: bash
         run: |

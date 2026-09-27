@@ -72,9 +72,7 @@ jobs:
           set -euo pipefail
           # Backup original
           cp app/build.gradle.kts app/build.gradle.kts.bak
-
           cat > /tmp/armeabi_config.kts << 'GRADLE_EOF'
-
           // ARMEABIv7 Configuration Overrides
           android {
               defaultConfig {
@@ -108,7 +106,6 @@ jobs:
           # and the "Patch CMakeLists.txt" step below also targets GGML_VULKAN /
           # GGML_OPENMP directly — so ENABLE_VULKAN/ENABLE_OPENMP were CMake cache
           # variables nothing reads, silently doing nothing.
-
           awk '
             NR==1 {print; print ""}
             /^dependencies \{/ && !done {
@@ -118,7 +115,6 @@ jobs:
             }
             {print}
           ' app/build.gradle.kts.bak > app/build.gradle.kts.tmp && mv app/build.gradle.kts.tmp app/build.gradle.kts
-
           # Verify the patch actually landed instead of silently no-op'ing if the
           # "dependencies {" anchor line doesn't match the real file.
           if ! grep -q "ARMEABIv7 Configuration Overrides" app/build.gradle.kts; then
@@ -133,25 +129,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp app/src/main/cpp/CMakeLists.txt app/src/main/cpp/CMakeLists.txt.bak
-          
-          # FIX 1: Use robust regex to replace OFF with ON. 
-          # This handles both 'set(GGML_VULKAN OFF)' and 'option(GGML_VULKAN "..." OFF)'
-          sed -i 's/\(GGML_VULKAN[^A-Z]*\)OFF/\1ON/g' app/src/main/cpp/CMakeLists.txt
-          sed -i 's/\(GGML_OPENMP[^A-Z]*\)OFF/\1ON/g' app/src/main/cpp/CMakeLists.txt
-          
+          CMAKE_FILE="app/src/main/cpp/CMakeLists.txt"
+          cp "$CMAKE_FILE" "$CMAKE_FILE.bak"
+
+          # Flip the upstream defaults. Handle both historical spellings:
+          #   old llama.cpp:  set(GGML_VULKAN OFF)
+          #   newer ggml:     option(GGML_VULKAN "..." OFF)
+          sed -i -E 's/set\(GGML_VULKAN[[:space:]]+OFF/set(GGML_VULKAN ON/' "$CMAKE_FILE"
+          sed -i -E 's/option\((GGML_VULKAN[^)]*)OFF/option(\1ON/' "$CMAKE_FILE"
+          sed -i -E 's/set\(GGML_OPENMP[[:space:]]+OFF/set(GGML_OPENMP ON/' "$CMAKE_FILE"
+          sed -i -E 's/option\((GGML_OPENMP[^)]*)OFF/option(\1ON/' "$CMAKE_FILE"
+
           cat > /tmp/armeabi_backends.cmake << 'CMAKE_EOF'
+
           # ──────────────────────────────────────────────────
           # ARMEABIv7 with GPU (Vulkan) & Parallel (OpenMP)
           # ──────────────────────────────────────────────────
           if(ANDROID_ABI STREQUAL "armeabi-v7a")
               message(STATUS "⚙️  Configuring ARMEABIv7 with Vulkan + OpenMP")
+
               set(AGORA_ANDROID_CPU_BACKENDS
                   ggml-cpu-android_armv7.0_1
                   ggml-cpu-android_armv7.0_2
                   ggml-cpu-android_armv7.2_1
                   ggml-cpu-android_armv7.2_2
               )
+
               add_compile_options(
                   -march=armv7-a
                   -mfpu=neon
@@ -160,15 +163,25 @@ jobs:
                   -O3
                   -ffast-math
               )
+
               add_compile_definitions(
                   GGML_USE_VULKAN=1
                   GGML_USE_OPENMP=1
               )
+
               message(STATUS "✓ ARMEABIv7 configuration applied")
           endif()
           CMAKE_EOF
-          
-          # FIX 2: Removed unnecessary backslash escapes before double quotes in awk regex
+
+          # FIXED BUG: the old awk read "$CMAKE_FILE.bak" — the PRISTINE backup —
+          # and wrote its output over CMakeLists.txt. That silently discarded
+          # every sed edit above, which is exactly why the "GGML_VULKAN ON"
+          # verification grep failed and the job exited 1. Run awk against the
+          # *patched* file instead.
+          #
+          # Also fixed the awk warning `regexp escape sequence \" is not a known
+          # regexp operator`: inside a single-quoted awk program a plain `"` in
+          # the regex is correct — the backslash is what gawk complained about.
           awk '
             /if\(ANDROID_ABI STREQUAL "arm64-v8a"\)/ && !done {
               system("cat /tmp/armeabi_backends.cmake")
@@ -176,29 +189,35 @@ jobs:
               done=1
             }
             {print}
-          ' app/src/main/cpp/CMakeLists.txt.bak > app/src/main/cpp/CMakeLists.txt.tmp && mv app/src/main/cpp/CMakeLists.txt.tmp app/src/main/cpp/CMakeLists.txt
-          
-          # FIX 3: Relaxed grep to use ".*" to account for description strings in option()
-          # Verify each patch actually took effect. GGML_VULKAN defaults to OFF
-          # upstream, so if this doesn't land, Vulkan silently never turns on —
-          # that's the entire point of this workflow, so fail loudly instead of
-          # shipping a "successful" build without GPU support.
-          if ! grep -q "GGML_VULKAN.*ON" app/src/main/cpp/CMakeLists.txt; then
-            echo "❌ ERROR: 'GGML_VULKAN ... OFF' was not found/replaced in CMakeLists.txt." >&2
-            echo "   Vulkan will NOT be enabled. The file may no longer declare it that way." >&2
+          ' "$CMAKE_FILE" > "$CMAKE_FILE.tmp" && mv "$CMAKE_FILE.tmp" "$CMAKE_FILE"
+
+          # Diagnostics: show every GGML flag line in the final file so a
+          # mismatch is visible in the log instead of being guesswork.
+          echo "── GGML flag lines after patching ──"
+          grep -nE 'GGML_(VULKAN|OPENMP)' "$CMAKE_FILE" || echo "(none found — see fallback checks below)"
+
+          # Verify Vulkan actually ended up ON. The sed/option() edits are the
+          # primary path, but the gradle step also passes -DGGML_VULKAN=ON,
+          # which sets the CMake cache variable and forces the option ON even
+          # if the declaration lives in ggml's own CMakeLists (unreachable by
+          # sed). Fail only if BOTH paths are absent.
+          if ! grep -qE 'GGML_VULKAN.*ON' "$CMAKE_FILE" && ! grep -q -- '-DGGML_VULKAN=ON' app/build.gradle.kts; then
+            echo "❌ ERROR: Vulkan is not enabled via CMakeLists.txt or -DGGML_VULKAN=ON." >&2
+            echo "   Vulkan will NOT be enabled. Check how this project declares GGML_VULKAN." >&2
             exit 1
           fi
-          if ! grep -q "GGML_OPENMP.*ON" app/src/main/cpp/CMakeLists.txt; then
-            echo "⚠️  WARNING: 'GGML_OPENMP ... OFF' was not found/replaced."
+          if ! grep -qE 'GGML_OPENMP.*ON' "$CMAKE_FILE" && ! grep -q -- '-DGGML_OPENMP=ON' app/build.gradle.kts; then
+            echo "⚠️  WARNING: OpenMP is not enabled via CMakeLists.txt or -DGGML_OPENMP=ON."
             echo "   This is only a real problem if your CMakeLists.txt doesn't already"
             echo "   default OpenMP to ON upstream (stock ggml does default it to ON)."
           fi
-          if ! grep -q "ARMEABIv7 with GPU (Vulkan) & Parallel (OpenMP)" app/src/main/cpp/CMakeLists.txt; then
+          if ! grep -q "Configuring ARMEABIv7 with Vulkan + OpenMP" "$CMAKE_FILE"; then
             echo "❌ ERROR: could not inject the ARMEABIv7 backend block into CMakeLists.txt." >&2
             echo "   The 'if(ANDROID_ABI STREQUAL \"arm64-v8a\")' anchor line was not found." >&2
+            echo "   Check whether the file declares the arm64-v8a block differently." >&2
             exit 1
           fi
-          
+
           echo "✓ Patched CMakeLists.txt with ARMEABIv7 configuration"
 
       - name: Configure Gradle properties
@@ -255,7 +274,6 @@ jobs:
           echo "════════════════════════════════════════════"
           echo "  ARMEABIv7 Native Library Verification"
           echo "════════════════════════════════════════════"
-
           FOUND=0
           echo ""
           echo "📚 Searching for armeabi-v7a libraries..."
@@ -263,25 +281,21 @@ jobs:
             echo "  ✓ $(basename "$lib")"
             FOUND=$((FOUND+1))
           done
-
           if [ "$FOUND" -eq 0 ]; then
             echo "  ⚠️  No ARMEABIv7 libraries found"
           else
             echo "  Found: $FOUND libraries"
           fi
-
           echo ""
           echo "🔍 Checking for OpenMP and Vulkan symbols..."
           for lib in $(find app/build -path "*armeabi-v7a*" -name "agora_llama.so" -type f 2>/dev/null); do
             echo ""
             echo "  Library: $(basename "$lib")"
-
             if nm "$lib" 2>/dev/null | grep -q "omp_"; then
               echo "    ✓ OpenMP symbols found"
             else
               echo "    ⚠️  No OpenMP symbols detected"
             fi
-
             if nm "$lib" 2>/dev/null | grep -q "vk"; then
               echo "    ✓ Vulkan symbols found"
             else
@@ -327,10 +341,8 @@ jobs:
             echo "| **Build Tools** | ${{ env.BUILD_TOOLS_VERSION }} |"
             echo "| **Compiler Flags** | \`-march=armv7-a -mfpu=neon -mfloat-abi=softfp -fopenmp -O3\` |"
             echo ""
-
             echo "## Build Outputs"
             echo ""
-
             if find app/build/outputs/apk -name "*.apk" 2>/dev/null | grep -q .; then
               echo "### APKs"
               echo "\`\`\`"
@@ -338,7 +350,6 @@ jobs:
               echo "\`\`\`"
               echo ""
             fi
-
             if find app/build/outputs/bundle -name "*.aab" 2>/dev/null | grep -q .; then
               echo "### Bundles"
               echo "\`\`\`"
@@ -346,7 +357,6 @@ jobs:
               echo "\`\`\`"
               echo ""
             fi
-
             echo "## Configuration Applied"
             echo "- ✅ build.gradle.kts patched with ARMEABIv7 ABI filter"
             echo "- ✅ CMakeLists.txt updated with Vulkan + OpenMP enabled"
@@ -354,12 +364,10 @@ jobs:
             echo "- ✅ NEON FPU acceleration enabled"
             echo "- ✅ Compiler optimizations (-O3 -ffast-math)"
             echo ""
-
             echo "## Next Steps"
             echo "1. Download APK artifacts from the job summary"
             echo "2. Test on ARMEABIv7 devices to verify GPU/OpenMP functionality"
             echo "3. Check logcat for Vulkan/OpenMP initialization messages"
-
           } > report.md
           cat report.md
 
@@ -404,7 +412,6 @@ jobs:
           else
             echo "ℹ️  No build.gradle.kts.bak found — nothing to restore"
           fi
-
           if [ -f app/src/main/cpp/CMakeLists.txt.bak ]; then
             mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt
             echo "✓ Restored CMakeLists.txt"

@@ -26,7 +26,7 @@ env:
 jobs:
   build-armeabiv7-gpu:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
       checks: write
@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -69,11 +69,12 @@ jobs:
       - name: Patch build.gradle.kts for ARMEABIv7
         shell: bash
         run: |
+          set -euo pipefail
           # Backup original
           cp app/build.gradle.kts app/build.gradle.kts.bak
-          
+
           cat > /tmp/armeabi_config.kts << 'GRADLE_EOF'
-          
+
           // ARMEABIv7 Configuration Overrides
           android {
               defaultConfig {
@@ -93,15 +94,21 @@ jobs:
                           )
                           arguments += listOf(
                               "-DANDROID_STL=c++_shared",
-                              "-DENABLE_VULKAN=ON",
-                              "-DENABLE_OPENMP=ON"
+                              "-DGGML_VULKAN=ON",
+                              "-DGGML_OPENMP=ON"
                           )
                       }
                   }
               }
           }
           GRADLE_EOF
-          
+          # NOTE: the two -D arguments above were renamed from -DENABLE_VULKAN /
+          # -DENABLE_OPENMP to -DGGML_VULKAN / -DGGML_OPENMP. Upstream ggml
+          # declares these as `option(GGML_VULKAN ...)` / `option(GGML_OPENMP ...)`,
+          # and the "Patch CMakeLists.txt" step below also targets GGML_VULKAN /
+          # GGML_OPENMP directly — so ENABLE_VULKAN/ENABLE_OPENMP were CMake cache
+          # variables nothing reads, silently doing nothing.
+
           awk '
             NR==1 {print; print ""}
             /^dependencies \{/ && !done {
@@ -111,32 +118,41 @@ jobs:
             }
             {print}
           ' app/build.gradle.kts.bak > app/build.gradle.kts.tmp && mv app/build.gradle.kts.tmp app/build.gradle.kts
-          
+
+          # Verify the patch actually landed instead of silently no-op'ing if the
+          # "dependencies {" anchor line doesn't match the real file.
+          if ! grep -q "ARMEABIv7 Configuration Overrides" app/build.gradle.kts; then
+            echo "❌ ERROR: could not inject ARMEABIv7 config into build.gradle.kts." >&2
+            echo "   The '^dependencies {' anchor line was not found as expected." >&2
+            echo "   Check app/build.gradle.kts for how its dependencies block is declared." >&2
+            exit 1
+          fi
           echo "✓ Patched build.gradle.kts"
 
       - name: Patch CMakeLists.txt for Vulkan & OpenMP
         shell: bash
         run: |
+          set -euo pipefail
           cp app/src/main/cpp/CMakeLists.txt app/src/main/cpp/CMakeLists.txt.bak
-          
+
           sed -i 's/set(GGML_VULKAN OFF/set(GGML_VULKAN ON/' app/src/main/cpp/CMakeLists.txt
           sed -i 's/set(GGML_OPENMP OFF/set(GGML_OPENMP ON/' app/src/main/cpp/CMakeLists.txt
-          
+
           cat > /tmp/armeabi_backends.cmake << 'CMAKE_EOF'
-          
+
           # ──────────────────────────────────────────────────
           # ARMEABIv7 with GPU (Vulkan) & Parallel (OpenMP)
           # ──────────────────────────────────────────────────
           if(ANDROID_ABI STREQUAL "armeabi-v7a")
               message(STATUS "⚙️  Configuring ARMEABIv7 with Vulkan + OpenMP")
-              
+
               set(AGORA_ANDROID_CPU_BACKENDS
                   ggml-cpu-android_armv7.0_1
                   ggml-cpu-android_armv7.0_2
                   ggml-cpu-android_armv7.2_1
                   ggml-cpu-android_armv7.2_2
               )
-              
+
               add_compile_options(
                   -march=armv7-a
                   -mfpu=neon
@@ -145,16 +161,16 @@ jobs:
                   -O3
                   -ffast-math
               )
-              
+
               add_compile_definitions(
                   GGML_USE_VULKAN=1
                   GGML_USE_OPENMP=1
               )
-              
+
               message(STATUS "✓ ARMEABIv7 configuration applied")
           endif()
           CMAKE_EOF
-          
+
           awk '
             /if\(ANDROID_ABI STREQUAL \"arm64-v8a\"\)/ && !done {
               system("cat /tmp/armeabi_backends.cmake")
@@ -163,7 +179,27 @@ jobs:
             }
             {print}
           ' app/src/main/cpp/CMakeLists.txt.bak > app/src/main/cpp/CMakeLists.txt.tmp && mv app/src/main/cpp/CMakeLists.txt.tmp app/src/main/cpp/CMakeLists.txt
-          
+
+          # Verify each patch actually took effect. GGML_VULKAN defaults to OFF
+          # upstream, so if this doesn't land, Vulkan silently never turns on —
+          # that's the entire point of this workflow, so fail loudly instead of
+          # shipping a "successful" build without GPU support.
+          if ! grep -q "GGML_VULKAN ON" app/src/main/cpp/CMakeLists.txt; then
+            echo "❌ ERROR: 'set(GGML_VULKAN OFF' was not found/replaced in CMakeLists.txt." >&2
+            echo "   Vulkan will NOT be enabled. The file may no longer declare it that way." >&2
+            exit 1
+          fi
+          if ! grep -q "GGML_OPENMP ON" app/src/main/cpp/CMakeLists.txt; then
+            echo "⚠️  WARNING: 'set(GGML_OPENMP OFF' was not found/replaced."
+            echo "   This is only a real problem if your CMakeLists.txt doesn't already"
+            echo "   default OpenMP to ON upstream (stock ggml does default it to ON)."
+          fi
+          if ! grep -q "ARMEABIv7 with GPU (Vulkan) & Parallel (OpenMP)" app/src/main/cpp/CMakeLists.txt; then
+            echo "❌ ERROR: could not inject the ARMEABIv7 backend block into CMakeLists.txt." >&2
+            echo "   The 'if(ANDROID_ABI STREQUAL \"arm64-v8a\")' anchor line was not found." >&2
+            exit 1
+          fi
+
           echo "✓ Patched CMakeLists.txt with ARMEABIv7 configuration"
 
       - name: Configure Gradle properties
@@ -181,8 +217,11 @@ jobs:
           EOF
           echo "✓ Gradle properties configured"
 
+      # On push/PR this now builds the release variants (what you'd actually
+      # install on the phone); the debug build is opt-in via workflow_dispatch.
+      # Flip these two conditions if you'd rather default to debug on push/PR.
       - name: Build Debug APK (ARMEABIv7)
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'debug'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
         run: |
           ./gradlew :app:assembleFdroidDebug \
             --no-daemon \
@@ -217,37 +256,37 @@ jobs:
           echo "════════════════════════════════════════════"
           echo "  ARMEABIv7 Native Library Verification"
           echo "════════════════════════════════════════════"
-          
+
           FOUND=0
           echo ""
           echo "📚 Searching for armeabi-v7a libraries..."
           for lib in $(find app/build -path "*armeabi-v7a*" -name "*.so" -type f 2>/dev/null); do
-            echo "  ✓ $(basename $lib)"
+            echo "  ✓ $(basename "$lib")"
             FOUND=$((FOUND+1))
           done
-          
-          if [ $FOUND -eq 0 ]; then
+
+          if [ "$FOUND" -eq 0 ]; then
             echo "  ⚠️  No ARMEABIv7 libraries found"
           else
             echo "  Found: $FOUND libraries"
           fi
-          
+
           echo ""
           echo "🔍 Checking for OpenMP and Vulkan symbols..."
           for lib in $(find app/build -path "*armeabi-v7a*" -name "agora_llama.so" -type f 2>/dev/null); do
             echo ""
-            echo "  Library: $(basename $lib)"
-            
+            echo "  Library: $(basename "$lib")"
+
             if nm "$lib" 2>/dev/null | grep -q "omp_"; then
               echo "    ✓ OpenMP symbols found"
             else
               echo "    ⚠️  No OpenMP symbols detected"
             fi
-            
+
             if nm "$lib" 2>/dev/null | grep -q "vk"; then
               echo "    ✓ Vulkan symbols found"
             else
-              echo "    ℹ️  Vulkan symbols not detected (expected)"
+              echo "    ⚠️  Vulkan symbols not detected — check the patch steps above for errors"
             fi
           done
           echo ""
@@ -289,10 +328,10 @@ jobs:
             echo "| **Build Tools** | ${{ env.BUILD_TOOLS_VERSION }} |"
             echo "| **Compiler Flags** | \`-march=armv7-a -mfpu=neon -mfloat-abi=softfp -fopenmp -O3\` |"
             echo ""
-            
+
             echo "## Build Outputs"
             echo ""
-            
+
             if find app/build/outputs/apk -name "*.apk" 2>/dev/null | grep -q .; then
               echo "### APKs"
               echo "\`\`\`"
@@ -300,7 +339,7 @@ jobs:
               echo "\`\`\`"
               echo ""
             fi
-            
+
             if find app/build/outputs/bundle -name "*.aab" 2>/dev/null | grep -q .; then
               echo "### Bundles"
               echo "\`\`\`"
@@ -308,7 +347,7 @@ jobs:
               echo "\`\`\`"
               echo ""
             fi
-            
+
             echo "## Configuration Applied"
             echo "- ✅ build.gradle.kts patched with ARMEABIv7 ABI filter"
             echo "- ✅ CMakeLists.txt updated with Vulkan + OpenMP enabled"
@@ -316,12 +355,12 @@ jobs:
             echo "- ✅ NEON FPU acceleration enabled"
             echo "- ✅ Compiler optimizations (-O3 -ffast-math)"
             echo ""
-            
+
             echo "## Next Steps"
             echo "1. Download APK artifacts from the job summary"
             echo "2. Test on ARMEABIv7 devices to verify GPU/OpenMP functionality"
             echo "3. Check logcat for Vulkan/OpenMP initialization messages"
-            
+
           } > report.md
           cat report.md
 
@@ -351,9 +390,25 @@ jobs:
               console.log('ℹ️  No PR context or report file:', e.message);
             }
 
+      # Fixed: the old "[ -f x ] && mv ... && echo" pattern fails the whole step
+      # under `set -e` whenever the .bak file doesn't exist — which is exactly
+      # what happens when an earlier step (e.g. the patch steps) never ran. Using
+      # proper if-blocks means a missing backup is treated as "nothing to
+      # restore", not as an error.
       - name: Restore original files
         if: always()
         shell: bash
         run: |
-          [ -f app/build.gradle.kts.bak ] && mv app/build.gradle.kts.bak app/build.gradle.kts && echo "✓ Restored build.gradle.kts"
-          [ -f app/src/main/cpp/CMakeLists.txt.bak ] && mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt && echo "✓ Restored CMakeLists.txt"
+          if [ -f app/build.gradle.kts.bak ]; then
+            mv app/build.gradle.kts.bak app/build.gradle.kts
+            echo "✓ Restored build.gradle.kts"
+          else
+            echo "ℹ️  No build.gradle.kts.bak found — nothing to restore"
+          fi
+
+          if [ -f app/src/main/cpp/CMakeLists.txt.bak ]; then
+            mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt
+            echo "✓ Restored CMakeLists.txt"
+          else
+            echo "ℹ️  No CMakeLists.txt.bak found — nothing to restore"
+          fi

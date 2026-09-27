@@ -1,0 +1,188 @@
+name: Build ARMEABIv7 with GPU & OpenMP
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+env:
+  JAVA_VERSION: '21'
+  ANDROID_SDK_VERSION: '36'
+  NDK_VERSION: '28.2.13676358'
+
+jobs:
+  build-armeabiv7-gpu:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: ${{ env.ANDROID_SDK_VERSION }}
+          ndk-version: ${{ env.NDK_VERSION }}
+
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "ndk.dir=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> local.properties
+
+      - name: Patch build.gradle.kts for ARMEABIv7
+        run: |
+          cat > /tmp/patch_gradle.kts << 'EOF'
+          // Inject ARMEABIv7 configuration
+          android {
+              defaultConfig {
+                  ndk {
+                      abiFilters.clear()
+                      abiFilters += listOf("armeabi-v7a")
+                  }
+                  externalNativeBuild {
+                      cmake {
+                          cppFlags += listOf(
+                              "-std=c++17",
+                              "-march=armv7-a",
+                              "-mfpu=neon",
+                              "-mfloat-abi=softfp",
+                              "-fopenmp",
+                              "-O3"
+                          )
+                          arguments += listOf(
+                              "-DANDROID_STL=c++_shared",
+                              "-DENABLE_VULKAN=ON",
+                              "-DENABLE_OPENMP=ON",
+                              "-DENABLE_GPU_ACCELERATION=ON"
+                          )
+                      }
+                  }
+              }
+          }
+          EOF
+          
+          # Backup original
+          cp app/build.gradle.kts app/build.gradle.kts.bak
+          
+          # Inject before the dependencies block
+          sed -i '/^dependencies {/r /tmp/patch_gradle.kts' app/build.gradle.kts
+
+      - name: Patch CMakeLists.txt for Vulkan & OpenMP
+        run: |
+          # Backup original
+          cp app/src/main/cpp/CMakeLists.txt app/src/main/cpp/CMakeLists.txt.bak
+          
+          # Replace GGML flags
+          sed -i 's/set(GGML_VULKAN OFF/set(GGML_VULKAN ON/' app/src/main/cpp/CMakeLists.txt
+          sed -i 's/set(GGML_OPENMP OFF/set(GGML_OPENMP ON/' app/src/main/cpp/CMakeLists.txt
+          
+          # Add ARMEABIv7 backends configuration
+          cat >> /tmp/arm7_patch.txt << 'EOF'
+          
+          # ──────── ARMEABIv7 GPU & OpenMP Configuration ────────
+          if(ANDROID_ABI STREQUAL "armeabi-v7a")
+              message(STATUS "Building for ARMEABIv7 with GPU acceleration and OpenMP")
+              set(AGORA_ANDROID_CPU_BACKENDS
+                  ggml-cpu-android_armv7.0_1
+                  ggml-cpu-android_armv7.0_2
+                  ggml-cpu-android_armv7.2_1
+                  ggml-cpu-android_armv7.2_2
+              )
+              add_compile_options(
+                  -march=armv7-a -mfpu=neon -mfloat-abi=softfp
+                  -fopenmp -O3
+              )
+              target_compile_definitions(agora_llama PRIVATE GGML_USE_VULKAN=1 GGML_USE_OPENMP=1)
+          EOF
+          
+          # Insert configuration before old ABI block
+          sed -i '/if(ANDROID_ABI STREQUAL "arm64-v8a")/r /tmp/arm7_patch.txt' app/src/main/cpp/CMakeLists.txt
+
+      - name: Configure Gradle
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
+
+      - name: Build Release APK
+        run: |
+          ./gradlew :app:assembleFdroidRelease :app:assemblePlayRelease \
+            --no-daemon -x lint
+
+      - name: Build Release Bundle
+        run: |
+          ./gradlew :app:bundlePlayRelease \
+            --no-daemon -x lint
+
+      - name: Verify ARMEABIv7 libraries
+        if: always()
+        run: |
+          echo "=== Native libraries (ARMEABIv7) ==="
+          find app/build -path "*armeabi-v7a*" -name "*.so" -type f | sort || echo "None found"
+          echo ""
+          echo "=== Symbol verification ==="
+          for lib in $(find app/build -path "*armeabi-v7a*" -name "*.so" -type f); do
+            echo "Library: $(basename $lib)"
+            nm "$lib" 2>/dev/null | grep -E "omp_|vk_" | head -2 || echo "  No symbols"
+          done
+
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-armeabiv7-release
+          path: |
+            app/build/outputs/apk/fdroid/release/
+            app/build/outputs/apk/play/release/
+            app/build/outputs/bundle/playRelease/
+          retention-days: 30
+
+      - name: Build Report
+        if: always()
+        run: |
+          {
+            echo "# ARMEABIv7 GPU Build Report"
+            echo "**Target:** armeabi-v7a with Vulkan + OpenMP"
+            echo "**Build Time:** $(date)"
+            echo ""
+            ls -lh app/build/outputs/apk/*/release/*.apk 2>/dev/null || echo "No APKs"
+            ls -lh app/build/outputs/bundle/*/app-*.aab 2>/dev/null || echo "No Bundles"
+          } > report.md
+          cat report.md
+
+      - name: Restore originals
+        if: always()
+        run: |
+          [ -f app/build.gradle.kts.bak ] && mv app/build.gradle.kts.bak app/build.gradle.kts
+          [ -f app/src/main/cpp/CMakeLists.txt.bak ] && mv app/src/main/cpp/CMakeLists.txt.bak app/src/main/cpp/CMakeLists.txt

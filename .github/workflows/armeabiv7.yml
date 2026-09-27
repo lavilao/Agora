@@ -134,25 +134,24 @@ jobs:
         run: |
           set -euo pipefail
           cp app/src/main/cpp/CMakeLists.txt app/src/main/cpp/CMakeLists.txt.bak
-
-          sed -i 's/set(GGML_VULKAN OFF/set(GGML_VULKAN ON/' app/src/main/cpp/CMakeLists.txt
-          sed -i 's/set(GGML_OPENMP OFF/set(GGML_OPENMP ON/' app/src/main/cpp/CMakeLists.txt
-
+          
+          # FIX 1: Use robust regex to replace OFF with ON. 
+          # This handles both 'set(GGML_VULKAN OFF)' and 'option(GGML_VULKAN "..." OFF)'
+          sed -i 's/\(GGML_VULKAN[^A-Z]*\)OFF/\1ON/g' app/src/main/cpp/CMakeLists.txt
+          sed -i 's/\(GGML_OPENMP[^A-Z]*\)OFF/\1ON/g' app/src/main/cpp/CMakeLists.txt
+          
           cat > /tmp/armeabi_backends.cmake << 'CMAKE_EOF'
-
           # ──────────────────────────────────────────────────
           # ARMEABIv7 with GPU (Vulkan) & Parallel (OpenMP)
           # ──────────────────────────────────────────────────
           if(ANDROID_ABI STREQUAL "armeabi-v7a")
               message(STATUS "⚙️  Configuring ARMEABIv7 with Vulkan + OpenMP")
-
               set(AGORA_ANDROID_CPU_BACKENDS
                   ggml-cpu-android_armv7.0_1
                   ggml-cpu-android_armv7.0_2
                   ggml-cpu-android_armv7.2_1
                   ggml-cpu-android_armv7.2_2
               )
-
               add_compile_options(
                   -march=armv7-a
                   -mfpu=neon
@@ -161,36 +160,36 @@ jobs:
                   -O3
                   -ffast-math
               )
-
               add_compile_definitions(
                   GGML_USE_VULKAN=1
                   GGML_USE_OPENMP=1
               )
-
               message(STATUS "✓ ARMEABIv7 configuration applied")
           endif()
           CMAKE_EOF
-
+          
+          # FIX 2: Removed unnecessary backslash escapes before double quotes in awk regex
           awk '
-            /if\(ANDROID_ABI STREQUAL \"arm64-v8a\"\)/ && !done {
+            /if\(ANDROID_ABI STREQUAL "arm64-v8a"\)/ && !done {
               system("cat /tmp/armeabi_backends.cmake")
               print ""
               done=1
             }
             {print}
           ' app/src/main/cpp/CMakeLists.txt.bak > app/src/main/cpp/CMakeLists.txt.tmp && mv app/src/main/cpp/CMakeLists.txt.tmp app/src/main/cpp/CMakeLists.txt
-
+          
+          # FIX 3: Relaxed grep to use ".*" to account for description strings in option()
           # Verify each patch actually took effect. GGML_VULKAN defaults to OFF
           # upstream, so if this doesn't land, Vulkan silently never turns on —
           # that's the entire point of this workflow, so fail loudly instead of
           # shipping a "successful" build without GPU support.
-          if ! grep -q "GGML_VULKAN ON" app/src/main/cpp/CMakeLists.txt; then
-            echo "❌ ERROR: 'set(GGML_VULKAN OFF' was not found/replaced in CMakeLists.txt." >&2
+          if ! grep -q "GGML_VULKAN.*ON" app/src/main/cpp/CMakeLists.txt; then
+            echo "❌ ERROR: 'GGML_VULKAN ... OFF' was not found/replaced in CMakeLists.txt." >&2
             echo "   Vulkan will NOT be enabled. The file may no longer declare it that way." >&2
             exit 1
           fi
-          if ! grep -q "GGML_OPENMP ON" app/src/main/cpp/CMakeLists.txt; then
-            echo "⚠️  WARNING: 'set(GGML_OPENMP OFF' was not found/replaced."
+          if ! grep -q "GGML_OPENMP.*ON" app/src/main/cpp/CMakeLists.txt; then
+            echo "⚠️  WARNING: 'GGML_OPENMP ... OFF' was not found/replaced."
             echo "   This is only a real problem if your CMakeLists.txt doesn't already"
             echo "   default OpenMP to ON upstream (stock ggml does default it to ON)."
           fi
@@ -199,7 +198,7 @@ jobs:
             echo "   The 'if(ANDROID_ABI STREQUAL \"arm64-v8a\")' anchor line was not found." >&2
             exit 1
           fi
-
+          
           echo "✓ Patched CMakeLists.txt with ARMEABIv7 configuration"
 
       - name: Configure Gradle properties

@@ -1,0 +1,315 @@
+# ============================================================================
+#  Agora · APK armeabi-v7a (llama.cpp git · VULKAN + OpenMP)
+#  Ubicación: .github/workflows/glm-53.yml (reemplazo directo)
+# ============================================================================
+name: Agora APK armeabi-v7a (Vulkan + OpenMP)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options: [debug, release]
+  push:
+    branches: [ main, master ]
+
+env:
+  JAVA_VERSION: '21'
+  NDK_VERSION: '28.2.13676358'
+  CMAKE_VERSION: '3.22.1'
+  TARGET_ABI: 'armeabi-v7a'
+  TARGET_PLATFORM: 'android-29'   # vkGetPhysicalDeviceFeatures2: stubs >= 28; Redmi 9A = API 29
+  SPIRV_HEADERS_TAG: 'vulkan-sdk-1.4.313.0'
+  VULKAN_HEADERS_TAG: 'vulkan-sdk-1.4.357.0'
+
+jobs:
+  build-armeabiv7:
+    name: APK armeabi-v7a · Vulkan+OpenMP
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo + submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Info del pin de llama.cpp
+        run: git -C thirdparty/llama.cpp log -1 --format='llama.cpp: %h %ci %s'
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Android SDK + NDK r28c + CMake 3.22.1
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}"
+          log-accepted-licenses: true
+
+      - name: local.properties
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
+          } > local.properties
+
+      - name: chmod +x gradlew
+        run: chmod +x ./gradlew
+
+      # ------------------------------------------------------------------
+      # Herramientas de HOST (x86_64) para ggml-vulkan
+      # ------------------------------------------------------------------
+      - name: Build glslc (shaderc, host)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          rm -rf shaderc
+          git clone --depth 1 https://github.com/google/shaderc
+          cd shaderc
+          # ⚠ shaderc ya NO usa submodules: sin esto third_party/ queda
+          #   vacío y falla "SPIRV-Tools was not found".
+          python3 utils/git-sync-deps
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSHADERC_SKIP_TESTS=ON \
+            -DSHADERC_SKIP_COPYRIGHT_CHECK=ON
+          # el ejecutable se llama glslc_exe (OUTPUT_NAME glslc)
+          cmake --build build --target glslc_exe -j"$(nproc)"
+          sudo install -m755 build/glslc/glslc /usr/local/bin/glslc
+          glslc --version
+
+      - name: Install SPIRV-Headers (host → /usr/local)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          rm -rf SPIRV-Headers
+          git clone --depth 1 --branch "${{ env.SPIRV_HEADERS_TAG }}" \
+            https://github.com/KhronosGroup/SPIRV-Headers
+          cmake -S SPIRV-Headers -B SPIRV-Headers/build
+          sudo cmake --install SPIRV-Headers/build
+          ls /usr/local/share/cmake/SPIRV-Headers/   # SPIRV-HeadersConfig.cmake
+
+      - name: Install Vulkan-Headers (host → /usr/local)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          rm -rf Vulkan-Headers
+          git clone --depth 1 --branch "${{ env.VULKAN_HEADERS_TAG }}" \
+            https://github.com/KhronosGroup/Vulkan-Headers
+          cmake -S Vulkan-Headers -B Vulkan-Headers/build
+          sudo cmake --install Vulkan-Headers/build
+          test -f /usr/local/include/vulkan/vulkan.hpp
+          test -f /usr/local/include/vulkan/vulkan.h
+
+      # ------------------------------------------------------------------
+      # Parches: ABI + argumentos cmake del pipeline Vulkan
+      # ------------------------------------------------------------------
+      - name: Patch build.gradle.kts (ABI + cmake args)
+        run: |
+          set -euo pipefail
+          sed -i 's/abiFilters += listOf("arm64-v8a")/abiFilters += listOf("${{ env.TARGET_ABI }}")/' app/build.gradle.kts
+          sed -i 's/abiFilters += "x86_64"/abiFilters += "${{ env.TARGET_ABI }}"/' app/build.gradle.kts
+          grep -q 'abiFilters += listOf("${{ env.TARGET_ABI }}")' app/build.gradle.kts || { echo "defaultConfig no parcheado"; exit 1; }
+          grep -q 'abiFilters += "${{ env.TARGET_ABI }}"' app/build.gradle.kts || { echo "buildType debug no parcheado"; exit 1; }
+
+          # Vulkan en el cross-compile de AGP:
+          #  · BOTH → deja ver /usr/local (SPIRV-Headers) pese al re-root del
+          #    toolchain NDK (solo lo fuerza si NO viene definido).
+          #  · ANDROID_PLATFORM=29 → stub con vkGetPhysicalDeviceFeatures2.
+          #  · Vulkan_INCLUDE_DIR → headers con vulkan.hpp (el NDK no los trae).
+          #  · Vulkan_LIBRARY explícito → blindaje: aunque AGP pise la
+          #    plataforma con minSdk (26), se enlaza el stub de API 29.
+          VULKAN_STUB="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/29/libvulkan.so"
+          test -f "$VULKAN_STUB" || { echo "no existe $VULKAN_STUB"; exit 1; }
+          OLD='arguments += listOf("-DANDROID_STL=c++_shared")'
+          NEW="arguments += listOf(\"-DANDROID_STL=c++_shared\", \"-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH\", \"-DCMAKE_PREFIX_PATH=/usr/local\", \"-DANDROID_PLATFORM=${{ env.TARGET_PLATFORM }}\", \"-DVulkan_INCLUDE_DIR=/usr/local/include\", \"-DVulkan_LIBRARY=$VULKAN_STUB\")"
+          sed -i "s|$OLD|$NEW|" app/build.gradle.kts
+          grep -q 'CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH' app/build.gradle.kts || { echo "cmake arguments no parcheados"; exit 1; }
+          echo "build.gradle.kts parcheado (ABI + 6 argumentos cmake)"
+
+      - name: Patch CMakeLists.txt (Vulkan + OpenMP + armv7)
+        run: |
+          set -euo pipefail
+          cat > /tmp/patch_cmake.py <<'PYEOF'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          cmake = path.read_text()
+
+          # 1) GGML_VULKAN ON (Agora lo fuerza OFF)
+          if 'set(GGML_VULKAN ON CACHE BOOL "" FORCE)' not in cmake:
+              if 'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)' not in cmake:
+                  raise SystemExit("no encuentro la linea GGML_VULKAN")
+              cmake = cmake.replace(
+                  'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)',
+                  'set(GGML_VULKAN ON CACHE BOOL "" FORCE)', 1)
+
+          # 2) GGML_OPENMP ON
+          if 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)' not in cmake:
+              if 'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)' not in cmake:
+                  raise SystemExit("no encuentro la linea GGML_OPENMP")
+              cmake = cmake.replace(
+                  'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)',
+                  'set(GGML_OPENMP ON CACHE BOOL "" FORCE)', 1)
+
+          # 3) ALL_VARIANTS condicional (variantes armv8.x no existen en 32-bit)
+          old = 'set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)'
+          new = '\n'.join([
+              'if(ANDROID_ABI STREQUAL "armeabi-v7a")',
+              '    set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)',
+              '    set(GGML_CPU_ARM_ARCH "armv7-a" CACHE STRING "" FORCE)',
+              '    set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)',
+              'else()',
+              '    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)',
+              'endif()',
+          ])
+          if 'set(GGML_CPU_ARM_ARCH "armv7-a"' not in cmake:
+              if old not in cmake:
+                  raise SystemExit("no encuentro GGML_CPU_ALL_VARIANTS ON")
+              cmake = cmake.replace(old, new, 1)
+
+          # 4) rama armv7: backends ggml-cpu + ggml-vulkan (el foreach de
+          #    Agora VERIFICA que existan → fail-fast si Vulkan queda OFF)
+          branch = ('elseif(ANDROID_ABI STREQUAL "armeabi-v7a")\n'
+                    '    set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu ggml-vulkan)\n\n')
+          if 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu ggml-vulkan)' not in cmake:
+              marker = 'elseif(ANDROID_ABI STREQUAL "x86_64")\n'
+              if marker not in cmake:
+                  raise SystemExit("no encuentro el dispatch de ABI")
+              cmake = cmake.replace(marker, branch + marker, 1)
+
+          # 5) Vulkan-Hpp 32-bit: handles uint64_t con conversion explicit →
+          #    'std::cerr << vk::Buffer' no compila. Opt-in documentado:
+          #    #define VULKAN_HPP_TYPESAFE_CONVERSION 1 (no-op en 64-bit).
+          define = 'add_compile_definitions(VULKAN_HPP_TYPESAFE_CONVERSION=1)\n\n'
+          anchor = 'add_subdirectory(${LLAMA_CPP_DIR} ${CMAKE_CURRENT_BINARY_DIR}/llama)'
+          if 'VULKAN_HPP_TYPESAFE_CONVERSION' not in cmake:
+              if anchor not in cmake:
+                  raise SystemExit("no encuentro el add_subdirectory de llama.cpp")
+              cmake = cmake.replace(anchor, define + anchor, 1)
+
+          path.write_text(cmake)
+          print("Patched CMakeLists.txt OK")
+          PYEOF
+          python3 /tmp/patch_cmake.py app/src/main/cpp/CMakeLists.txt
+          grep -q 'set(GGML_VULKAN ON CACHE BOOL "" FORCE)'        app/src/main/cpp/CMakeLists.txt || { echo "Vulkan no ON"; exit 1; }
+          grep -q 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)'        app/src/main/cpp/CMakeLists.txt || { echo "OpenMP no ON"; exit 1; }
+          grep -q 'ggml-cpu ggml-vulkan'                            app/src/main/cpp/CMakeLists.txt || { echo "rama armv7 sin ggml-vulkan"; exit 1; }
+          grep -q 'VULKAN_HPP_TYPESAFE_CONVERSION'                 app/src/main/cpp/CMakeLists.txt || { echo "falta TYPESAFE"; exit 1; }
+          echo "CMakeLists.txt parcheado y verificado"
+
+      - name: Copiar libomp.so del NDK a jniLibs
+        run: |
+          set -euo pipefail
+          TC="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64"
+          JNILIBS="app/src/main/jniLibs/${{ env.TARGET_ABI }}"
+          mkdir -p "$JNILIBS"
+          LIBOMP="$(ls "$TC"/lib/clang/*/lib/linux/arm/libomp.so 2>/dev/null | head -1 || true)"
+          [ -n "$LIBOMP" ] || LIBOMP="$TC/sysroot/usr/lib/arm-linux-androideabi/libomp.so"
+          [ -n "$LIBOMP" ] || { echo "ERROR: libomp.so no está en el NDK"; exit 1; }
+          cp "$LIBOMP" "$JNILIBS/libomp.so"
+          ls -la "$JNILIBS/libomp.so"
+
+      - name: Patch + build proot (armeabi-v7a)
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+
+          cat > /tmp/patch_proot.py <<'PYEOF'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          for old, new in [
+              ('CROSS_PREFIX="aarch64-linux-android26"', 'CROSS_PREFIX="armv7a-linux-androideabi26"'),
+              ('SYSROOT="$BLD/sysroot/arm64-v8a"', 'SYSROOT="$BLD/sysroot/armeabi-v7a"'),
+              ('BLD_DIR="$BLD/build-proot-arm64-v8a"', 'BLD_DIR="$BLD/build-proot-armeabi-v7a"'),
+              ('JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/arm64-v8a"', 'JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/armeabi-v7a"'),
+              ('FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/arm64-v8a"', 'FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/armeabi-v7a"'),
+          ]:
+              if old not in text:
+                  raise SystemExit("no puedo parchear build-proot.sh: " + old)
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          print("Patched build-proot.sh OK")
+          PYEOF
+
+          python3 /tmp/patch_proot.py build-proot.sh
+          chmod +x build-proot.sh
+          bash build-proot.sh --force
+
+          for lib in libproot_exec.so libproot_loader.so libtalloc.so; do
+            [ -f "app/src/main/jniLibs/${{ env.TARGET_ABI }}/$lib" ] || { echo "ERROR: falta $lib"; exit 1; }
+          done
+          echo "Runtime de proot armv7 completo"
+
+      - name: Configurar gradle.properties
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.workers.max=4
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.suppressUnsupportedCompileSdk=36
+          EOF
+
+      - name: Build APK Release (armeabi-v7a · Vulkan+OpenMP)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidRelease --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/release/app-fdroid-release.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
+
+      - name: Build APK Debug (armeabi-v7a · Vulkan+OpenMP)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidDebug --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
+
+      - name: Verificar librerías nativas dentro del APK
+        if: always()
+        run: |
+          set -euo pipefail
+          APKS=$(find app/build/outputs/apk -name '*.apk' -type f)
+          [ -n "$APKS" ] || { echo "No hay APKs"; exit 1; }
+          for apk in $APKS; do
+            echo "=== $(basename "$apk") ==="
+            for lib in libomp.so libagora_llama.so libggml-cpu.so \
+                       libggml-vulkan.so libmtmd.so libc++_shared.so \
+                       libproot_exec.so; do
+              unzip -l "$apk" | grep -q "lib/armeabi-v7a/$lib" \
+                && echo "  OK: $lib" \
+                || { echo "  FALTA: $lib  →  la app crasheará al cargar"; exit 1; }
+            done
+          done
+          echo "APK verificado: CPU+OpenMP+Vulkan armv7 completo"
+
+      - name: Subir APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-armeabiv7-vulkan
+          path: |
+            app/build/outputs/apk/fdroid/release/
+            app/build/outputs/apk/fdroid/debug/
+          if-no-files-found: error
+          retention-days: 30

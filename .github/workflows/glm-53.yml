@@ -1,24 +1,28 @@
-name: GLM-53 Android APK (Vulkan)
+name: Agora APK armeabi-v7a (CPU + OpenMP)
 
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
   push:
     branches: [ main, master ]
 
 env:
-  NDK_VERSION: "27.2.12479018"                # NDK r27c
-  SPIRV_HEADERS_TAG: "vulkan-sdk-1.4.313.0"   # tag real de KhronosGroup/SPIRV-Headers
-  LLAMA_DIR: thirdparty/llama.cpp
-  NATIVE_BUILD_DIR: build-android
-  JNI_LIBS_DIR: app/src/main/jniLibs          # ← ajusta al módulo de tu app
-  ANDROID_ABI: arm64-v8a
-  ANDROID_PLATFORM: android-28                # Vulkan 1.1+
-  BUILD_TYPE: Release
-  VULKAN_SDK: /usr/local
+  JAVA_VERSION: '21'
+  NDK_VERSION: '28.2.13676358'
+  CMAKE_VERSION: '3.22.1'
+  TARGET_ABI: 'armeabi-v7a'
 
 jobs:
-  build-apk:
-    name: APK arm64-v8a · Vulkan
+  build-armeabiv7:
+    name: APK armeabi-v7a · CPU+OpenMP
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -28,94 +32,190 @@ jobs:
         with:
           submodules: recursive
 
-      - name: JDK 17
+      - name: JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
 
-      - name: Gradle (con caché de dependencias)
-        uses: gradle/actions/setup-gradle@v4
+      - name: Android SDK + NDK r28c + CMake
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}"
+          log-accepted-licenses: true
 
-      - name: Instalar NDK r27c
+      - name: local.properties
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "ndk;${NDK_VERSION}" > /dev/null
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${NDK_VERSION}"   >> "$GITHUB_ENV"
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
+          } > local.properties
 
-      # glslc: lo ejecuta el HOST en configure-time (tests de extensiones)
-      # y vulkan-shaders-gen al compilar los shaders. Ni runner ni NDK lo traen.
-      - name: Compilar glslc (shaderc)
+      - name: chmod +x gradlew
+        run: chmod +x ./gradlew
+
+      # ── Patch ABI: arm64-v8a/x86_64 → armeabi-v7a ──────────────────
+      - name: Patch build.gradle.kts (ABI → armeabi-v7a)
         run: |
-          git clone --depth 1 --recursive https://github.com/google/shaderc /tmp/shaderc
-          cmake -S /tmp/shaderc -B /tmp/shaderc-build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DSHADERC_SKIP_TESTS=ON \
-            -DSHADERC_SKIP_INSTALL=ON
-          cmake --build /tmp/shaderc-build -j"$(nproc)"
-          GLSLC_BIN="$(find /tmp/shaderc-build -type f -name glslc -perm -u+x | head -1)"
-          sudo install -m755 "$GLSLC_BIN" /usr/local/bin/glslc
-          glslc --version
+          set -euo pipefail
+          sed -i 's/abiFilters += listOf("arm64-v8a")/abiFilters += listOf("armeabi-v7a")/' app/build.gradle.kts
+          sed -i 's/abiFilters += "x86_64"/abiFilters += "armeabi-v7a"/' app/build.gradle.kts
+          grep -q 'abiFilters += listOf("armeabi-v7a")' app/build.gradle.kts || { echo "defaultConfig no parcheado"; exit 1; }
+          grep -q 'abiFilters += "armeabi-v7a"' app/build.gradle.kts || { echo "buildType debug no parcheado"; exit 1; }
 
-      # SPIRV-Headers (header-only → seguro en cross-compile) → /usr/local
-      - name: Instalar SPIRV-Headers en /usr/local
+      # ── Patch CMake: OpenMP ON + backend único ggml-cpu en armv7 ───
+      #    Vulkan queda OFF (así lo define el CMake de Agora; en el
+      #    Redmi 9A OpenMP es la vía rápida)
+      - name: Patch CMakeLists.txt (OpenMP + armeabi-v7a)
         run: |
-          git clone --depth 1 --branch "${SPIRV_HEADERS_TAG}" \
-            https://github.com/KhronosGroup/SPIRV-Headers /tmp/spirv-headers
-          cmake -S /tmp/spirv-headers -B /tmp/spirv-headers-build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr/local
-          sudo cmake --install /tmp/spirv-headers-build
-          ls /usr/local/share/cmake/SPIRV-Headers/
+          set -euo pipefail
+          cat > /tmp/patch_cmake.py <<'PYEOF'
+          from pathlib import Path
+          import sys
 
-      # ⚠️ EL FIX: MODE_PACKAGE=BOTH → find_package(CONFIG) busca en el
-      # sysroot del NDK Y en /usr/local real (SPIRV-Headers).
-      - name: Configurar llama.cpp (NDK toolchain + Vulkan + fix)
+          cmake = Path(sys.argv[1]).read_text()
+
+          cmake = cmake.replace(
+              'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)',
+              'set(GGML_OPENMP ON CACHE BOOL "" FORCE)')
+
+          old = 'set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)'
+          new = '\n'.join([
+              'if(ANDROID_ABI STREQUAL "armeabi-v7a")',
+              '    set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)',
+              '    set(GGML_CPU_ARM_ARCH "armv7-a" CACHE STRING "" FORCE)',
+              '    set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)',
+              'else()',
+              '    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)',
+              'endif()',
+          ])
+          if 'set(GGML_CPU_ARM_ARCH "armv7-a"' not in cmake:
+              if old not in cmake:
+                  raise SystemExit("no encuentro GGML_CPU_ALL_VARIANTS ON")
+              cmake = cmake.replace(old, new, 1)
+
+          branch = 'elseif(ANDROID_ABI STREQUAL "armeabi-v7a")\n    set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)\n\n'
+          if 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)' not in cmake:
+              marker = 'elseif(ANDROID_ABI STREQUAL "x86_64")\n'
+              if marker not in cmake:
+                  raise SystemExit("no encuentro el dispatch de ABI")
+              cmake = cmake.replace(marker, branch + marker, 1)
+
+          Path(sys.argv[1]).write_text(cmake)
+          print("Patched CMakeLists.txt OK")
+          PYEOF
+          python3 /tmp/patch_cmake.py app/src/main/cpp/CMakeLists.txt
+          grep -q 'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)' app/src/main/cpp/CMakeLists.txt || { echo "Vulkan debe quedar OFF"; exit 1; }
+          grep -q 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)'   app/src/main/cpp/CMakeLists.txt || { echo "OpenMP no ON"; exit 1; }
+          grep -q 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)'  app/src/main/cpp/CMakeLists.txt || { echo "rama armv7 no añadida"; exit 1; }
+
+      # ── libomp.so → jniLibs: ggml-cpu con OpenMP enlaza libomp.so
+      #    DINÁMICAMENTE y AGP no la empaqueta sola (verificado:
+      #    DT_NEEDED de libggml-cpu.so). Sin esto: dlopen falla. ──────
+      - name: Copiar libomp.so del NDK a jniLibs
         run: |
-          cmake -S "${LLAMA_DIR}" -B "${NATIVE_BUILD_DIR}" \
-            -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="${ANDROID_ABI}" \
-            -DANDROID_PLATFORM="${ANDROID_PLATFORM}" \
-            -DGGML_VULKAN=ON \
-            -DBUILD_SHARED_LIBS=ON \
-            -DLLAMA_BUILD_TESTS=OFF \
-            -DLLAMA_BUILD_EXAMPLES=OFF \
-            -DLLAMA_BUILD_SERVER=OFF \
-            -DLLAMA_CURL=OFF \
-            -DCMAKE_PREFIX_PATH=/usr/local \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+          set -euo pipefail
+          TC="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64"
+          JNILIBS="app/src/main/jniLibs/armeabi-v7a"
+          mkdir -p "$JNILIBS"
+          LIBOMP="$(ls "$TC"/lib/clang/*/lib/linux/arm/libomp.so 2>/dev/null | head -1 || true)"
+          [ -n "$LIBOMP" ] || LIBOMP="$TC/sysroot/usr/lib/arm-linux-androideabi/libomp.so"
+          [ -n "$LIBOMP" ] || { echo "ERROR: libomp.so no está en el NDK"; exit 1; }
+          cp "$LIBOMP" "$JNILIBS/libomp.so"
+          ls -la "$JNILIBS/libomp.so"
 
-      - name: Compilar libggml / libllama (.so + shaders Vulkan embebidos)
-        run: cmake --build "${NATIVE_BUILD_DIR}" -j"$(nproc)"
-
-      - name: Copiar .so → jniLibs (+ strip)
+      # ── PRoot runtime para armeabi-v7a (verificado aquí) ───────────
+      - name: Patch + build proot (armeabi-v7a)
         run: |
-          mkdir -p "${JNI_LIBS_DIR}/${ANDROID_ABI}"
-          find "${NATIVE_BUILD_DIR}" -name '*.so' -type f \
-            -exec cp {} "${JNI_LIBS_DIR}/${ANDROID_ABI}/" \;
-          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
-            "${JNI_LIBS_DIR}/${ANDROID_ABI}"/*.so
-          ls -lh "${JNI_LIBS_DIR}/${ANDROID_ABI}/"
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
-      - name: Gradle assembleDebug
+          cat > /tmp/patch_proot.py <<'PYEOF'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          for old, new in [
+              ('CROSS_PREFIX="aarch64-linux-android26"', 'CROSS_PREFIX="armv7a-linux-androideabi26"'),
+              ('SYSROOT="$BLD/sysroot/arm64-v8a"', 'SYSROOT="$BLD/sysroot/armeabi-v7a"'),
+              ('BLD_DIR="$BLD/build-proot-arm64-v8a"', 'BLD_DIR="$BLD/build-proot-armeabi-v7a"'),
+              ('JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/arm64-v8a"', 'JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/armeabi-v7a"'),
+              ('FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/arm64-v8a"', 'FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/armeabi-v7a"'),
+          ]:
+              if old not in text:
+                  raise SystemExit("no puedo parchear build-proot.sh: " + old)
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          print("Patched build-proot.sh OK")
+          PYEOF
+
+          python3 /tmp/patch_proot.py build-proot.sh
+          chmod +x build-proot.sh
+          bash build-proot.sh --force
+
+          for lib in libproot_exec.so libproot_loader.so libtalloc.so; do
+            [ -f "app/src/main/jniLibs/armeabi-v7a/$lib" ] || { echo "ERROR: falta $lib"; exit 1; }
+          done
+
+      - name: Configurar gradle.properties
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
-        # Si tu proyecto Gradle vive en un subdir: cd android && ./gradlew assembleDebug
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.workers.max=4
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.suppressUnsupportedCompileSdk=36
+          EOF
 
-      - name: Recolectar artifacts
+      - name: Build APK Release (armeabi-v7a)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
-          mkdir -p artifacts
-          find . -name '*.apk' -path '*build/outputs*' \
-            -not -path './thirdparty/*' -exec cp {} artifacts/ \;
-          cp "${JNI_LIBS_DIR}/${ANDROID_ABI}"/*.so artifacts/
-          ls -lh artifacts/
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidRelease --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/release/app-fdroid-release.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
 
-      - name: Subir APK + librerías nativas
+      - name: Build APK Debug (armeabi-v7a)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidDebug --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+
+      # ── Verificar que el APK lleva TODO el runtime armv7 ────────────
+      - name: Verificar librerías nativas dentro del APK
+        if: always()
+        run: |
+          set -euo pipefail
+          APKS=$(find app/build/outputs/apk -name '*.apk' -type f)
+          [ -n "$APKS" ] || { echo "No hay APKs"; exit 1; }
+          for apk in $APKS; do
+            echo "=== $(basename "$apk") ==="
+            for lib in libomp.so libagora_llama.so libggml-cpu.so libmtmd.so \
+                       libc++_shared.so libproot_exec.so; do
+              unzip -l "$apk" | grep -q "lib/armeabi-v7a/$lib" \
+                && echo "  OK: $lib" \
+                || { echo "  FALTA: $lib → la app crasheará al cargar"; exit 1; }
+            done
+          done
+
+      # ── TU APK ──────────────────────────────────────────────────────
+      - name: Subir APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: glm53-apk-arm64-vulkan
-          path: artifacts/
+          name: agora-armeabiv7-apk
+          path: |
+            app/build/outputs/apk/fdroid/release/
+            app/build/outputs/apk/fdroid/debug/
           if-no-files-found: error
+          retention-days: 30

@@ -1,4 +1,4 @@
-name: Build ARMEABIv7 with Vulkan & OpenMP
+name: Build ARMEABIv7 with Vulkan & OpenMP & llamagit
 
 on:
   push:
@@ -72,17 +72,18 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y glslang-tools libvulkan-dev
+          # CRITICAL: the package is `glslc` (from shaderc), NOT `glslang-tools`.
+          # `glslang-tools` only provides `glslangValidator`, not `glslc`, and
+          # llama.cpp's find_package(Vulkan COMPONENTS glslc REQUIRED) needs the
+          # actual `glslc` binary. `libvulkan-dev` provides the Vulkan headers.
+          sudo apt-get install -y glslc libvulkan-dev
           echo "=== glslc location and version ==="
           which glslc
           glslc --version
           echo "=== Vulkan headers ==="
           ls /usr/include/vulkan/ | head -5
           echo "=== Test glslc works ==="
-          echo '#version 460
-          #extension GL_KHR_cooperative_matrix : enable
-          layout(local_size_x=1) in;
-          void main() {}' > /tmp/test.comp
+          printf '#version 460\n#extension GL_KHR_cooperative_matrix : enable\nlayout(local_size_x=1) in;\nvoid main() {}\n' > /tmp/test.comp
           glslc -fshader-stage=compute --target-env=vulkan1.3 -o /tmp/test.spv /tmp/test.comp && echo "glslc works" || { echo "glslc broken"; exit 1; }
           ls -la /tmp/test.spv
 

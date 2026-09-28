@@ -1,4 +1,4 @@
-name: Build ARMEABIv7 with GPU & OpenMP-glm
+name: Build ARMEABIv7 with OpenMP (no Vulkan)
 
 on:
   push:
@@ -60,11 +60,6 @@ jobs:
             echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
           } > local.properties
           cat local.properties
-          # NOTE: ndk.dir is intentionally NOT written here. AGP 9.x deprecates
-          # ndk.dir and warns: "Please delete ndk.dir from local.properties and
-          # set android.ndkVersion to [28.2.13676358] in all native modules."
-          # app/build.gradle.kts already sets `ndkVersion = "28.2.13676358"`, so
-          # AGP will find the NDK via android.ndkVersion + the SDK's ndk/ directory.
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -88,7 +83,7 @@ jobs:
           grep -q 'abiFilters.*arm64-v8a' app/build.gradle.kts && { echo "arm64-v8a still present"; exit 1; } || true
           echo "build.gradle.kts patched (ABI only, 2 sed replacements)"
 
-      - name: Patch CMakeLists.txt for Vulkan, OpenMP, and ARMEABIv7
+      - name: Patch CMakeLists.txt for OpenMP and ARMEABIv7
         shell: bash
         run: |
           set -euo pipefail
@@ -101,10 +96,7 @@ jobs:
           cmake_path = Path(sys.argv[1])
           cmake = cmake_path.read_text()
 
-          cmake = cmake.replace(
-              'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)',
-              'set(GGML_VULKAN ON CACHE BOOL "" FORCE)'
-          )
+          # GGML_VULKAN: left OFF (original value, not patched)
 
           cmake = cmake.replace(
               'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)',
@@ -147,7 +139,7 @@ jobs:
 
           python3 /tmp/patch_cmake.py "$CMAKE_FILE"
 
-          grep -q 'set(GGML_VULKAN ON CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "Vulkan not ON"; exit 1; }
+          grep -q 'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "Vulkan should be OFF"; exit 1; }
           grep -q 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "OpenMP not ON"; exit 1; }
           grep -q 'set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)' "$CMAKE_FILE" || { echo "CPU_ALL_VARIANTS not OFF"; exit 1; }
           grep -q 'set(GGML_CPU_ARM_ARCH "armv7-a"' "$CMAKE_FILE" || { echo "CPU_ARM_ARCH not set"; exit 1; }
@@ -217,10 +209,6 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
         run: |
           set -euo pipefail
-          # NOTE: no -x lint* flags. Agora has two flavors (fdroid, play), so
-          # `lintRelease`/`lintDebug` are ambiguous (expand to 13+ flavored tasks)
-          # and Gradle fails with "Task 'lintRelease' is ambiguous". Lint does
-          # not fail the build by default, so we just let it run.
           ./gradlew :app:assembleFdroidDebug \
             --no-daemon --build-cache \
             --info 2>&1 | tee build-debug.log
@@ -232,7 +220,6 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           set -euo pipefail
-          # NOTE: no -x lint* flags — see Build Debug step for explanation.
           ./gradlew :app:assembleFdroidRelease :app:assemblePlayRelease \
             --no-daemon --build-cache \
             --info 2>&1 | tee build-release.log
@@ -246,7 +233,6 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           set -euo pipefail
-          # NOTE: no -x lint* flags — see Build Debug step for explanation.
           ./gradlew :app:bundlePlayRelease \
             --no-daemon --build-cache \
             --info 2>&1 | tee build-bundle.log
@@ -293,13 +279,13 @@ jobs:
         shell: bash
         run: |
           {
-            echo "# ARMEABIv7 GPU Build Report"
+            echo "# ARMEABIv7 Build Report"
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
             echo "| **Target ABI** | armeabi-v7a (32-bit ARM with NEON) |"
             echo "| **Build Date** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |"
-            echo "| **GPU Support** | Vulkan ON |"
+            echo "| **GPU Support** | Vulkan OFF (glslc unavailable) |"
             echo "| **Parallel Compute** | OpenMP ON |"
             echo "| **NDK Version** | ${{ env.NDK_VERSION }} |"
             echo ""
@@ -316,7 +302,7 @@ jobs:
             echo ""
             echo "## Configuration Applied"
             echo "- build.gradle.kts: 2 sed replacements (arm64-v8a to armeabi-v7a, x86_64 to armeabi-v7a)"
-            echo "- CMakeLists.txt: GGML_VULKAN=ON, GGML_OPENMP=ON"
+            echo "- CMakeLists.txt: GGML_VULKAN=OFF (left as-is, glslc unavailable), GGML_OPENMP=ON"
             echo "- CMakeLists.txt: GGML_CPU_ALL_VARIANTS=OFF for armeabi-v7a"
             echo "- CMakeLists.txt: GGML_CPU_ARM_ARCH=armv7-a, GGML_LLAMAFILE=OFF"
             echo "- CMakeLists.txt: armeabi-v7a branch uses base ggml-cpu target"

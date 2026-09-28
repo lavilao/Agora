@@ -72,11 +72,22 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          # CRITICAL: the package is `glslc` (from shaderc), NOT `glslang-tools`.
-          # `glslang-tools` only provides `glslangValidator`, not `glslc`, and
-          # llama.cpp's find_package(Vulkan COMPONENTS glslc REQUIRED) needs the
-          # actual `glslc` binary. `libvulkan-dev` provides the Vulkan headers.
-          sudo apt-get install -y glslc libvulkan-dev
+          sudo apt-get install -y glslc libvulkan-dev cmake
+
+          # Install SPIRV-Headers from source — the Ubuntu `spirv-headers` apt
+          # package (1.6.1, from 2023) is too old and doesn't ship
+          # SPIRV-HeadersConfig.cmake which llama.cpp b11223+ requires.
+          # KhronosGroup/SPIRV-Headers latest tag always has it.
+          echo "=== Installing SPIRV-Headers from source ==="
+          cd /tmp
+          git clone --depth=1 https://github.com/KhronosGroup/SPIRV-Headers.git
+          cd SPIRV-Headers
+          mkdir build && cd build
+          cmake -DCMAKE_INSTALL_PREFIX=/usr ..
+          sudo cmake --install .
+          echo "=== Verify SPIRV-HeadersConfig.cmake installed ==="
+          find /usr -name "SPIRV-HeadersConfig.cmake" -o -name "spirv-headers-config.cmake" 2>/dev/null
+
           echo "=== glslc location and version ==="
           which glslc
           glslc --version

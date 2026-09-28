@@ -57,10 +57,14 @@ jobs:
         run: |
           {
             echo "sdk.dir=$ANDROID_HOME"
-            echo "ndk.dir=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
             echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
           } > local.properties
           cat local.properties
+          # NOTE: ndk.dir is intentionally NOT written here. AGP 9.x deprecates
+          # ndk.dir and warns: "Please delete ndk.dir from local.properties and
+          # set android.ndkVersion to [28.2.13676358] in all native modules."
+          # app/build.gradle.kts already sets `ndkVersion = "28.2.13676358"`, so
+          # AGP will find the NDK via android.ndkVersion + the SDK's ndk/ directory.
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -213,9 +217,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
         run: |
           set -euo pipefail
+          # NOTE: no -x lint* flags. Agora has two flavors (fdroid, play), so
+          # `lintRelease`/`lintDebug` are ambiguous (expand to 13+ flavored tasks)
+          # and Gradle fails with "Task 'lintRelease' is ambiguous". Lint does
+          # not fail the build by default, so we just let it run.
           ./gradlew :app:assembleFdroidDebug \
             --no-daemon --build-cache \
-            -x lint -x lintDebug --info 2>&1 | tee build-debug.log
+            --info 2>&1 | tee build-debug.log
           APK="app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk"
           [ -f "$APK" ] || { echo "$APK not found"; exit 1; }
           echo "Built: $APK ($(du -h "$APK" | cut -f1))"
@@ -224,9 +232,10 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           set -euo pipefail
+          # NOTE: no -x lint* flags — see Build Debug step for explanation.
           ./gradlew :app:assembleFdroidRelease :app:assemblePlayRelease \
             --no-daemon --build-cache \
-            -x lint -x lintRelease --info 2>&1 | tee build-release.log
+            --info 2>&1 | tee build-release.log
           FDROID_APK="app/build/outputs/apk/fdroid/release/app-fdroid-release.apk"
           PLAY_APK="app/build/outputs/apk/play/release/app-play-release.apk"
           [ -f "$FDROID_APK" ] || [ -f "$PLAY_APK" ] || { echo "No APK produced"; exit 1; }
@@ -237,9 +246,10 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
         run: |
           set -euo pipefail
+          # NOTE: no -x lint* flags — see Build Debug step for explanation.
           ./gradlew :app:bundlePlayRelease \
             --no-daemon --build-cache \
-            -x lint --info 2>&1 | tee build-bundle.log
+            --info 2>&1 | tee build-bundle.log
           BUNDLE="app/build/outputs/bundle/playRelease/app-play-release.aab"
           [ -f "$BUNDLE" ] || { echo "$BUNDLE not found"; exit 1; }
           echo "Built: $BUNDLE"

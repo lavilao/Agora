@@ -38,7 +38,8 @@ jobs:
           submodules: recursive
 
       - name: Info del pin de llama.cpp
-        run: git -C thirdparty/llama.cpp log -1 --format='llama.cpp: %h %ci %s'
+        run: >-
+          git -C thirdparty/llama.cpp log -1 --format='llama.cpp: %h %ci %s'
 
       - name: JDK 21
         uses: actions/setup-java@v4

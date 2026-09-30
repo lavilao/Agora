@@ -811,6 +811,9 @@
     <string name="local_runtime_cpu">CPU</string>
     <string name="local_runtime_vulkan">Vulkan (GPU)</string>
     <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <string name="local_runtime_vulkan_status_old">يُبلّغ الجهاز عن Vulkan %1$s. يتطلب خلفية Vulkan الإصدار 1.2 أو أحدث، لذا لا يتوفر تسريع GPU على هذا الجهاز.</string>
+    <string name="local_runtime_vulkan_status_init_failed">‏Vulkan %1$s موجود، لكن تعذّر تهيئة خلفية GPU.</string>
+    <string name="local_runtime_vulkan_status_no_loader">‏Vulkan غير متوفر على هذا النظام.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">الاستيراد من DeepSeek</string>
     <string name="deepseek_import_subtitle">استيراد المحادثات من ملف تصدير DeepSeek بصيغة .json.</string>

@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstring>
 #include <android/log.h>
+#include <dlfcn.h>
 #include "llama.h"
 #include "ggml-backend.h"
 #include "jni_utf8.h"
@@ -18,6 +19,11 @@ using agora::jni::read_java_string;
 #define LOGD(...) ((void)0)
 #define LOGE(...) ((void)0)
 #endif
+
+// Packed vkEnumerateInstanceVersion decoding (no Vulkan headers needed here).
+#define AGORA_VK_VERSION_MAJOR(v) (((unsigned int)(v)) >> 22)
+#define AGORA_VK_VERSION_MINOR(v) ((((unsigned int)(v)) >> 12) & 0x3ffu)
+#define AGORA_VK_VERSION_PATCH(v) (((unsigned int)(v)) & 0xfffu)
 
 struct LlamaHandle {
     llama_model * model   = nullptr;
@@ -38,6 +44,17 @@ Java_com_newoether_agora_api_LlamaEngine_nativeInitializeBackends(
     if (!read_java_path(env, native_library_dir, directory)) return JNI_FALSE;
 
     ggml_backend_load_all_from_path(directory.c_str());
+
+    // Log what actually registered: on devices whose Vulkan driver is too old
+    // (llama.cpp requires Vulkan 1.2+), libggml-vulkan.so loads but registers no
+    // device and the only visible symptom used to be a greyed-out selector.
+    const size_t registered = ggml_backend_dev_count();
+    for (size_t i = 0; i < registered; ++i) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (dev == nullptr) continue;
+        LOGD("Backend device[%zu]: type=%d name=%s",
+             i, (int) ggml_backend_dev_type(dev), ggml_backend_dev_name(dev));
+    }
 
     if (!ggml_backend_reg_by_name("CPU")) {
         LOGE("No compatible CPU backend was loaded");
@@ -96,6 +113,44 @@ Java_com_newoether_agora_api_LlamaEngine_nativeListBackendDevices(
         env->DeleteLocalRef(value);
     }
     return result;
+}
+
+// Reports the instance version exposed by the system Vulkan loader without
+// initializing the ggml Vulkan backend. Lets the settings UI explain *why* the
+// Vulkan option is unavailable instead of just greying it out.
+//   0            no loader (or a Vulkan 1.0 loader without vkEnumerateInstanceVersion)
+//   otherwise    the packed VK_MAKE_API_VERSION value (major = v >> 22,
+//                minor = (v >> 12) & 0x3ff, patch = v & 0xfff)
+JNIEXPORT jint JNICALL
+Java_com_newoether_agora_api_LlamaEngine_nativeVulkanInstanceVersion(
+    JNIEnv * /*env*/, jclass /*clazz*/) {
+
+    void * loader = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+    if (loader == nullptr) {
+        LOGD("libvulkan.so not loadable: %s", dlerror());
+        return 0;
+    }
+
+    typedef unsigned int (* enumerate_instance_version_t)(unsigned int *);
+    const enumerate_instance_version_t enumerate_instance_version =
+        (enumerate_instance_version_t) dlsym(loader, "vkEnumerateInstanceVersion");
+    if (enumerate_instance_version == nullptr) {
+        LOGD("vkEnumerateInstanceVersion missing (Vulkan 1.0 loader)");
+        dlclose(loader);
+        return 0;
+    }
+
+    unsigned int version = 0;
+    const unsigned int result = enumerate_instance_version(&version);
+    dlclose(loader);
+    if (result != 0 /* VK_SUCCESS */) {
+        LOGE("vkEnumerateInstanceVersion failed: %u", result);
+        return 0;
+    }
+    LOGD("Vulkan instance version: %u.%u.%u",
+         AGORA_VK_VERSION_MAJOR(version), AGORA_VK_VERSION_MINOR(version),
+         AGORA_VK_VERSION_PATCH(version));
+    return (jint) version;
 }
 
 JNIEXPORT jlong JNICALL

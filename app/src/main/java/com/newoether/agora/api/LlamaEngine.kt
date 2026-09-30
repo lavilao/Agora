@@ -15,6 +15,7 @@ object LlamaEngine {
 
     private external fun nativeInitializeBackends(nativeLibraryDir: String): Boolean
     private external fun nativeListBackendDevices(): Array<String>?
+    private external fun nativeVulkanInstanceVersion(): Int
     private external fun nativeLoadModel(path: String): Long
     private external fun nativeFreeModel(handle: Long)
     private external fun nativeComputeEmbedding(handle: Long, text: String): FloatArray?
@@ -31,6 +32,24 @@ object LlamaEngine {
     ) {
         val isGpu: Boolean get() = type == "gpu"
     }
+
+    /** Packed Vulkan 1.2 version, the minimum the ggml Vulkan backend accepts. */
+    const val VULKAN_MIN_REQUIRED: Int = 0x00402000
+
+    /**
+     * Instance version exposed by the system Vulkan loader, or null when there
+     * is no usable loader. Used to explain a greyed-out Vulkan runtime option:
+     * llama.cpp refuses to register GPU devices below [VULKAN_MIN_REQUIRED].
+     */
+    fun vulkanInstanceVersion(): Int? = try {
+        nativeVulkanInstanceVersion().takeIf { it > 0 }
+    } catch (_: UnsatisfiedLinkError) {
+        null
+    }
+
+    /** "major.minor" rendering of a packed Vulkan version for status messages. */
+    fun formatVulkanVersion(version: Int): String =
+        "${version shr 22}.${(version shr 12) and 0x3ff}"
 
     /**
      * Enumerates the runtime backends present in this APK + device, e.g.

@@ -371,14 +371,14 @@ class ImportExportManager(
                     _claudeImportProgress.value = 0.8f
                     _claudeImportResult.value = ClaudeChatImporter.ImportResult(newCh.size, graph.messages.size)
                 }
-                _claudeImportProgress.value = null
                 onDataChanged()
             } catch (e: OutOfMemoryError) {
-                _claudeImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
             } catch (e: Exception) {
-                _claudeImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.claude_import_error_detail, e.localizedMessage ?: "")))
+            } finally {
+                // Early exits (oversize, parse failure, no data) must not freeze the dialog.
+                _claudeImportProgress.value = null
             }
         }
     }
@@ -476,14 +476,14 @@ class ImportExportManager(
                     _gptImportProgress.value = 0.8f
                     _gptImportResult.value = GptChatImporter.ImportResult(newCh.size, graph.messages.size, newThoughtsCount)
                 }
-                _gptImportProgress.value = null
                 onDataChanged()
             } catch (e: OutOfMemoryError) {
-                _gptImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
             } catch (e: Exception) {
-                _gptImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.gpt_import_error_detail, e.localizedMessage ?: "")))
+            } finally {
+                // Early exits (oversize, parse failure, no data) must not freeze the dialog.
+                _gptImportProgress.value = null
             }
         }
     }
@@ -574,14 +574,14 @@ class ImportExportManager(
                     _deepseekImportProgress.value = 0.8f
                     _deepseekImportResult.value = DeepSeekChatImporter.ImportResult(newCh.size, graph.messages.size)
                 }
-                _deepseekImportProgress.value = null
                 onDataChanged()
             } catch (e: OutOfMemoryError) {
-                _deepseekImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
             } catch (e: Exception) {
-                _deepseekImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_error_detail, e.localizedMessage ?: "")))
+            } finally {
+                // Early exits (oversize, parse failure, no data) must not freeze the dialog at 40%.
+                _deepseekImportProgress.value = null
             }
         }
     }

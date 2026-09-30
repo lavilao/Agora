@@ -811,6 +811,9 @@
     <string name="local_runtime_cpu">CPU</string>
     <string name="local_runtime_vulkan">Vulkan (GPU)</string>
     <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <string name="local_runtime_vulkan_status_old">L\'appareil rapporte Vulkan %1$s. Le backend Vulkan exige Vulkan 1.2 ou supérieur, donc l\'accélération GPU n\'est pas disponible sur cet appareil.</string>
+    <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s est présent, mais le backend GPU n\'a pas pu s\'initialiser.</string>
+    <string name="local_runtime_vulkan_status_no_loader">Vulkan n\'est pas disponible sur ce système.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Importer depuis DeepSeek</string>
     <string name="deepseek_import_subtitle">Importe des conversations depuis un fichier d’export DeepSeek .json.</string>

@@ -805,6 +805,9 @@
     <string name="local_runtime_cpu">CPU</string>
     <string name="local_runtime_vulkan">Vulkan（GPU）</string>
     <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <string name="local_runtime_vulkan_status_old">设备报告的 Vulkan 版本为 %1$s。Vulkan 后端需要 Vulkan 1.2 或更高版本，因此此设备无法使用 GPU 加速。</string>
+    <string name="local_runtime_vulkan_status_init_failed">存在 Vulkan %1$s，但无法初始化 GPU 后端。</string>
+    <string name="local_runtime_vulkan_status_no_loader">此系统不支持 Vulkan。</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">从 DeepSeek 导入</string>
     <string name="deepseek_import_subtitle">从 DeepSeek 导出的 .json 文件导入对话。</string>

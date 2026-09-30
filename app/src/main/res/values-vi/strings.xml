@@ -817,6 +817,9 @@
     <string name="local_runtime_cpu">CPU</string>
     <string name="local_runtime_vulkan">Vulkan (GPU)</string>
     <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <string name="local_runtime_vulkan_status_old">Thiết bị báo cáo Vulkan %1$s. Backend Vulkan yêu cầu Vulkan 1.2 trở lên nên không thể dùng tăng tốc GPU trên thiết bị này.</string>
+    <string name="local_runtime_vulkan_status_init_failed">Có Vulkan %1$s nhưng không thể khởi tạo backend GPU.</string>
+    <string name="local_runtime_vulkan_status_no_loader">Vulkan không khả dụng trên hệ thống này.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Nhập từ DeepSeek</string>
     <string name="deepseek_import_subtitle">Nhập các cuộc trò chuyện từ tệp xuất .json của DeepSeek.</string>

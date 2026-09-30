@@ -2,6 +2,7 @@ package com.newoether.agora.ui.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -43,7 +44,30 @@ internal fun LocalRuntimeSettingItem(
     val backendDevices = remember(isLocal) {
         if (isLocal) LlamaEngine.listBackendDevices() else emptyList()
     }
+    // Loader version queried independently of the backend registry: when no GPU device
+    // registers, this distinguishes "driver too old" from "backend failed to init".
+    val vulkanLoaderVersion = remember(isLocal) {
+        if (isLocal) LlamaEngine.vulkanInstanceVersion() else null
+    }
     val vulkanDevice = backendDevices.firstOrNull { it.isGpu }
+    val vulkanStatus = if (isLocal && vulkanDevice == null) {
+        when {
+            vulkanLoaderVersion == null ->
+                stringResource(R.string.local_runtime_vulkan_status_no_loader)
+            vulkanLoaderVersion < LlamaEngine.VULKAN_MIN_REQUIRED ->
+                stringResource(
+                    R.string.local_runtime_vulkan_status_old,
+                    LlamaEngine.formatVulkanVersion(vulkanLoaderVersion),
+                )
+            else ->
+                stringResource(
+                    R.string.local_runtime_vulkan_status_init_failed,
+                    LlamaEngine.formatVulkanVersion(vulkanLoaderVersion),
+                )
+        }
+    } else {
+        null
+    }
     var runtimeMenuExpanded by remember { mutableStateOf(false) }
     val runtimeLabel = when (localRuntimePreference) {
         "cpu" -> stringResource(R.string.local_runtime_cpu)
@@ -55,7 +79,16 @@ internal fun LocalRuntimeSettingItem(
             Text(stringResource(R.string.local_runtime_title))
         },
         supportingContent = {
-            Text(stringResource(R.string.local_runtime_desc))
+            Column {
+                Text(stringResource(R.string.local_runtime_desc))
+                if (vulkanStatus != null) {
+                    Text(
+                        vulkanStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         },
         leadingContent = {
             Icon(

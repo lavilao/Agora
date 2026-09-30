@@ -270,7 +270,9 @@ class DeepSeekChatImporter {
     }
 
     private fun parseTopLevel(root: JsonElement): List<DeepSeekConversation> {
-        if (root is JsonArray) return root.mapNotNull(::parseConversation)
+        if (root is JsonArray) {
+            return root.filterIsInstance<JsonObject>().mapNotNull(::parseConversation)
+        }
         if (root is JsonObject) {
             for (key in CONTAINER_KEYS) {
                 val found = root[key]?.let(::parseContainer).orEmpty()
@@ -283,14 +285,18 @@ class DeepSeekChatImporter {
 
     /** Accepts `[… ]`, `{"key": […]}` and one further nesting level of either. */
     private fun parseContainer(value: JsonElement): List<DeepSeekConversation> {
-        if (value is JsonArray) return value.mapNotNull(::parseConversation)
+        if (value is JsonArray) {
+            return value.filterIsInstance<JsonObject>().mapNotNull(::parseConversation)
+        }
         if (value is JsonObject) {
             for (key in CONTAINER_KEYS) {
                 val found = value[key]?.let(::parseContainer).orEmpty()
                 if (found.isNotEmpty()) return found
             }
             // Also tolerate maps of id → conversation.
-            val mapped = value.values.mapNotNull(::parseConversation)
+            val mapped = value.values
+                .filterIsInstance<JsonObject>()
+                .mapNotNull(::parseConversation)
             if (mapped.isNotEmpty()) return mapped
             return parseConversation(value)?.let { listOf(it) }.orEmpty()
         }
@@ -375,24 +381,27 @@ class DeepSeekChatImporter {
     }
 
     private fun extractText(value: JsonElement?): String? {
-        if (value == null || value is JsonNull) return null
-        if (value is JsonArray) {
-            return value.joinToString("\n") { extractText(it).orEmpty() }
+        when (value) {
+            is JsonArray -> return value.joinToString("\n") { extractText(it).orEmpty() }
                 .takeIf { it.isNotBlank() }
-        }
-        if (value is JsonObject) {
-            for (key in CONTENT_KEYS) {
-                val nested = value[key] as? JsonPrimitive ?: continue
-                if (nested !is JsonNull && nested.content.isNotEmpty() &&
-                    nested.content != "null"
-                ) {
-                    return nested.content
+            is JsonObject -> {
+                for (key in CONTENT_KEYS) {
+                    val nested = value[key] as? JsonPrimitive ?: continue
+                    if (nested !is JsonNull && nested.content.isNotEmpty() &&
+                        nested.content != "null"
+                    ) {
+                        return nested.content
+                    }
                 }
+                return null
             }
-            return null
+            // Numbers, booleans and strings all surface their literal; JsonNull's
+            // content is the string "null", which the filter below drops.
+            is JsonPrimitive -> return value.content
+                .takeIf { it.isNotEmpty() && it != "null" }
+            else -> {}
         }
-        // JsonPrimitive: numbers, booleans and strings all surface their literal.
-        return value.content.takeIf { it.isNotEmpty() && it != "null" }
+        return null
     }
 
     private fun firstString(obj: JsonObject, vararg keys: String): String? {

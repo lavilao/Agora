@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="generation_speed_with_label">平均生成速度: %1$s</string>
+    <string name="prompt_processing_speed_with_label">平均プロンプト処理速度: %1$s</string>
+    <string name="runtime_with_label">ランタイム: %1$s</string>
 </resources>

@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">2YbYs9iu2Kkg2YXYudiv2ZHZhNip</string>
     <string name="rating_origin_modified_body_b64">2YrYs9iq2K7Yr9mFINmH2LDYpyDYp9mE2KrYt9io2YrZgiDYp9iz2YUg2K3YstmF2Kkg2YXYrtiq2YTZgdmL2Kcg2LnZhiDYp9mE2YXYtNix2YjYuSDYp9mE2KPYtdmE2YrYjCDZiNmC2K8g2KPZj9i52YrYryDYqtit2LLZitmF2Ycg2KPZiCDYqti52K/ZitmE2YcuINin2YTZhdi02LHZiNi5INin2YTYo9i12YTZiiDZh9mIIEFnb3Jh2Iwg2YXZhiDYqti32YjZitixIG5ld28tZXRoZXIuINmK2KrYrdmF2YQg2YXZiNiy2ZHYuSDZh9iw2Ycg2KfZhNmG2LPYrtipINmF2LPYpNmI2YTZitipINin2YTYqti52K/ZitmE2KfYqtiMINmI2YfZiiDZhNinINiq2YXYq9mEINin2YTZhdik2YTZgSDYp9mE2KPYtdmE2You</string>
     <string name="rating_origin_view_project_b64">2LnYsdi2INin2YTZhdi02LHZiNi5INin2YTYo9i12YTZig==</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">بيئة التشغيل المحلية</string>
+    <string name="local_runtime_desc">الخلفية التي تعمل عليها النماذج المحلية. يُطبق من تحميل النموذج التالي؛ افتح معلومات الرسالة لرؤية بيئة التشغيل النشطة وسرعتها.</string>
+    <string name="local_runtime_auto">تلقائي</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">الاستيراد من DeepSeek</string>
+    <string name="deepseek_import_subtitle">استيراد المحادثات من ملف تصدير DeepSeek بصيغة .json.</string>
+    <string name="deepseek_import_conversations">المحادثات</string>
+    <string name="deepseek_import_messages">الرسائل</string>
+    <string name="deepseek_import_error_detail">فشل الاستيراد: %1$s</string>
+    <string name="deepseek_import_success">تم الاستيراد بنجاح</string>
+    <string name="deepseek_import_success_detail">تم استيراد %1$d من المحادثات (%2$d رسالة).</string>
+    <string name="deepseek_import_import">استيراد</string>
+    <string name="deepseek_import_progress">جارٍ الاستيراد…</string>
+    <string name="deepseek_import_no_data">لا يحتوي هذا الملف على بيانات قابلة للاستيراد.</string>
+    <string name="deepseek_import_attachments_notice">المرفقات مذكورة في الملف لكن لا يمكن استرجاع ملفاتها، لذلك لا يتم استيرادها.</string>
 </resources>

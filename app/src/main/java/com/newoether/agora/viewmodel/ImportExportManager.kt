@@ -7,6 +7,7 @@ import com.newoether.agora.automation.AutomationExecutionGate
 import com.newoether.agora.data.ClaudeChatImporter
 import com.newoether.agora.data.DataExporter
 import com.newoether.agora.data.DataImporter
+import com.newoether.agora.data.DeepSeekChatImporter
 import com.newoether.agora.data.GptChatImporter
 import com.newoether.agora.data.MemoryManager
 import com.newoether.agora.data.SkillManager
@@ -163,6 +164,18 @@ class ImportExportManager(
 
     private val _gptImportResult = MutableStateFlow<GptChatImporter.ImportResult?>(null)
     val gptImportResult: StateFlow<GptChatImporter.ImportResult?> = _gptImportResult.asStateFlow()
+
+    // DeepSeek import state
+    private val _deepseekImportPreview = MutableStateFlow<DeepSeekChatImporter.ImportPreview?>(null)
+    val deepseekImportPreview: StateFlow<DeepSeekChatImporter.ImportPreview?> =
+        _deepseekImportPreview.asStateFlow()
+
+    private val _deepseekImportProgress = MutableStateFlow<Float?>(null)
+    val deepseekImportProgress: StateFlow<Float?> = _deepseekImportProgress.asStateFlow()
+
+    private val _deepseekImportResult = MutableStateFlow<DeepSeekChatImporter.ImportResult?>(null)
+    val deepseekImportResult: StateFlow<DeepSeekChatImporter.ImportResult?> =
+        _deepseekImportResult.asStateFlow()
 
     fun exportData(uri: Uri, categories: Set<DataExporter.ExportCategory>, includeApiKeys: Boolean) {
         _exportProgress.value = 0f
@@ -471,6 +484,104 @@ class ImportExportManager(
             } catch (e: Exception) {
                 _gptImportProgress.value = null
                 emitSnackbar(SnackbarEvent(app.getString(R.string.gpt_import_error_detail, e.localizedMessage ?: "")))
+            }
+        }
+    }
+
+    fun previewDeepSeekChat(uri: Uri) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                importSizeError(uri)?.let {
+                    emitSnackbar(SnackbarEvent(it)); _deepseekImportPreview.value = null; return@launch
+                }
+                val importer = DeepSeekChatImporter()
+                val parseResult = importer.extractAndParse { openImportStream(uri) }
+                if (parseResult.isSuccess) {
+                    _deepseekImportPreview.value = importer.preview(parseResult.getOrThrow())
+                } else {
+                    emitSnackbar(SnackbarEvent(parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error)))
+                    _deepseekImportPreview.value = null
+                }
+            } catch (e: OutOfMemoryError) {
+                emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
+                _deepseekImportPreview.value = null
+            } catch (e: Exception) {
+                emitSnackbar(SnackbarEvent(e.localizedMessage ?: app.getString(R.string.unknown_error)))
+                _deepseekImportPreview.value = null
+            }
+        }
+    }
+
+    fun clearDeepSeekImportState() {
+        _deepseekImportPreview.value = null
+        _deepseekImportProgress.value = null
+        _deepseekImportResult.value = null
+    }
+
+    fun importDeepSeekChat(uri: Uri, strategy: ImportStrategy, selectedIds: Set<String>) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                _deepseekImportProgress.value = 0.2f
+                importSizeError(uri)?.let {
+                    emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_error_detail, it)))
+                    return@launch
+                }
+
+                val importer = DeepSeekChatImporter()
+                val parseResult = importer.extractAndParse { openImportStream(uri) }
+                if (parseResult.isFailure) {
+                    emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_error_detail, parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error))))
+                    return@launch
+                }
+
+                _deepseekImportProgress.value = 0.4f
+                val parsed = parseResult.getOrThrow()
+                val preview = importer.preview(parsed)
+                val importData = importer.toImportFormat(parsed, selectedIds)
+
+                if (preview.totalMessageCount == 0) {
+                    emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_no_data)))
+                    return@launch
+                }
+
+                _deepseekImportProgress.value = 0.6f
+
+                val chatEntities = importData.conversations.map { ce ->
+                    ChatEntity(ce.id, ce.title, ce.lastUpdated, dataChangedAt = 0L, selectedBranchesJson = ce.selectedBranchesJson, systemPromptId = ce.systemPromptId, modelId = ce.modelId)
+                }
+                if (strategy == ImportStrategy.REPLACE) {
+                    val graph = planImportedLegacyMessages(importData.messages)
+                    conversations.importExternalConversationGraph(
+                        conversations = chatEntities,
+                        runs = graph.runs,
+                        messages = graph.messages,
+                        replace = true,
+                    )
+                    _deepseekImportProgress.value = 0.8f
+                    _deepseekImportResult.value = DeepSeekChatImporter.ImportResult(chatEntities.size, graph.messages.size)
+                } else {
+                    val existingConvIds = conversations.getAllConversationsList().map { it.id }.toSet()
+                    val existingMsgIds = conversations.findExistingMessageIds(importData.messages.map { it.id }).toSet()
+                    val newCh = chatEntities.filterNot { it.id in existingConvIds }
+                    val newMessageDrafts = importData.messages.filterNot { it.id in existingMsgIds }
+                    val graph = planImportedLegacyMessages(newMessageDrafts)
+                    conversations.importExternalConversationGraph(
+                        conversations = newCh,
+                        runs = graph.runs,
+                        messages = graph.messages,
+                        replace = false,
+                    )
+                    _deepseekImportProgress.value = 0.8f
+                    _deepseekImportResult.value = DeepSeekChatImporter.ImportResult(newCh.size, graph.messages.size)
+                }
+                _deepseekImportProgress.value = null
+                onDataChanged()
+            } catch (e: OutOfMemoryError) {
+                _deepseekImportProgress.value = null
+                emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
+            } catch (e: Exception) {
+                _deepseekImportProgress.value = null
+                emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_error_detail, e.localizedMessage ?: "")))
             }
         }
     }

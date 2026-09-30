@@ -77,8 +77,12 @@ bool init_callbacks(JNIEnv * env, jobject callback, NativeChatCallbacks & method
     methods.on_tool_calls_complete = env->GetMethodID(
         methods.clazz, "onToolCallsComplete", "()Z"
     );
-    methods.on_done = env->GetMethodID(methods.clazz, "onDone", "(Ljava/lang/String;II)V");
-    methods.on_error = env->GetMethodID(methods.clazz, "onError", "(Ljava/lang/String;II)V");
+    methods.on_done = env->GetMethodID(
+        methods.clazz, "onDone", "(Ljava/lang/String;IIDLjava/lang/String;)V"
+    );
+    methods.on_error = env->GetMethodID(
+        methods.clazz, "onError", "(Ljava/lang/String;IIDLjava/lang/String;)V"
+    );
     if (methods.on_text && methods.on_thought && methods.on_tool_call &&
         methods.on_tool_calls_complete && methods.on_done && methods.on_error) return true;
     if (env->ExceptionCheck()) env->ExceptionClear();
@@ -93,14 +97,19 @@ jint report_error(
     NativeChatCallbacks & methods,
     const char * message,
     int32_t input_tokens,
-    int32_t output_tokens
+    int32_t output_tokens,
+    double prompt_tokens_per_second,
+    const char * runtime_name
 ) {
     jstring jmessage = utf8_to_jstring(env, message, std::strlen(message));
+    jstring jruntime = env->NewStringUTF(runtime_name == nullptr ? "" : runtime_name);
     env->CallVoidMethod(
         callback, methods.on_error, jmessage,
-        static_cast<jint>(input_tokens), static_cast<jint>(output_tokens)
+        static_cast<jint>(input_tokens), static_cast<jint>(output_tokens),
+        static_cast<jdouble>(prompt_tokens_per_second), jruntime
     );
     env->DeleteLocalRef(jmessage);
+    env->DeleteLocalRef(jruntime);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(methods.clazz);
     methods.clazz = nullptr;
@@ -113,14 +122,19 @@ jint report_done(
     NativeChatCallbacks & methods,
     const char * reason,
     int32_t input_tokens,
-    int32_t output_tokens
+    int32_t output_tokens,
+    double prompt_tokens_per_second,
+    const char * runtime_name
 ) {
     jstring jreason = env->NewStringUTF(reason);
+    jstring jruntime = env->NewStringUTF(runtime_name == nullptr ? "" : runtime_name);
     env->CallVoidMethod(
         callback, methods.on_done, jreason,
-        static_cast<jint>(input_tokens), static_cast<jint>(output_tokens)
+        static_cast<jint>(input_tokens), static_cast<jint>(output_tokens),
+        static_cast<jdouble>(prompt_tokens_per_second), jruntime
     );
     env->DeleteLocalRef(jreason);
+    env->DeleteLocalRef(jruntime);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(methods.clazz);
     methods.clazz = nullptr;

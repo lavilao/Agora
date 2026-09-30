@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">5aSJ5pu044GV44KM44Gf44OQ44O844K444On44Oz</string>
     <string name="rating_origin_modified_body_b64">44GT44Gu44Ki44OX44Oq44Gv5YWD44Gu44OX44Ot44K444Kn44Kv44OI44Go44Gv55Ww44Gq44KL44OR44OD44Kx44O844K45ZCN44KS5L2/55So44GX44Gm44GK44KK44CB5YaN44OR44OD44Kx44O844K45YyW44G+44Gf44Gv5aSJ5pu044GV44KM44Gm44GE44G+44GZ44CC5YWD44Gu44OX44Ot44K444Kn44Kv44OI44GvIG5ld28tZXRoZXIg44GM6ZaL55m644GX44GfIEFnb3JhIOOBp+OBmeOAguOBk+OBruODkOODvOOCuOODp+ODs+OBruWkieabtOOBr+mFjeW4g+iAheOBruiyrOS7u+OBp+OBguOCiuOAgeWFg+OBruS9nOiAheOCkuS7o+ihqOOBmeOCi+OCguOBruOBp+OBr+OBguOCiuOBvuOBm+OCk+OAgg==</string>
     <string name="rating_origin_view_project_b64">5YWD44Gu44OX44Ot44K444Kn44Kv44OI44KS6KaL44KL</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">ローカルランタイム</string>
+    <string name="local_runtime_desc">ローカルモデルが実行されるバックエンド。次回のモデル読み込みから適用されます。メッセージの情報からアクティブなランタイムと速度を確認できます。</string>
+    <string name="local_runtime_auto">自動</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">DeepSeek からインポート</string>
+    <string name="deepseek_import_subtitle">DeepSeek のエクスポート .json ファイルから会話をインポートします。</string>
+    <string name="deepseek_import_conversations">会話</string>
+    <string name="deepseek_import_messages">メッセージ</string>
+    <string name="deepseek_import_error_detail">インポートに失敗しました: %1$s</string>
+    <string name="deepseek_import_success">インポート成功</string>
+    <string name="deepseek_import_success_detail">%1$d 件の会話（%2$d 件のメッセージ）をインポートしました。</string>
+    <string name="deepseek_import_import">インポート</string>
+    <string name="deepseek_import_progress">インポート中…</string>
+    <string name="deepseek_import_no_data">このファイルにはインポート可能なデータがありません。</string>
+    <string name="deepseek_import_attachments_notice">添付ファイルはファイル内に記載されていますが、その内容を復元できないため、インポートされません。</string>
 </resources>

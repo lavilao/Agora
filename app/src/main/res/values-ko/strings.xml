@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">7IiY7KCV65CcIOuyhOyghA==</string>
     <string name="rating_origin_modified_body_b64">7J20IOyVseydgCDsm5Drs7gg7ZSE66Gc7KCd7Yq47JmAIOuLpOuluCDtjKjtgqTsp4Ag7J2066aE7J2EIOyCrOyaqe2VmOupsCDri6Tsi5wg7Yyo7YKk7KeV65CY7JeI6rGw64KYIOyImOygleuQmOyXiOyKteuLiOuLpC4g7JuQ67O4IO2UhOuhnOygne2KuOuKlCBuZXdvLWV0aGVy6rCAIOqwnOuwnO2VnCBBZ29yYeyeheuLiOuLpC4g7J20IOuyhOyghOydmCDrs4Dqsr0g7IKs7ZWt7J2AIOuwsO2PrOyekOydmCDssYXsnoTsnbTrqbAg7JuQ7J6R7J6Q66W8IOuMgO2RnO2VmOyngCDslYrsirXri4jri6Qu</string>
     <string name="rating_origin_view_project_b64">7JuQ67O4IO2UhOuhnOygne2KuCDrs7TquLA=</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">로컬 런타임</string>
+    <string name="local_runtime_desc">로컬 모델이 실행되는 백엔드입니다. 다음 모델 로드시부터 적용됩니다. 메시지의 정보에서 활성 런타임과 속도를 확인할 수 있습니다.</string>
+    <string name="local_runtime_auto">자동</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">DeepSeek에서 가져오기</string>
+    <string name="deepseek_import_subtitle">DeepSeek 내콤을 .json 파일에서 대화를 가져옵니다.</string>
+    <string name="deepseek_import_conversations">대화</string>
+    <string name="deepseek_import_messages">메시지</string>
+    <string name="deepseek_import_error_detail">가져오기 실패: %1$s</string>
+    <string name="deepseek_import_success">가져오기 성공</string>
+    <string name="deepseek_import_success_detail">%1$d개의 대화(%2$d개 메시지)를 가져옴니다.</string>
+    <string name="deepseek_import_import">가져오기</string>
+    <string name="deepseek_import_progress">가져오는 중…</string>
+    <string name="deepseek_import_no_data">이 파일에는 가져올 데이터가 없습니다.</string>
+    <string name="deepseek_import_attachments_notice">첨부 파일은 파일에 나열되어 있지만 내용을 복구할 수 없어 가져오지 않습니다.</string>
 </resources>

@@ -31,7 +31,9 @@ jint report_error(
     NativeChatCallbacks & methods,
     const char * message,
     int32_t input_tokens,
-    int32_t output_tokens
+    int32_t output_tokens,
+    double prompt_tokens_per_second = 0.0,
+    const char * runtime_name = ""
 );
 
 jint report_done(
@@ -40,7 +42,9 @@ jint report_done(
     NativeChatCallbacks & methods,
     const char * reason,
     int32_t input_tokens,
-    int32_t output_tokens
+    int32_t output_tokens,
+    double prompt_tokens_per_second = 0.0,
+    const char * runtime_name = ""
 );
 
 bool report_string(

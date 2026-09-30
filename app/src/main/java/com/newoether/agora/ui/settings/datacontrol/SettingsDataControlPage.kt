@@ -53,6 +53,10 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
     val gptImportPreview by viewModel.importExport.gptImportPreview.collectAsState()
     val gptImportProgress by viewModel.importExport.gptImportProgress.collectAsState()
     val gptImportResult by viewModel.importExport.gptImportResult.collectAsState()
+
+    val deepseekImportPreview by viewModel.importExport.deepseekImportPreview.collectAsState()
+    val deepseekImportProgress by viewModel.importExport.deepseekImportProgress.collectAsState()
+    val deepseekImportResult by viewModel.importExport.deepseekImportResult.collectAsState()
     var showExportDialog by remember { mutableStateOf(false) }
     var showImportPreviewDialog by remember { mutableStateOf(false) }
     var importUri by remember { mutableStateOf<Uri?>(null) }
@@ -75,7 +79,16 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         mutableStateOf(DataImporter.ImportStrategy.MERGE)
     }
     var gptSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var pendingExternalReplace by remember { mutableStateOf<Pair<Boolean, Set<String>>?>(null) }
+
+    var showDeepSeekImportDialog by remember { mutableStateOf(false) }
+    var deepseekFileUri by remember { mutableStateOf<Uri?>(null) }
+    var showDeepSeekSuccessDialog by remember { mutableStateOf(false) }
+    var deepseekImportStrategy by remember {
+        mutableStateOf(DataImporter.ImportStrategy.MERGE)
+    }
+    var deepseekSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Provider awaiting REPLACE confirmation ("claude" | "gpt" | "deepseek").
+    var pendingExternalReplace by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
 
     // Auto Backup
     val autoBackupEnabled by viewModel.settings.autoBackupEnabled.collectAsState()
@@ -146,6 +159,16 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         }
     }
 
+    // DeepSeek chat file picker launcher
+    val deepseekChatLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            deepseekFileUri = uri
+            viewModel.importExport.previewDeepSeekChat(uri)
+        }
+    }
+
     // Show import preview dialog when preview is loaded
     LaunchedEffect(importPreview, importPreviewLoading) {
         if (importPreview != null && !importPreviewLoading) {
@@ -155,13 +178,14 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
 
     val isClaudeImporting = claudeImportProgress != null
     val isGptImporting = gptImportProgress != null
+    val isDeepSeekImporting = deepseekImportProgress != null
     val isNativeProgressVisible = importPreviewLoading || isExporting || isImporting
     val nativeProgressTitle = when {
         importPreviewLoading -> R.string.loading_label
         isExporting -> R.string.exporting_label
         else -> R.string.importing_label
     }
-    val isThirdPartyImporting = isClaudeImporting || isGptImporting
+    val isThirdPartyImporting = isClaudeImporting || isGptImporting || isDeepSeekImporting
 
     val showDocFab by viewModel.settings.showDocumentationFab.collectAsState()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -216,6 +240,16 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                             },
                             modifier = Modifier.clickable { claudeChatLauncher.launch(arrayOf("application/zip", "*/*")) }
                         )
+                    },
+                    {
+                        SettingsItem(
+                            headlineContent = { Text(stringResource(R.string.deepseek_import_title)) },
+                            supportingContent = { Text(stringResource(R.string.deepseek_import_subtitle)) },
+                            leadingContent = {
+                                Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            modifier = Modifier.clickable { deepseekChatLauncher.launch(arrayOf("application/json", "application/zip", "*/*")) }
+                        )
                     }
                 ))
 
@@ -259,6 +293,23 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                     }
                 }
 
+                // Show DeepSeek import dialog when preview is loaded
+                LaunchedEffect(deepseekImportPreview) {
+                    deepseekImportPreview?.let { preview ->
+                        deepseekSelectedIds = preview.conversations.mapTo(mutableSetOf()) { it.uuid }
+                        deepseekImportStrategy = DataImporter.ImportStrategy.MERGE
+                        pendingExternalReplace = null
+                        showDeepSeekImportDialog = true
+                    }
+                }
+
+                // Show DeepSeek import success dialog when result is available
+                LaunchedEffect(deepseekImportResult) {
+                    if (deepseekImportResult != null) {
+                        showDeepSeekSuccessDialog = true
+                    }
+                }
+
                 if (showDocFab) { Spacer(modifier = Modifier.height(80.dp)) }
         }
 
@@ -267,11 +318,11 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         }
 
         if (isThirdPartyImporting) {
-            val progress = claudeImportProgress ?: gptImportProgress ?: 0f
-            val label = if (isClaudeImporting) {
-                stringResource(R.string.claude_import_progress)
-            } else {
-                stringResource(R.string.gpt_import_progress)
+            val progress = claudeImportProgress ?: gptImportProgress ?: deepseekImportProgress ?: 0f
+            val label = when {
+                isClaudeImporting -> stringResource(R.string.claude_import_progress)
+                isGptImporting -> stringResource(R.string.gpt_import_progress)
+                else -> stringResource(R.string.deepseek_import_progress)
             }
             AlertDialog(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -454,7 +505,7 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                         val finalIds = claudeSelectedIds
                         showClaudeImportDialog = false
                         if (claudeImportStrategy == DataImporter.ImportStrategy.REPLACE) {
-                            pendingExternalReplace = true to finalIds
+                            pendingExternalReplace = "claude" to finalIds
                         } else {
                             viewModel.importExport.clearClaudeImportState()
                             claudeFileUri?.let { uri ->
@@ -485,12 +536,17 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         )
     }
 
-    pendingExternalReplace?.let { (isClaude, selectedIds) ->
+    pendingExternalReplace?.let { (provider, selectedIds) ->
+        val reopenSourceDialog = when (provider) {
+            "claude" -> { { showClaudeImportDialog = true } }
+            "gpt" -> { { showGptImportDialog = true } }
+            else -> { { showDeepSeekImportDialog = true } }
+        }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             onDismissRequest = {
                 pendingExternalReplace = null
-                if (isClaude) showClaudeImportDialog = true else showGptImportDialog = true
+                reopenSourceDialog()
             },
             title = {
                 Text(
@@ -503,26 +559,41 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                 TextButton(
                     onClick = {
                         pendingExternalReplace = null
-                        if (isClaude) {
-                            viewModel.importExport.clearClaudeImportState()
-                            claudeFileUri?.let { uri ->
-                                scope.launch {
-                                    viewModel.importExport.importClaudeChat(
-                                        uri,
-                                        DataImporter.ImportStrategy.REPLACE,
-                                        selectedIds,
-                                    )
+                        when (provider) {
+                            "claude" -> {
+                                viewModel.importExport.clearClaudeImportState()
+                                claudeFileUri?.let { uri ->
+                                    scope.launch {
+                                        viewModel.importExport.importClaudeChat(
+                                            uri,
+                                            DataImporter.ImportStrategy.REPLACE,
+                                            selectedIds,
+                                        )
+                                    }
                                 }
                             }
-                        } else {
-                            viewModel.importExport.clearGptImportState()
-                            gptFileUri?.let { uri ->
-                                scope.launch {
-                                    viewModel.importExport.importGptChat(
-                                        uri,
-                                        DataImporter.ImportStrategy.REPLACE,
-                                        selectedIds,
-                                    )
+                            "gpt" -> {
+                                viewModel.importExport.clearGptImportState()
+                                gptFileUri?.let { uri ->
+                                    scope.launch {
+                                        viewModel.importExport.importGptChat(
+                                            uri,
+                                            DataImporter.ImportStrategy.REPLACE,
+                                            selectedIds,
+                                        )
+                                    }
+                                }
+                            }
+                            else -> {
+                                viewModel.importExport.clearDeepSeekImportState()
+                                deepseekFileUri?.let { uri ->
+                                    scope.launch {
+                                        viewModel.importExport.importDeepSeekChat(
+                                            uri,
+                                            DataImporter.ImportStrategy.REPLACE,
+                                            selectedIds,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -537,7 +608,7 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
             dismissButton = {
                 TextButton(onClick = {
                     pendingExternalReplace = null
-                    if (isClaude) showClaudeImportDialog = true else showGptImportDialog = true
+                    reopenSourceDialog()
                 }) {
                     Text(stringResource(R.string.cancel))
                 }
@@ -688,7 +759,7 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                         val finalIds = gptSelectedIds
                         showGptImportDialog = false
                         if (gptImportStrategy == DataImporter.ImportStrategy.REPLACE) {
-                            pendingExternalReplace = false to finalIds
+                            pendingExternalReplace = "gpt" to finalIds
                         } else {
                             viewModel.importExport.clearGptImportState()
                             gptFileUri?.let { uri ->
@@ -746,6 +817,186 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                 TextButton(onClick = {
                     showGptSuccessDialog = false
                     viewModel.importExport.clearGptImportState()
+                }) {
+                    Text(stringResource(R.string.provider_close))
+                }
+            }
+        )
+    }
+
+    // DeepSeek import preview dialog
+    if (showDeepSeekImportDialog && deepseekImportPreview != null) {
+        val preview = deepseekImportPreview!!
+        val allIds = preview.conversations.map { it.uuid }.toSet()
+        val allSelected = deepseekSelectedIds.size == allIds.size
+        val selectedConvCount = preview.conversations.count { it.uuid in deepseekSelectedIds }
+        val selectedMsgCount = preview.conversations
+            .filter { it.uuid in deepseekSelectedIds }
+            .sumOf { it.messageCount }
+
+        AlertDialog(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            onDismissRequest = {
+                showDeepSeekImportDialog = false
+                pendingExternalReplace = null
+                viewModel.importExport.clearDeepSeekImportState()
+            },
+            title = { Text(stringResource(R.string.deepseek_import_title), fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.claude_import_strategy),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    PillTabSwitcher(
+                        tabs = listOf(
+                            stringResource(R.string.import_strategy_merge),
+                            stringResource(R.string.import_strategy_replace),
+                        ),
+                        selectedIndex = if (
+                            deepseekImportStrategy == DataImporter.ImportStrategy.MERGE
+                        ) 0 else 1,
+                        onSelect = { index ->
+                            deepseekImportStrategy = if (index == 0) {
+                                DataImporter.ImportStrategy.MERGE
+                            } else {
+                                DataImporter.ImportStrategy.REPLACE
+                            }
+                        },
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "$selectedConvCount ${stringResource(R.string.deepseek_import_conversations)}, $selectedMsgCount ${stringResource(R.string.deepseek_import_messages)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (preview.hasAttachments) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            stringResource(R.string.deepseek_import_attachments_notice),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            deepseekSelectedIds = if (allSelected) emptySet() else allIds
+                        }) {
+                            Text(
+                                if (allSelected) stringResource(R.string.deselect_all) else stringResource(R.string.select_all),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
+                        items(preview.conversations.size) { index ->
+                            val conv = preview.conversations[index]
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        deepseekSelectedIds = if (conv.uuid in deepseekSelectedIds) {
+                                            deepseekSelectedIds - conv.uuid
+                                        } else {
+                                            deepseekSelectedIds + conv.uuid
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = conv.uuid in deepseekSelectedIds,
+                                    onCheckedChange = { checked ->
+                                        deepseekSelectedIds = if (checked) {
+                                            deepseekSelectedIds + conv.uuid
+                                        } else {
+                                            deepseekSelectedIds - conv.uuid
+                                        }
+                                    }
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        conv.title.ifEmpty { "Untitled" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        "${conv.messageCount} messages",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val finalIds = deepseekSelectedIds
+                        showDeepSeekImportDialog = false
+                        if (deepseekImportStrategy == DataImporter.ImportStrategy.REPLACE) {
+                            pendingExternalReplace = "deepseek" to finalIds
+                        } else {
+                            viewModel.importExport.clearDeepSeekImportState()
+                            deepseekFileUri?.let { uri ->
+                                viewModel.importExport.importDeepSeekChat(
+                                    uri,
+                                    deepseekImportStrategy,
+                                    finalIds,
+                                )
+                            }
+                        }
+                    },
+                    enabled = deepseekSelectedIds.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.deepseek_import_import))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeepSeekImportDialog = false
+                    pendingExternalReplace = null
+                    viewModel.importExport.clearDeepSeekImportState()
+                }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // DeepSeek import success dialog
+    if (showDeepSeekSuccessDialog && deepseekImportResult != null) {
+        val result = deepseekImportResult!!
+        AlertDialog(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            onDismissRequest = {
+                showDeepSeekSuccessDialog = false
+                viewModel.importExport.clearDeepSeekImportState()
+            },
+            title = { Text(stringResource(R.string.deepseek_import_success), fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.deepseek_import_success_detail, result.conversationsImported, result.messagesImported))
+                    if (result.errors.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Errors: ${result.errors.joinToString(", ")}",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeepSeekSuccessDialog = false
+                    viewModel.importExport.clearDeepSeekImportState()
                 }) {
                     Text(stringResource(R.string.provider_close))
                 }

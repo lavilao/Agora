@@ -47,6 +47,57 @@ Java_com_newoether_agora_api_LlamaEngine_nativeInitializeBackends(
     return JNI_TRUE;
 }
 
+// Enumerates every backend device registered by ggml_backend_load_all_from_path.
+// Each entry is "type|name|description" where type is cpu|gpu|accel, so the Kotlin
+// side can answer "is Vulkan available?" and label the active runtime without
+// loading a model. Call only after nativeInitializeBackends.
+JNIEXPORT jobjectArray JNICALL
+Java_com_newoether_agora_api_LlamaEngine_nativeListBackendDevices(
+    JNIEnv * env, jclass /*clazz*/) {
+
+    std::vector<std::string> entries;
+    const size_t device_count = ggml_backend_dev_count();
+    entries.reserve(device_count);
+    for (size_t i = 0; i < device_count; ++i) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (!dev) continue;
+        const char * type = "cpu";
+        switch (ggml_backend_dev_type(dev)) {
+            case GGML_BACKEND_DEVICE_TYPE_GPU:
+            case GGML_BACKEND_DEVICE_TYPE_IGPU:
+                type = "gpu";
+                break;
+            case GGML_BACKEND_DEVICE_TYPE_ACCEL:
+                type = "accel";
+                break;
+            default:
+                type = "cpu";
+                break;
+        }
+        const char * name = ggml_backend_dev_name(dev);
+        const char * description = ggml_backend_dev_description(dev);
+        std::string entry = std::string(type) + "|" +
+                            (name ? name : "") + "|" +
+                            (description ? description : "");
+        entries.push_back(std::move(entry));
+    }
+
+    jclass string_class = env->FindClass("java/lang/String");
+    if (string_class == nullptr) return nullptr;
+    jobjectArray result = env->NewObjectArray(
+        static_cast<jsize>(entries.size()), string_class, nullptr
+    );
+    env->DeleteLocalRef(string_class);
+    if (result == nullptr) return nullptr;
+    for (jsize i = 0; i < static_cast<jsize>(entries.size()); ++i) {
+        jstring value = env->NewStringUTF(entries[i].c_str());
+        if (value == nullptr) return result;
+        env->SetObjectArrayElement(result, i, value);
+        env->DeleteLocalRef(value);
+    }
+    return result;
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_newoether_agora_api_LlamaEngine_nativeLoadModel(
     JNIEnv * env, jclass /*clazz*/, jstring path) {

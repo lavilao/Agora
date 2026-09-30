@@ -261,6 +261,10 @@ data class MessageEntity(
     val outputTokenCount: Int? = null,
     val reasoningTokenCount: Int? = null,
     val generationDurationMs: Long? = null,
+    /** Local-only prompt-eval throughput in tokens/s; null for remote providers. */
+    val promptProcessingTokensPerSecond: Float? = null,
+    /** llama.cpp backend device the local model ran on (e.g. "Vulkan0 (PowerVR)"). */
+    val runtimeName: String? = null,
     val status: MessageStatus = MessageStatus.SUCCESS,
     val participant: Participant,
     val timestamp: Long,
@@ -299,6 +303,8 @@ data class MessageStreamCheckpoint(
     val outputTokenCount: Int?,
     val reasoningTokenCount: Int?,
     val generationDurationMs: Long? = null,
+    val promptProcessingTokensPerSecond: Float? = null,
+    val runtimeName: String? = null,
     val status: MessageStatus,
     val thoughtTimeMs: Long?,
     val toolCallJson: String?,

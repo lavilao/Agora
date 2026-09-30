@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">0JjQt9C80LXQvdGR0L3QvdCw0Y8g0LLQtdGA0YHQuNGP</string>
     <string name="rating_origin_modified_body_b64">0JjQvNGPINC/0LDQutC10YLQsCDRjdGC0L7Qs9C+INC/0YDQuNC70L7QttC10L3QuNGPINC+0YLQu9C40YfQsNC10YLRgdGPINC+0YIg0LjRgdGF0L7QtNC90L7Qs9C+INC/0YDQvtC10LrRgtCwOiDQv9GA0LjQu9C+0LbQtdC90LjQtSDQsdGL0LvQviDQv9C10YDQtdC/0LDQutC+0LLQsNC90L4g0LjQu9C4INC40LfQvNC10L3QtdC90L4uINCY0YHRhdC+0LTQvdGL0Lkg0L/RgNC+0LXQutGCIOKAlCBBZ29yYSwg0YDQsNC30YDQsNCx0L7RgtCw0L3QvdGL0LkgbmV3by1ldGhlci4g0JfQsCDQuNC30LzQtdC90LXQvdC40Y8g0LIg0Y3RgtC+0Lkg0LLQtdGA0YHQuNC4INC+0YLQstC10YfQsNC10YIg0LXRkSDRgNCw0YHQv9GA0L7RgdGC0YDQsNC90LjRgtC10LvRjDsg0L7QvdC4INC90LUg0L/RgNC10LTRgdGC0LDQstC70Y/RjtGCINC/0LXRgNCy0L7QvdCw0YfQsNC70YzQvdC+0LPQviDQsNCy0YLQvtGA0LAu</string>
     <string name="rating_origin_view_project_b64">0J7RgtC60YDRi9GC0Ywg0LjRgdGF0L7QtNC90YvQuSDQv9GA0L7QtdC60YI=</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">Локальный runtime</string>
+    <string name="local_runtime_desc">Бэкенд для локальных моделей. Применяется со следующей загрузки модели; откройте «Информацию» сообщения, чтобы увидеть активный runtime и его скорость.</string>
+    <string name="local_runtime_auto">Авто</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">Импорт из DeepSeek</string>
+    <string name="deepseek_import_subtitle">Импорт диалогов из файла экспорта DeepSeek .json.</string>
+    <string name="deepseek_import_conversations">Диалоги</string>
+    <string name="deepseek_import_messages">Сообщения</string>
+    <string name="deepseek_import_error_detail">Не удалось импортировать: %1$s</string>
+    <string name="deepseek_import_success">Импорт выполнен</string>
+    <string name="deepseek_import_success_detail">Импортировано диалогов: %1$d (сообщений: %2$d).</string>
+    <string name="deepseek_import_import">Импорт</string>
+    <string name="deepseek_import_progress">Импортирование…</string>
+    <string name="deepseek_import_no_data">Этот файл не содержит данных для импорта.</string>
+    <string name="deepseek_import_attachments_notice">Вложения указаны в файле, но их содержимое невозможно восстановить, поэтому они не импортируются.</string>
 </resources>

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="generation_speed_with_label">متوسط سرعة التوليد: %1$s</string>
+    <string name="prompt_processing_speed_with_label">متوسط سرعة معالجة التوجيه: %1$s</string>
+    <string name="runtime_with_label">بيئة التشغيل: %1$s</string>
 </resources>

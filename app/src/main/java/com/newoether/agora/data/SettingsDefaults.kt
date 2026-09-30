@@ -11,6 +11,14 @@ internal const val DEFAULT_LOCAL_MODEL_IDLE_RETENTION_MINUTES = 5
 internal const val DEFAULT_LOCAL_LOW_CONTEXT_MODE_ENABLED = false
 internal val LOCAL_MODEL_IDLE_RETENTION_PRESETS = intArrayOf(0, 1, 2, 5, 10, 15, 30)
 
+/** Runtime backend preference for local llama.cpp models. */
+internal val LOCAL_RUNTIME_PREFERENCES = listOf("auto", "cpu", "vulkan")
+internal const val DEFAULT_LOCAL_RUNTIME_PREFERENCE = "auto"
+
+internal fun normalizeLocalRuntimePreference(value: String?): String =
+    value?.lowercase()?.takeIf { it in LOCAL_RUNTIME_PREFERENCES }
+        ?: DEFAULT_LOCAL_RUNTIME_PREFERENCE
+
 internal fun normalizeLocalModelIdleRetentionMinutes(value: Int?): Int =
     value?.takeIf { it in LOCAL_MODEL_IDLE_RETENTION_PRESETS }
         ?: DEFAULT_LOCAL_MODEL_IDLE_RETENTION_MINUTES

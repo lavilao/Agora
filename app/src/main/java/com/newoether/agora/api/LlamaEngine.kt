@@ -14,6 +14,7 @@ object LlamaEngine {
     }
 
     private external fun nativeInitializeBackends(nativeLibraryDir: String): Boolean
+    private external fun nativeListBackendDevices(): Array<String>?
     private external fun nativeLoadModel(path: String): Long
     private external fun nativeFreeModel(handle: Long)
     private external fun nativeComputeEmbedding(handle: Long, text: String): FloatArray?
@@ -21,6 +22,33 @@ object LlamaEngine {
 
     internal fun initializeBackends(nativeLibraryDir: String): Boolean =
         nativeInitializeBackends(nativeLibraryDir)
+
+    /** One backend device as reported by ggml after backends were loaded. */
+    data class BackendDevice(
+        val type: String,
+        val name: String,
+        val description: String,
+    ) {
+        val isGpu: Boolean get() = type == "gpu"
+    }
+
+    /**
+     * Enumerates the runtime backends present in this APK + device, e.g.
+     * "gpu|Vulkan0|PowerVR GE8320" and "cpu|CPU|CPU". Returns an empty list when
+     * backends have not been initialized yet or enumeration is unsupported.
+     */
+    fun listBackendDevices(): List<BackendDevice> = try {
+        nativeListBackendDevices().orEmpty().mapNotNull { entry ->
+            val parts = entry.split("|", limit = 3)
+            if (parts.size == 3) {
+                BackendDevice(type = parts[0], name = parts[1], description = parts[2])
+            } else {
+                null
+            }
+        }
+    } catch (_: UnsatisfiedLinkError) {
+        emptyList()
+    }
 
     fun isModelReady(modelPath: String): Boolean {
         return modelPath.isNotBlank() && File(modelPath).exists() && File(modelPath).length() > 0

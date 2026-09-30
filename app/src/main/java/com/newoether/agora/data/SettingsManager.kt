@@ -175,6 +175,9 @@ class SettingsManager(private val context: Context) {
     val localLowContextModeEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[LOCAL_LOW_CONTEXT_MODE_ENABLED] ?: DEFAULT_LOCAL_LOW_CONTEXT_MODE_ENABLED
     }
+    val localRuntimePreference: Flow<String> = context.dataStore.data.map {
+        normalizeLocalRuntimePreference(it[LOCAL_RUNTIME_PREFERENCE])
+    }
     val customProviders: Flow<List<CustomProviderConfig>> = modelPreferenceStore.customProviders
 
     val showDocumentationFab: Flow<Boolean> = context.dataStore.data.map { it[SHOW_DOCUMENTATION_FAB] ?: true }
@@ -559,6 +562,12 @@ class SettingsManager(private val context: Context) {
 
     suspend fun saveLocalLowContextModeEnabled(enabled: Boolean) {
         context.dataStore.edit { it[LOCAL_LOW_CONTEXT_MODE_ENABLED] = enabled }
+    }
+
+    suspend fun saveLocalRuntimePreference(preference: String) {
+        context.dataStore.edit {
+            it[LOCAL_RUNTIME_PREFERENCE] = normalizeLocalRuntimePreference(preference)
+        }
     }
 
     suspend fun saveCustomProviders(providers: List<CustomProviderConfig>) =

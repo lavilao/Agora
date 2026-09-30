@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">VmVyc8OjbyBtb2RpZmljYWRh</string>
     <string name="rating_origin_modified_body_b64">RXN0ZSBhcGxpY2F0aXZvIHVzYSB1bSBub21lIGRlIHBhY290ZSBkaWZlcmVudGUgZG8gcHJvamV0byBvcmlnaW5hbCBlIGZvaSByZWVtcGFjb3RhZG8gb3UgbW9kaWZpY2Fkby4gTyBwcm9qZXRvIG9yaWdpbmFsIMOpIG8gQWdvcmEsIGRlc2Vudm9sdmlkbyBwb3IgbmV3by1ldGhlci4gQXMgYWx0ZXJhw6fDtWVzIGRlc3RhIHZlcnPDo28gc8OjbyBkZSByZXNwb25zYWJpbGlkYWRlIGRlIHNldSBkaXN0cmlidWlkb3IgZSBuw6NvIHJlcHJlc2VudGFtIG8gYXV0b3Igb3JpZ2luYWwu</string>
     <string name="rating_origin_view_project_b64">VmVyIHByb2pldG8gb3JpZ2luYWw=</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">Runtime local</string>
+    <string name="local_runtime_desc">Backend em que os modelos locais são executados. Aplica-se a partir do próximo carregamento do modelo; abra as Informações de uma mensagem para ver o runtime ativo e suas velocidades.</string>
+    <string name="local_runtime_auto">Automático</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">Importar do DeepSeek</string>
+    <string name="deepseek_import_subtitle">Importa conversas de um arquivo .json exportado do DeepSeek.</string>
+    <string name="deepseek_import_conversations">Conversas</string>
+    <string name="deepseek_import_messages">Mensagens</string>
+    <string name="deepseek_import_error_detail">Falha ao importar: %1$s</string>
+    <string name="deepseek_import_success">Importação bem-sucedida</string>
+    <string name="deepseek_import_success_detail">%1$d conversas importadas (%2$d mensagens).</string>
+    <string name="deepseek_import_import">Importar</string>
+    <string name="deepseek_import_progress">Importando…</string>
+    <string name="deepseek_import_no_data">Este arquivo não contém dados importáveis.</string>
+    <string name="deepseek_import_attachments_notice">Os anexos estão listados no arquivo, mas seu conteúdo não pode ser recuperado, então não são importados.</string>
 </resources>

@@ -68,6 +68,9 @@ internal suspend fun ChatDao.executeRuntimeRecovery(
                         outputTokenCount = message.outputTokenCount,
                         reasoningTokenCount = message.reasoningTokenCount,
                         generationDurationMs = message.generationDurationMs,
+                        promptProcessingTokensPerSecond =
+                            message.promptProcessingTokensPerSecond,
+                        runtimeName = message.runtimeName,
                         status = recoveredStatus,
                         thoughtTimeMs = message.thoughtTimeMs,
                         toolCallJson = recoveredToolJson,

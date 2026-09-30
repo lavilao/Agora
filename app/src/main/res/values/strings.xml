@@ -789,4 +789,23 @@
     <string name="rating_origin_modified_title_b64">TW9kaWZpZWQgVmVyc2lvbg==</string>
     <string name="rating_origin_modified_body_b64">VGhpcyBhcHAgdXNlcyBhIGRpZmZlcmVudCBwYWNrYWdlIG5hbWUgZnJvbSB0aGUgb3JpZ2luYWwgcHJvamVjdCBhbmQgaGFzIGJlZW4gcmVwYWNrYWdlZCBvciBtb2RpZmllZC4gVGhlIG9yaWdpbmFsIHByb2plY3QgaXMgQWdvcmEsIGRldmVsb3BlZCBieSBuZXdvLWV0aGVyLiBDaGFuZ2VzIGluIHRoaXMgdmVyc2lvbiBhcmUgdGhlIHJlc3BvbnNpYmlsaXR5IG9mIGl0cyBkaXN0cmlidXRvciBhbmQgZG8gbm90IHJlcHJlc2VudCB0aGUgb3JpZ2luYWwgYXV0aG9yLg==</string>
     <string name="rating_origin_view_project_b64">VmlldyBPcmlnaW5hbCBQcm9qZWN0</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">Local Runtime</string>
+    <string name="local_runtime_desc">Backend local models run on. Applies from the next model load; open a message’s Information to see the active runtime and its speeds.</string>
+    <string name="local_runtime_auto">Auto</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">Import from DeepSeek</string>
+    <string name="deepseek_import_subtitle">Import conversations from a DeepSeek export .json file.</string>
+    <string name="deepseek_import_conversations">Conversations</string>
+    <string name="deepseek_import_messages">Messages</string>
+    <string name="deepseek_import_error_detail">Failed to import: %1$s</string>
+    <string name="deepseek_import_success">Import Successful</string>
+    <string name="deepseek_import_success_detail">Imported %1$d conversations (%2$d messages).</string>
+    <string name="deepseek_import_import">Import</string>
+    <string name="deepseek_import_progress">Importing…</string>
+    <string name="deepseek_import_no_data">This file contains no importable data.</string>
+    <string name="deepseek_import_attachments_notice">Attachments are listed in the file but their files cannot be recovered, so they are not imported.</string>
 </resources>

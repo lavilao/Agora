@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">R2XDpG5kZXJ0ZSBWZXJzaW9u</string>
     <string name="rating_origin_modified_body_b64">RGllc2UgQXBwIHZlcndlbmRldCBlaW5lbiBhbmRlcmVuIFBha2V0bmFtZW4gYWxzIGRhcyBPcmlnaW5hbHByb2pla3QgdW5kIHd1cmRlIG5ldSBnZXBhY2t0IG9kZXIgZ2XDpG5kZXJ0LiBEYXMgT3JpZ2luYWxwcm9qZWt0IGlzdCBBZ29yYSwgZW50d2lja2VsdCB2b24gbmV3by1ldGhlci4gRsO8ciBkaWUgw4RuZGVydW5nZW4gZGllc2VyIFZlcnNpb24gaXN0IGRlcmVuIEhlcmF1c2dlYmVyIHZlcmFudHdvcnRsaWNoOyBzaWUgcmVwcsOkc2VudGllcmVuIG5pY2h0IGRlbiB1cnNwcsO8bmdsaWNoZW4gQXV0b3Iu</string>
     <string name="rating_origin_view_project_b64">T3JpZ2luYWxwcm9qZWt0IGFuc2VoZW4=</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">Lokale Laufzeit</string>
+    <string name="local_runtime_desc">Backend, auf dem lokale Modelle laufen. Gilt ab dem nächsten Laden des Modells; öffne die Informationen einer Nachricht, um die aktive Laufzeit und ihre Geschwindigkeiten zu sehen.</string>
+    <string name="local_runtime_auto">Auto</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">Aus DeepSeek importieren</string>
+    <string name="deepseek_import_subtitle">Importiert Unterhaltungen aus einer DeepSeek-Exportdatei (.json).</string>
+    <string name="deepseek_import_conversations">Unterhaltungen</string>
+    <string name="deepseek_import_messages">Nachrichten</string>
+    <string name="deepseek_import_error_detail">Import fehlgeschlagen: %1$s</string>
+    <string name="deepseek_import_success">Import erfolgreich</string>
+    <string name="deepseek_import_success_detail">%1$d Unterhaltungen (%2$d Nachrichten) importiert.</string>
+    <string name="deepseek_import_import">Importieren</string>
+    <string name="deepseek_import_progress">Importiere…</string>
+    <string name="deepseek_import_no_data">Diese Datei enthält keine importierbaren Daten.</string>
+    <string name="deepseek_import_attachments_notice">Anhänge sind in der Datei aufgeführt, ihre Dateien lassen sich aber nicht wiederherstellen und werden daher nicht importiert.</string>
 </resources>

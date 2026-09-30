@@ -142,6 +142,8 @@ class DataExporter(
         val outputTokenCount: Int? = null,
         val reasoningTokenCount: Int? = null,
         val generationDurationMs: Long? = null,
+        val promptProcessingTokensPerSecond: Float? = null,
+        val runtimeName: String? = null,
         val status: String = "SUCCESS",
         val participant: String = "MODEL",
         val timestamp: Long,
@@ -313,6 +315,9 @@ class DataExporter(
                                         outputTokenCount = message.outputTokenCount,
                                         reasoningTokenCount = message.reasoningTokenCount,
                                         generationDurationMs = message.generationDurationMs,
+                                        promptProcessingTokensPerSecond =
+                                            message.promptProcessingTokensPerSecond,
+                                        runtimeName = message.runtimeName,
                                         status = message.status.name,
                                         participant = message.participant.name,
                                         timestamp = message.timestamp,

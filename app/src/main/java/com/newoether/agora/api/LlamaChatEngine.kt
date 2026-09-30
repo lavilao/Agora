@@ -40,12 +40,16 @@ internal sealed interface LlamaGenerationEvent {
         val reason: LlamaGenerationStopReason,
         val inputTokenCount: Int,
         val outputTokenCount: Int,
+        val promptTokensPerSecond: Double = 0.0,
+        val runtimeName: String? = null,
     ) : LlamaGenerationEvent
 
     data class Failed(
         val message: String,
         val inputTokenCount: Int,
         val outputTokenCount: Int,
+        val promptTokensPerSecond: Double = 0.0,
+        val runtimeName: String? = null,
     ) : LlamaGenerationEvent
 }
 
@@ -54,8 +58,21 @@ interface NativeChatCallback {
     fun onThought(thought: String): Boolean
     fun onToolCall(index: Int, id: String, name: String, arguments: String): Boolean
     fun onToolCallsComplete(): Boolean
-    fun onDone(reason: String, inputTokenCount: Int, outputTokenCount: Int)
-    fun onError(message: String, inputTokenCount: Int, outputTokenCount: Int)
+    fun onDone(
+        reason: String,
+        inputTokenCount: Int,
+        outputTokenCount: Int,
+        promptTokensPerSecond: Double,
+        runtimeName: String,
+    )
+
+    fun onError(
+        message: String,
+        inputTokenCount: Int,
+        outputTokenCount: Int,
+        promptTokensPerSecond: Double,
+        runtimeName: String,
+    )
 }
 
 class ChatTemplateToolCall(
@@ -103,9 +120,23 @@ class LlamaChatTemplateResult(
     val parser: String = "",
 )
 
+/** Runtime backend preference for the resident local model. */
+enum class LlamaBackendPreference(val nativeValue: String) {
+    /** llama.cpp default: GPU (Vulkan) when available, otherwise CPU. */
+    AUTO("auto"),
+    CPU("cpu"),
+    VULKAN("vulkan");
+
+    companion object {
+        fun fromNative(value: String): LlamaBackendPreference = entries
+            .firstOrNull { it.nativeValue == value } ?: AUTO
+    }
+}
+
 class LlamaChatEngine(
     val modelPath: String,
-    val nCtx: Int = 2048
+    val nCtx: Int = 2048,
+    val backendPreference: LlamaBackendPreference = LlamaBackendPreference.AUTO,
 ) : Closeable {
     companion object {
         private const val TAG = "LlamaChatEngine"
@@ -122,7 +153,7 @@ class LlamaChatEngine(
     private var loadedMmprojPath: String? = null
     private val lock = ReentrantReadWriteLock()
 
-    private external fun nativeChatLoadModel(path: String, nCtx: Int): Long
+    private external fun nativeChatLoadModel(path: String, nCtx: Int, backendPref: String): Long
     private external fun nativeChatGetTemplate(handle: Long): String?
     private external fun nativeChatApplyTemplate(
         handle: Long,
@@ -147,8 +178,9 @@ class LlamaChatEngine(
 
     fun isLoaded(): Boolean = nativeHandle != 0L
 
-    fun matches(path: String, contextSize: Int): Boolean =
-        nativeHandle != 0L && modelPath == path && nCtx == contextSize
+    fun matches(path: String, contextSize: Int, backend: LlamaBackendPreference): Boolean =
+        nativeHandle != 0L && modelPath == path && nCtx == contextSize &&
+            backendPreference == backend
 
     fun load(): Boolean {
         if (!File(modelPath).exists()) {
@@ -157,12 +189,12 @@ class LlamaChatEngine(
         }
         lock.writeLock().lock()
         try {
-            nativeHandle = nativeChatLoadModel(modelPath, nCtx)
+            nativeHandle = nativeChatLoadModel(modelPath, nCtx, backendPreference.nativeValue)
             if (nativeHandle == 0L) {
                 DebugLog.e(TAG, "Failed to load model")
                 return false
             }
-            DebugLog.d(TAG, "Model loaded, nCtx=$nCtx")
+            DebugLog.d(TAG, "Model loaded, nCtx=$nCtx, backend=${backendPreference.nativeValue}")
             return true
         } finally {
             lock.writeLock().unlock()
@@ -273,7 +305,13 @@ class LlamaChatEngine(
                 ).isSuccess
             }
 
-            override fun onDone(reason: String, inputTokenCount: Int, outputTokenCount: Int) {
+            override fun onDone(
+                reason: String,
+                inputTokenCount: Int,
+                outputTokenCount: Int,
+                promptTokensPerSecond: Double,
+                runtimeName: String,
+            ) {
                 if (!terminalSignalled.compareAndSet(false, true)) return
                 val parsedReason = LlamaGenerationStopReason.fromNative(reason)
                 if (parsedReason == null) {
@@ -282,6 +320,8 @@ class LlamaChatEngine(
                             message = "Unknown native stop reason: $reason",
                             inputTokenCount = inputTokenCount,
                             outputTokenCount = outputTokenCount,
+                            promptTokensPerSecond = promptTokensPerSecond,
+                            runtimeName = runtimeName.takeIf(String::isNotBlank),
                         )
                     )
                 } else {
@@ -290,17 +330,31 @@ class LlamaChatEngine(
                             reason = parsedReason,
                             inputTokenCount = inputTokenCount,
                             outputTokenCount = outputTokenCount,
+                            promptTokensPerSecond = promptTokensPerSecond,
+                            runtimeName = runtimeName.takeIf(String::isNotBlank),
                         )
                     )
                 }
                 this@callbackFlow.close()
             }
 
-            override fun onError(message: String, inputTokenCount: Int, outputTokenCount: Int) {
+            override fun onError(
+                message: String,
+                inputTokenCount: Int,
+                outputTokenCount: Int,
+                promptTokensPerSecond: Double,
+                runtimeName: String,
+            ) {
                 if (!terminalSignalled.compareAndSet(false, true)) return
                 DebugLog.e(TAG, "Generation error reported by native backend")
                 trySendBlocking(
-                    LlamaGenerationEvent.Failed(message, inputTokenCount, outputTokenCount)
+                    LlamaGenerationEvent.Failed(
+                        message = message,
+                        inputTokenCount = inputTokenCount,
+                        outputTokenCount = outputTokenCount,
+                        promptTokensPerSecond = promptTokensPerSecond,
+                        runtimeName = runtimeName.takeIf(String::isNotBlank),
+                    )
                 )
                 this@callbackFlow.close()
             }
@@ -316,10 +370,10 @@ class LlamaChatEngine(
                         maxTokens, callback,
                     )
                     if (result < 0 && !terminalSignalled.get()) {
-                        callback.onError("Native generation ended without a terminal result", 0, 0)
+                        callback.onError("Native generation ended without a terminal result", 0, 0, 0.0, "")
                     }
                 } else {
-                    callback.onError("Model closed before generation started", 0, 0)
+                    callback.onError("Model closed before generation started", 0, 0, 0.0, "")
                 }
             } catch (e: Exception) {
                 DebugLog.e(TAG, "nativeChatGenerate crashed", e)
@@ -433,7 +487,13 @@ class LlamaChatEngine(
                 ).isSuccess
             }
 
-            override fun onDone(reason: String, inputTokenCount: Int, outputTokenCount: Int) {
+            override fun onDone(
+                reason: String,
+                inputTokenCount: Int,
+                outputTokenCount: Int,
+                promptTokensPerSecond: Double,
+                runtimeName: String,
+            ) {
                 if (!terminalSignalled.compareAndSet(false, true)) return
                 val parsedReason = LlamaGenerationStopReason.fromNative(reason)
                 val event = if (parsedReason == null) {
@@ -441,23 +501,39 @@ class LlamaChatEngine(
                         message = "Unknown native stop reason: $reason",
                         inputTokenCount = inputTokenCount,
                         outputTokenCount = outputTokenCount,
+                        promptTokensPerSecond = promptTokensPerSecond,
+                        runtimeName = runtimeName.takeIf(String::isNotBlank),
                     )
                 } else {
                     LlamaGenerationEvent.Completed(
                         reason = parsedReason,
                         inputTokenCount = inputTokenCount,
                         outputTokenCount = outputTokenCount,
+                        promptTokensPerSecond = promptTokensPerSecond,
+                        runtimeName = runtimeName.takeIf(String::isNotBlank),
                     )
                 }
                 trySendBlocking(event)
                 this@callbackFlow.close()
             }
 
-            override fun onError(message: String, inputTokenCount: Int, outputTokenCount: Int) {
+            override fun onError(
+                message: String,
+                inputTokenCount: Int,
+                outputTokenCount: Int,
+                promptTokensPerSecond: Double,
+                runtimeName: String,
+            ) {
                 if (!terminalSignalled.compareAndSet(false, true)) return
                 DebugLog.e(TAG, "Generation error reported by native backend")
                 trySendBlocking(
-                    LlamaGenerationEvent.Failed(message, inputTokenCount, outputTokenCount)
+                    LlamaGenerationEvent.Failed(
+                        message = message,
+                        inputTokenCount = inputTokenCount,
+                        outputTokenCount = outputTokenCount,
+                        promptTokensPerSecond = promptTokensPerSecond,
+                        runtimeName = runtimeName.takeIf(String::isNotBlank),
+                    )
                 )
                 this@callbackFlow.close()
             }
@@ -474,10 +550,10 @@ class LlamaChatEngine(
                         maxTokens, callback,
                     )
                     if (result < 0 && !terminalSignalled.get()) {
-                        callback.onError("Native generation ended without a terminal result", 0, 0)
+                        callback.onError("Native generation ended without a terminal result", 0, 0, 0.0, "")
                     }
                 } else {
-                    callback.onError("Model closed before generation started", 0, 0)
+                    callback.onError("Model closed before generation started", 0, 0, 0.0, "")
                 }
             } catch (e: Exception) {
                 DebugLog.e(TAG, "nativeChatGenerateWithImages crashed", e)

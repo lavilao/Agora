@@ -54,6 +54,10 @@ internal fun MessageInfoDialog(
     val generationSpeed = tokenUsage.generationTokensPerSecond?.let {
         String.format(Locale.getDefault(), "~%.1f token/s", it)
     } ?: "—"
+    val promptProcessingSpeed = tokenUsage.promptProcessingTokensPerSecond?.let {
+        String.format(Locale.getDefault(), "~%.1f token/s", it)
+    } ?: "—"
+    val runtimeName = tokenUsage.runtimeName ?: "—"
     val outputTokens = tokenUsage.output?.let {
         stringResource(R.string.token_count, it)
     } ?: "—"
@@ -95,6 +99,20 @@ internal fun MessageInfoDialog(
                         stringResource(R.string.generation_speed_with_label, generationSpeed),
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
                     )
+                    if (tokenUsage.promptProcessingTokensPerSecond != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.prompt_processing_speed_with_label, promptProcessingSpeed),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
+                        )
+                    }
+                    if (tokenUsage.runtimeName != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.runtime_with_label, runtimeName),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
+                        )
+                    }
                 }
             }
         },

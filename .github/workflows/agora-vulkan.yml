@@ -1,8 +1,16 @@
 # ============================================================================
-#  Agora · APK armeabi-v7a (llama.cpp git · VULKAN + OpenMP)
-#  Ubicación: .github/workflows/glm-53.yml (reemplazo directo)
+#  Agora · Workflow ÚNICO de compilación
+#
+#  Este es el único workflow del repositorio. Reemplaza a todos los anteriores
+#  (build.yml, build-glm.yml, build-glm-vulkan-llamacpp-latest.yml, glm-53.yml,
+#  glm-53-vulkan-latest.yml, mkdocs.yml), que fueron eliminados para ahorrar
+#  tiempo de CI. Se dispara SOLO manualmente (workflow_dispatch) desde la
+#  pestaña Actions: “Run workflow” → elegir debug o release.
+#
+#  Receta = glm-53-vulkan-latest.yml (la que funciona):
+#    APK armeabi-v7a · llama.cpp git · VULKAN + OpenMP
 # ============================================================================
-name: Agora APK armeabi-v7a (Vulkan + OpenMP)
+name: Agora APK (Vulkan, build manual)
 
 on:
   workflow_dispatch:
@@ -13,8 +21,6 @@ on:
         default: 'release'
         type: choice
         options: [debug, release]
-  push:
-    branches: [ main, master ]
 
 env:
   JAVA_VERSION: '21'
@@ -269,7 +275,7 @@ jobs:
           EOF
 
       - name: Build APK Release (armeabi-v7a · Vulkan+OpenMP)
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'release'
+        if: github.event.inputs.build_type == 'release'
         run: |
           set -euo pipefail
           ./gradlew :app:assembleFdroidRelease --no-daemon --build-cache
@@ -278,7 +284,7 @@ jobs:
           echo "APK generado: $(du -h "$APK" | cut -f1)"
 
       - name: Build APK Debug (armeabi-v7a · Vulkan+OpenMP)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
+        if: github.event.inputs.build_type == 'debug'
         run: |
           set -euo pipefail
           ./gradlew :app:assembleFdroidDebug --no-daemon --build-cache

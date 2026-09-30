@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="generation_speed_with_label">평균 생성 속도: %1$s</string>
+    <string name="prompt_processing_speed_with_label">평균 프롬프트 처리 속도: %1$s</string>
+    <string name="runtime_with_label">런타임: %1$s</string>
 </resources>

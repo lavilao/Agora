@@ -11,6 +11,7 @@
 #include "sampling.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
+#include "ggml-backend.h"
 #include "jni_utf8.h"
 #include "llama_chat_callbacks.h"
 #include "llama_chat_generation.h"
@@ -43,25 +44,84 @@ static bool abort_callback(void * data) {
     return handle->cancelled.load(std::memory_order_relaxed);
 }
 
+// ── Runtime backend selection ─────────────────────────────────────────────
+// llama.cpp resolves llama_model_params.devices as: explicit list, else GPU when
+// available, else integrated GPU, else CPU. An explicit single-device list therefore
+// pins the whole model (n_gpu_layers defaults to -1 = every layer) to one backend.
+
+static std::string backend_device_label(ggml_backend_dev_t dev) {
+    if (!dev) return "";
+    const char * name = ggml_backend_dev_name(dev);
+    const char * description = ggml_backend_dev_description(dev);
+    if (name == nullptr) return description ? description : "";
+    if (description == nullptr || std::strcmp(name, description) == 0) return name;
+    return std::string(name) + " (" + description + ")";
+}
+
+static ggml_backend_dev_t resolve_backend_device(const std::string & preference) {
+    if (preference == "cpu") {
+        return ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    }
+    if (preference == "vulkan" || preference == "gpu") {
+        return ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
+    }
+    return nullptr;
+}
+
+// The device an "auto" load would actually pick, mirroring llama.cpp's default
+// resolution: first real GPU, else the CPU device.
+static ggml_backend_dev_t default_backend_device() {
+    ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
+    if (!dev) dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    return dev;
+}
+
 extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
-    JNIEnv * env, jclass /*clazz*/, jstring path, jint n_ctx) {
+    JNIEnv * env, jclass /*clazz*/, jstring path, jint n_ctx, jstring backend_pref) {
 
     std::string path_str;
     if (!read_java_path(env, path, path_str)) return 0;
+
+    std::string backend_pref_str = "auto";
+    if (backend_pref != nullptr) {
+        if (!read_java_string(env, backend_pref, backend_pref_str)) backend_pref_str = "auto";
+    }
+    if (backend_pref_str != "cpu" && backend_pref_str != "vulkan" && backend_pref_str != "gpu") {
+        backend_pref_str = "auto";
+    }
 
     ChatHandle * handle = new ChatHandle();
     if (!handle) {
         return 0;
     }
+    handle->backend_preference = backend_pref_str;
 
     const auto load_started = std::chrono::steady_clock::now();
     llama_model_params model_params = llama_model_default_params();
+
+    // Explicit single-device pin for cpu/vulkan. The array only needs to outlive
+    // llama_model_load_from_file, which consumes it synchronously below.
+    ggml_backend_dev_t requested_devices[2] = { nullptr, nullptr };
+    ggml_backend_dev_t requested_device = resolve_backend_device(backend_pref_str);
+    if (requested_device != nullptr) {
+        requested_devices[0] = requested_device;
+        model_params.devices = requested_devices;
+    }
+
+    // Track what the model will actually run on: the explicit device, or the one
+    // llama.cpp's default resolution picks for "auto".
+    ggml_backend_dev_t reported_device = requested_device;
+    if (reported_device == nullptr) reported_device = default_backend_device();
+    handle->backend_description = backend_device_label(reported_device);
+
     const auto model_started = std::chrono::steady_clock::now();
     handle->model = llama_model_load_from_file(path_str.c_str(), model_params);
     const auto model_finished = std::chrono::steady_clock::now();
+    LOGD("Chat load backend: preference=%s, device=%s",
+         backend_pref_str.c_str(), handle->backend_description.c_str());
 
     if (!handle->model) {
         LOGE("Failed to load model from file");
@@ -228,9 +288,16 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
     const auto prefill_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         prefill_finished - prefill_started
     ).count();
-    LOGD("Text prefill: input_tokens=%d, cached_tokens=%d, processed_tokens=%d, duration_ms=%lld",
-         input_tokens, cached_tokens, input_tokens - cached_tokens,
-         (long long)prefill_ms);
+    // Prompt-processing throughput counts only tokens this request actually decoded;
+    // cache-hit tokens are excluded because they cost no compute.
+    const int32_t processed_tokens = input_tokens - cached_tokens;
+    const double prefill_tokens_per_second =
+        prefill_ms > 0 && processed_tokens > 0
+            ? processed_tokens * 1000.0 / static_cast<double>(prefill_ms)
+            : 0.0;
+    LOGD("Text prefill: input_tokens=%d, cached_tokens=%d, processed_tokens=%d, duration_ms=%lld, tokens_per_second=%.2f",
+         input_tokens, cached_tokens, processed_tokens,
+         (long long)prefill_ms, prefill_tokens_per_second);
 
     const int32_t context_after_prefill =
         llama_memory_seq_pos_max(llama_get_memory(handle->ctx), 0) + 1;
@@ -360,11 +427,13 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
     common_sampler_free(smpl);
     if (!failure.empty()) {
         return report_error(
-            env, callback, callbacks, failure.c_str(), input_tokens, generated
+            env, callback, callbacks, failure.c_str(), input_tokens, generated,
+            prefill_tokens_per_second, handle->backend_description.c_str()
         );
     }
     return report_done(
-        env, callback, callbacks, stop_reason, input_tokens, generated
+        env, callback, callbacks, stop_reason, input_tokens, generated,
+        prefill_tokens_per_second, handle->backend_description.c_str()
     );
 }
 
@@ -564,8 +633,13 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerateWithImages(
     const auto prefill_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         prefill_finished - prefill_started
     ).count();
-    LOGD("Multimodal prefill: input_tokens=%lld, images=%d, duration_ms=%lld",
-         (long long)n_past, n_images, (long long)prefill_ms);
+    // Multimodal prefill includes image encoding; n_past counts every evaluated position.
+    const double prefill_tokens_per_second =
+        prefill_ms > 0 && n_past > 0
+            ? n_past * 1000.0 / static_cast<double>(prefill_ms)
+            : 0.0;
+    LOGD("Multimodal prefill: input_tokens=%lld, images=%d, duration_ms=%lld, tokens_per_second=%.2f",
+         (long long)n_past, n_images, (long long)prefill_ms, prefill_tokens_per_second);
 
     // --- Generation loop (same as text-only path) ---
     std::string sampler_error;
@@ -702,11 +776,13 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerateWithImages(
     clear_text_cache(handle);
     if (!failure.empty()) {
         return report_error(
-            env, callback, callbacks, failure.c_str(), input_tokens, generated
+            env, callback, callbacks, failure.c_str(), input_tokens, generated,
+            prefill_tokens_per_second, handle->backend_description.c_str()
         );
     }
     return report_done(
-        env, callback, callbacks, stop_reason, input_tokens, generated
+        env, callback, callbacks, stop_reason, input_tokens, generated,
+        prefill_tokens_per_second, handle->backend_description.c_str()
     );
 }
 

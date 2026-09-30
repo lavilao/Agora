@@ -43,6 +43,9 @@ internal fun ChatMessage.toStreamCheckpoint(): MessageStreamCheckpoint {
         outputTokenCount = tokenUsage?.outputTokenCount,
         reasoningTokenCount = tokenUsage?.reasoningTokenCount,
         generationDurationMs = tokenUsage?.generationDurationMs,
+        promptProcessingTokensPerSecond =
+            tokenUsage?.promptProcessingTokensPerSecond?.toFloat(),
+        runtimeName = tokenUsage?.runtimeName,
         status = status,
         thoughtTimeMs = thoughtTimeMs,
         toolCallJson = MessagePersistenceGuard.encodeSegmentsBounded(persistedSegments),

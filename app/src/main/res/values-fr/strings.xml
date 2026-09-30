@@ -804,4 +804,23 @@
     <string name="rating_origin_modified_title_b64">VmVyc2lvbiBtb2RpZmnDqWU=</string>
     <string name="rating_origin_modified_body_b64">Q2V0dGUgYXBwbGljYXRpb24gdXRpbGlzZSB1biBub20gZGUgcGFxdWV0IGRpZmbDqXJlbnQgZGUgY2VsdWkgZHUgcHJvamV0IGTigJlvcmlnaW5lIGV0IGEgw6l0w6kgcmVjb25kaXRpb25uw6llIG91IG1vZGlmacOpZS4gTGUgcHJvamV0IGTigJlvcmlnaW5lIGVzdCBBZ29yYSwgZMOpdmVsb3Bww6kgcGFyIG5ld28tZXRoZXIuIExlcyBtb2RpZmljYXRpb25zIGRlIGNldHRlIHZlcnNpb24gcmVsw6h2ZW50IGRlIGxhIHJlc3BvbnNhYmlsaXTDqSBkZSBzb24gZGlzdHJpYnV0ZXVyIGV0IG5lIHJlcHLDqXNlbnRlbnQgcGFzIGzigJlhdXRldXIgZOKAmW9yaWdpbmUu</string>
     <string name="rating_origin_view_project_b64">Vm9pciBsZSBwcm9qZXQgZOKAmW9yaWdpbmU=</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">Runtime local</string>
+    <string name="local_runtime_desc">Backend sur lequel les modèles locaux s’exécutent. Appliqué au prochain chargement du modèle ; ouvrez les Informations d’un message pour voir le runtime actif et ses vitesses.</string>
+    <string name="local_runtime_auto">Auto</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan (GPU)</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">Importer depuis DeepSeek</string>
+    <string name="deepseek_import_subtitle">Importe des conversations depuis un fichier d’export DeepSeek .json.</string>
+    <string name="deepseek_import_conversations">Conversations</string>
+    <string name="deepseek_import_messages">Messages</string>
+    <string name="deepseek_import_error_detail">Échec de l’import : %1$s</string>
+    <string name="deepseek_import_success">Import réussi</string>
+    <string name="deepseek_import_success_detail">%1$d conversations importées (%2$d messages).</string>
+    <string name="deepseek_import_import">Importer</string>
+    <string name="deepseek_import_progress">Import en cours…</string>
+    <string name="deepseek_import_no_data">Ce fichier ne contient aucune donnée importable.</string>
+    <string name="deepseek_import_attachments_notice">Les pièces jointes sont listées dans le fichier, mais leurs contenus ne peuvent pas être récupérés ; elles ne sont donc pas importées.</string>
 </resources>

@@ -72,11 +72,16 @@ class LocalProvider(
             return@flow
         }
 
+        val backendPreference = LlamaBackendPreference.fromNative(
+            settings.localRuntimePreference.first()
+        )
+
         // The process runtime owns strict FIFO admission and the single Chat-or-Embedding resident.
         // This block covers model/context mutation, template rendering, and complete generation.
         val executed = LocalModelRuntime.runChat(
             modelPath = modelConfig.localFilePath,
             nCtx = modelConfig.nCtx,
+            backendPreference = backendPreference,
         ) { engine ->
 
         // Build template messages, collecting images per-message with <__media__> markers
@@ -149,6 +154,8 @@ class LocalProvider(
         // still recovers reasoning delimiters that the model emits as ordinary text.
         var inputTokenCount = 0
         var outputTokenCount = 0
+        var promptTokensPerSecond = 0.0
+        var runtimeName: String? = null
         var terminalError: GenerationError? = null
         try {
             val tokenFlow = if (hasImages) {
@@ -223,6 +230,8 @@ class LocalProvider(
                         is LlamaGenerationEvent.Completed -> {
                             inputTokenCount = event.inputTokenCount
                             outputTokenCount = event.outputTokenCount
+                            promptTokensPerSecond = event.promptTokensPerSecond
+                            runtimeName = event.runtimeName
                             terminalError = when (event.reason) {
                                 LlamaGenerationStopReason.EOG -> null
                                 LlamaGenerationStopReason.MAX_TOKENS ->
@@ -237,6 +246,8 @@ class LocalProvider(
                         is LlamaGenerationEvent.Failed -> {
                             inputTokenCount = event.inputTokenCount
                             outputTokenCount = event.outputTokenCount
+                            promptTokensPerSecond = event.promptTokensPerSecond
+                            runtimeName = event.runtimeName
                             terminalError = localGenerationFailure(
                                 event = event,
                                 displayMessage = formatGenerationError(
@@ -275,6 +286,9 @@ class LocalProvider(
                     totalTokenCount = (inputTokenCount + outputTokenCount).coerceAtLeast(0),
                     inputTokenCount = inputTokenCount.coerceAtLeast(0),
                     outputTokenCount = outputTokenCount.coerceAtLeast(0),
+                    promptProcessingTokensPerSecond =
+                        promptTokensPerSecond.takeIf { it > 0.0 },
+                    runtimeName = runtimeName,
                 )
             )
         )

@@ -103,6 +103,9 @@ internal fun projectProviderMessages(
                 outputTokenCount = entity.outputTokenCount,
                 reasoningTokenCount = entity.reasoningTokenCount,
                 generationDurationMs = entity.generationDurationMs,
+                promptProcessingTokensPerSecond =
+                    entity.promptProcessingTokensPerSecond?.toDouble(),
+                runtimeName = entity.runtimeName,
             ),
             status = entity.status,
             participant = entity.participant,

@@ -7,6 +7,8 @@ internal data class TokenUsagePresentation(
     val cachedInput: Int?,
     val output: Int?,
     val generationTokensPerSecond: Double? = null,
+    val promptProcessingTokensPerSecond: Double? = null,
+    val runtimeName: String? = null,
 )
 
 internal fun tokenUsagePresentation(
@@ -36,5 +38,7 @@ internal fun tokenUsagePresentation(
         output = output,
         generationTokensPerSecond = usage.generationDurationMs?.takeIf { it > 0 }
             ?.let { duration -> output?.takeIf { it > 0 }?.toDouble()?.times(1000.0)?.div(duration) },
+        promptProcessingTokensPerSecond = usage.promptProcessingTokensPerSecond,
+        runtimeName = usage.runtimeName,
     )
 }

@@ -798,4 +798,23 @@
     <string name="rating_origin_modified_title_b64">5b2T5YmN5Li65L+u5pS554mI5pys</string>
     <string name="rating_origin_modified_body_b64">5q2k5bqU55So55qE5YyF5ZCN5LiO5Y6f6aG555uu5LiN5ZCM77yM6KGo5piO5a6D57uP6L+H6YeN5paw5omT5YyF5oiW5L+u5pS544CC5Y6f6aG555uu5Li6IEFnb3Jh77yM55SxIG5ld28tZXRoZXIg5byA5Y+R44CC5b2T5YmN54mI5pys55qE5pS55Yqo55Sx5YW25Y+R5biD6ICF6LSf6LSj77yM5LiN5Luj6KGo5Y6f5L2c6ICF44CC</string>
     <string name="rating_origin_view_project_b64">5p+l55yL5Y6f6aG555uu</string>
+    <!-- Local runtime selection -->
+    <string name="local_runtime_title">本地运行时</string>
+    <string name="local_runtime_desc">本地模型运行的后端。下次加载模型时生效；打开消息的“信息”可查看激活的运行时及其速度。</string>
+    <string name="local_runtime_auto">自动</string>
+    <string name="local_runtime_cpu">CPU</string>
+    <string name="local_runtime_vulkan">Vulkan（GPU）</string>
+    <string name="local_runtime_vulkan_with_device">Vulkan — %1$s</string>
+    <!-- DeepSeek Chat Import -->
+    <string name="deepseek_import_title">从 DeepSeek 导入</string>
+    <string name="deepseek_import_subtitle">从 DeepSeek 导出的 .json 文件导入对话。</string>
+    <string name="deepseek_import_conversations">对话</string>
+    <string name="deepseek_import_messages">消息</string>
+    <string name="deepseek_import_error_detail">导入失败：%1$s</string>
+    <string name="deepseek_import_success">导入成功</string>
+    <string name="deepseek_import_success_detail">已导入 %1$d 个对话（%2$d 条消息）。</string>
+    <string name="deepseek_import_import">导入</string>
+    <string name="deepseek_import_progress">正在导入…</string>
+    <string name="deepseek_import_no_data">此文件不包含可导入的数据。</string>
+    <string name="deepseek_import_attachments_notice">附件已在文件中列出，但其内容无法恢复，因此不会被导入。</string>
 </resources>

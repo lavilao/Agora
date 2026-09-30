@@ -86,6 +86,8 @@ internal val LOCAL_MODEL_IDLE_RETENTION_MINUTES =
     intPreferencesKey("local_model_idle_retention_minutes")
 internal val LOCAL_LOW_CONTEXT_MODE_ENABLED =
     booleanPreferencesKey("local_low_context_mode_enabled")
+/** Runtime backend for local models: "auto" | "cpu" | "vulkan". */
+internal val LOCAL_RUNTIME_PREFERENCE = stringPreferencesKey("local_runtime_preference")
 internal val CUSTOM_PROVIDERS_JSON = stringPreferencesKey("custom_providers_json")
 internal val SHELL_ENABLED = booleanPreferencesKey("shell_enabled")
 internal val AUTOMATION_TOOLS_ENABLED = booleanPreferencesKey("automation_tools_enabled")

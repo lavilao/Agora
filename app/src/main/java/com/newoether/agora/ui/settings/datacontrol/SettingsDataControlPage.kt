@@ -75,18 +75,10 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
     var gptFileUri by remember { mutableStateOf<Uri?>(null) }
     var gptFileName by remember { mutableStateOf<String?>(null) }
     var showGptSuccessDialog by remember { mutableStateOf(false) }
-    var gptImportStrategy by remember {
-        mutableStateOf(DataImporter.ImportStrategy.MERGE)
-    }
-    var gptSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     var showDeepSeekImportDialog by remember { mutableStateOf(false) }
     var deepseekFileUri by remember { mutableStateOf<Uri?>(null) }
     var showDeepSeekSuccessDialog by remember { mutableStateOf(false) }
-    var deepseekImportStrategy by remember {
-        mutableStateOf(DataImporter.ImportStrategy.MERGE)
-    }
-    var deepseekSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Provider awaiting REPLACE confirmation ("claude" | "gpt" | "deepseek").
     var pendingExternalReplace by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
 
@@ -278,9 +270,7 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
 
                 // Show GPT import dialog when preview is loaded
                 LaunchedEffect(gptImportPreview) {
-                    gptImportPreview?.let { preview ->
-                        gptSelectedIds = preview.conversations.mapTo(mutableSetOf()) { it.uuid }
-                        gptImportStrategy = DataImporter.ImportStrategy.MERGE
+                    if (gptImportPreview != null) {
                         pendingExternalReplace = null
                         showGptImportDialog = true
                     }
@@ -295,9 +285,7 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
 
                 // Show DeepSeek import dialog when preview is loaded
                 LaunchedEffect(deepseekImportPreview) {
-                    deepseekImportPreview?.let { preview ->
-                        deepseekSelectedIds = preview.conversations.mapTo(mutableSetOf()) { it.uuid }
-                        deepseekImportStrategy = DataImporter.ImportStrategy.MERGE
+                    if (deepseekImportPreview != null) {
                         pendingExternalReplace = null
                         showDeepSeekImportDialog = true
                     }
@@ -537,80 +525,52 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
     }
 
     pendingExternalReplace?.let { (provider, selectedIds) ->
-        val reopenSourceDialog = when (provider) {
-            "claude" -> { { showClaudeImportDialog = true } }
-            "gpt" -> { { showGptImportDialog = true } }
-            else -> { { showDeepSeekImportDialog = true } }
-        }
-        AlertDialog(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            onDismissRequest = {
+        ExternalReplaceConfirmDialog(
+            onConfirm = {
                 pendingExternalReplace = null
-                reopenSourceDialog()
-            },
-            title = {
-                Text(
-                    stringResource(R.string.external_import_replace_confirm_title),
-                    fontWeight = FontWeight.Bold,
-                )
-            },
-            text = { Text(stringResource(R.string.external_import_replace_confirm_message)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingExternalReplace = null
-                        when (provider) {
-                            "claude" -> {
-                                viewModel.importExport.clearClaudeImportState()
-                                claudeFileUri?.let { uri ->
-                                    scope.launch {
-                                        viewModel.importExport.importClaudeChat(
-                                            uri,
-                                            DataImporter.ImportStrategy.REPLACE,
-                                            selectedIds,
-                                        )
-                                    }
-                                }
-                            }
-                            "gpt" -> {
-                                viewModel.importExport.clearGptImportState()
-                                gptFileUri?.let { uri ->
-                                    scope.launch {
-                                        viewModel.importExport.importGptChat(
-                                            uri,
-                                            DataImporter.ImportStrategy.REPLACE,
-                                            selectedIds,
-                                        )
-                                    }
-                                }
-                            }
-                            else -> {
-                                viewModel.importExport.clearDeepSeekImportState()
-                                deepseekFileUri?.let { uri ->
-                                    scope.launch {
-                                        viewModel.importExport.importDeepSeekChat(
-                                            uri,
-                                            DataImporter.ImportStrategy.REPLACE,
-                                            selectedIds,
-                                        )
-                                    }
-                                }
+                when (provider) {
+                    "claude" -> {
+                        viewModel.importExport.clearClaudeImportState()
+                        claudeFileUri?.let { uri ->
+                            scope.launch {
+                                viewModel.importExport.importClaudeChat(
+                                    uri,
+                                    DataImporter.ImportStrategy.REPLACE,
+                                    selectedIds,
+                                )
                             }
                         }
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Text(stringResource(R.string.external_import_replace_confirm_button))
+                    }
+                    "gpt" -> {
+                        viewModel.importExport.clearGptImportState()
+                        gptFileUri?.let { uri ->
+                            scope.launch {
+                                viewModel.importExport.importGptChat(
+                                    uri,
+                                    DataImporter.ImportStrategy.REPLACE,
+                                    selectedIds,
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        viewModel.importExport.clearDeepSeekImportState()
+                        deepseekFileUri?.let { uri ->
+                            viewModel.importExport.importDeepSeekChat(
+                                uri,
+                                DataImporter.ImportStrategy.REPLACE,
+                                selectedIds,
+                            )
+                        }
+                    }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    pendingExternalReplace = null
-                    reopenSourceDialog()
-                }) {
-                    Text(stringResource(R.string.cancel))
+            onDismiss = {
+                pendingExternalReplace = null
+                when (provider) {
+                    "claude" -> showClaudeImportDialog = true
+                    "gpt" -> showGptImportDialog = true
+                    else -> showDeepSeekImportDialog = true
                 }
             },
         )
@@ -650,143 +610,28 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         )
     }
 
-    // GPT import preview dialog
+    // GPT import preview dialog (state lives inside the dialog)
     if (showGptImportDialog && gptImportPreview != null) {
-        val preview = gptImportPreview!!
-        val allIds = preview.conversations.map { it.uuid }.toSet()
-        val allSelected = gptSelectedIds.size == allIds.size
-        val selectedConvCount = preview.conversations.count { it.uuid in gptSelectedIds }
-        val selectedMsgCount = preview.conversations
-            .filter { it.uuid in gptSelectedIds }
-            .sumOf { it.messageCount }
-
-        AlertDialog(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            onDismissRequest = {
+        GptImportPreviewDialog(
+            preview = gptImportPreview!!,
+            onImport = { strategy, finalIds ->
+                showGptImportDialog = false
+                if (strategy == DataImporter.ImportStrategy.REPLACE) {
+                    pendingExternalReplace = "gpt" to finalIds
+                } else {
+                    viewModel.importExport.clearGptImportState()
+                    gptFileUri?.let { uri ->
+                        scope.launch {
+                            viewModel.importExport.importGptChat(uri, strategy, finalIds)
+                        }
+                    }
+                }
+            },
+            onDismiss = {
                 showGptImportDialog = false
                 pendingExternalReplace = null
                 viewModel.importExport.clearGptImportState()
             },
-            title = { Text(stringResource(R.string.gpt_import_title), fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(
-                        stringResource(R.string.claude_import_strategy),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    PillTabSwitcher(
-                        tabs = listOf(
-                            stringResource(R.string.import_strategy_merge),
-                            stringResource(R.string.import_strategy_replace),
-                        ),
-                        selectedIndex = if (
-                            gptImportStrategy == DataImporter.ImportStrategy.MERGE
-                        ) 0 else 1,
-                        onSelect = { index ->
-                            gptImportStrategy = if (index == 0) {
-                                DataImporter.ImportStrategy.MERGE
-                            } else {
-                                DataImporter.ImportStrategy.REPLACE
-                            }
-                        },
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "$selectedConvCount ${stringResource(R.string.gpt_import_conversations)}, $selectedMsgCount ${stringResource(R.string.gpt_import_messages)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = {
-                            gptSelectedIds = if (allSelected) emptySet() else allIds
-                        }) {
-                            Text(
-                                if (allSelected) stringResource(R.string.deselect_all) else stringResource(R.string.select_all),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                    LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                        items(preview.conversations.size) { index ->
-                            val conv = preview.conversations[index]
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        gptSelectedIds = if (conv.uuid in gptSelectedIds) {
-                                            gptSelectedIds - conv.uuid
-                                        } else {
-                                            gptSelectedIds + conv.uuid
-                                        }
-                                    }
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = conv.uuid in gptSelectedIds,
-                                    onCheckedChange = { checked ->
-                                        gptSelectedIds = if (checked) {
-                                            gptSelectedIds + conv.uuid
-                                        } else {
-                                            gptSelectedIds - conv.uuid
-                                        }
-                                    }
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        conv.title.ifEmpty { "Untitled" },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        "${conv.messageCount} messages",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val finalIds = gptSelectedIds
-                        showGptImportDialog = false
-                        if (gptImportStrategy == DataImporter.ImportStrategy.REPLACE) {
-                            pendingExternalReplace = "gpt" to finalIds
-                        } else {
-                            viewModel.importExport.clearGptImportState()
-                            gptFileUri?.let { uri ->
-                                scope.launch {
-                                    viewModel.importExport.importGptChat(
-                                        uri,
-                                        gptImportStrategy,
-                                        finalIds,
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    enabled = gptSelectedIds.isNotEmpty()
-                ) {
-                    Text(stringResource(R.string.gpt_import_import))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showGptImportDialog = false
-                    pendingExternalReplace = null
-                    viewModel.importExport.clearGptImportState()
-                }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
         )
     }
 
@@ -824,183 +669,37 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         )
     }
 
-    // DeepSeek import preview dialog
+    // DeepSeek import preview dialog (state lives inside the dialog)
     if (showDeepSeekImportDialog && deepseekImportPreview != null) {
-        val preview = deepseekImportPreview!!
-        val allIds = preview.conversations.map { it.uuid }.toSet()
-        val allSelected = deepseekSelectedIds.size == allIds.size
-        val selectedConvCount = preview.conversations.count { it.uuid in deepseekSelectedIds }
-        val selectedMsgCount = preview.conversations
-            .filter { it.uuid in deepseekSelectedIds }
-            .sumOf { it.messageCount }
-
-        AlertDialog(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            onDismissRequest = {
+        DeepSeekImportPreviewDialog(
+            preview = deepseekImportPreview!!,
+            onImport = { strategy, finalIds ->
+                showDeepSeekImportDialog = false
+                if (strategy == DataImporter.ImportStrategy.REPLACE) {
+                    pendingExternalReplace = "deepseek" to finalIds
+                } else {
+                    viewModel.importExport.clearDeepSeekImportState()
+                    deepseekFileUri?.let { uri ->
+                        viewModel.importExport.importDeepSeekChat(uri, strategy, finalIds)
+                    }
+                }
+            },
+            onDismiss = {
                 showDeepSeekImportDialog = false
                 pendingExternalReplace = null
                 viewModel.importExport.clearDeepSeekImportState()
             },
-            title = { Text(stringResource(R.string.deepseek_import_title), fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(
-                        stringResource(R.string.claude_import_strategy),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    PillTabSwitcher(
-                        tabs = listOf(
-                            stringResource(R.string.import_strategy_merge),
-                            stringResource(R.string.import_strategy_replace),
-                        ),
-                        selectedIndex = if (
-                            deepseekImportStrategy == DataImporter.ImportStrategy.MERGE
-                        ) 0 else 1,
-                        onSelect = { index ->
-                            deepseekImportStrategy = if (index == 0) {
-                                DataImporter.ImportStrategy.MERGE
-                            } else {
-                                DataImporter.ImportStrategy.REPLACE
-                            }
-                        },
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "$selectedConvCount ${stringResource(R.string.deepseek_import_conversations)}, $selectedMsgCount ${stringResource(R.string.deepseek_import_messages)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (preview.hasAttachments) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            stringResource(R.string.deepseek_import_attachments_notice),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = {
-                            deepseekSelectedIds = if (allSelected) emptySet() else allIds
-                        }) {
-                            Text(
-                                if (allSelected) stringResource(R.string.deselect_all) else stringResource(R.string.select_all),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                    LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                        items(preview.conversations.size) { index ->
-                            val conv = preview.conversations[index]
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        deepseekSelectedIds = if (conv.uuid in deepseekSelectedIds) {
-                                            deepseekSelectedIds - conv.uuid
-                                        } else {
-                                            deepseekSelectedIds + conv.uuid
-                                        }
-                                    }
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = conv.uuid in deepseekSelectedIds,
-                                    onCheckedChange = { checked ->
-                                        deepseekSelectedIds = if (checked) {
-                                            deepseekSelectedIds + conv.uuid
-                                        } else {
-                                            deepseekSelectedIds - conv.uuid
-                                        }
-                                    }
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        conv.title.ifEmpty { "Untitled" },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        "${conv.messageCount} messages",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val finalIds = deepseekSelectedIds
-                        showDeepSeekImportDialog = false
-                        if (deepseekImportStrategy == DataImporter.ImportStrategy.REPLACE) {
-                            pendingExternalReplace = "deepseek" to finalIds
-                        } else {
-                            viewModel.importExport.clearDeepSeekImportState()
-                            deepseekFileUri?.let { uri ->
-                                viewModel.importExport.importDeepSeekChat(
-                                    uri,
-                                    deepseekImportStrategy,
-                                    finalIds,
-                                )
-                            }
-                        }
-                    },
-                    enabled = deepseekSelectedIds.isNotEmpty()
-                ) {
-                    Text(stringResource(R.string.deepseek_import_import))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showDeepSeekImportDialog = false
-                    pendingExternalReplace = null
-                    viewModel.importExport.clearDeepSeekImportState()
-                }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
         )
     }
 
     // DeepSeek import success dialog
     if (showDeepSeekSuccessDialog && deepseekImportResult != null) {
-        val result = deepseekImportResult!!
-        AlertDialog(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            onDismissRequest = {
+        DeepSeekImportSuccessDialog(
+            result = deepseekImportResult!!,
+            onDismiss = {
                 showDeepSeekSuccessDialog = false
                 viewModel.importExport.clearDeepSeekImportState()
             },
-            title = { Text(stringResource(R.string.deepseek_import_success), fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.deepseek_import_success_detail, result.conversationsImported, result.messagesImported))
-                    if (result.errors.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Errors: ${result.errors.joinToString(", ")}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeepSeekSuccessDialog = false
-                    viewModel.importExport.clearDeepSeekImportState()
-                }) {
-                    Text(stringResource(R.string.provider_close))
-                }
-            }
         )
     }
 }

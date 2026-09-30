@@ -48,6 +48,10 @@ import com.newoether.agora.data.isAnthropicProtocolProvider
 import com.newoether.agora.data.isAnthropicCacheEnabledForProvider
 import com.newoether.agora.data.anthropicCacheTtlForProvider
 import com.newoether.agora.data.LocalChatModelConfig
+import com.newoether.agora.data.repository.addApiKey
+import com.newoether.agora.data.repository.deleteApiKey
+import com.newoether.agora.data.repository.setActiveApiKey
+import com.newoether.agora.data.repository.updateApiKey
 import com.newoether.agora.ui.components.CustomEndpointProtocolSelector
 import com.newoether.agora.ui.components.clearFocusOnTap
 import com.newoether.agora.util.Constants
@@ -85,13 +89,6 @@ fun SettingsProviderDetailPage(
 
     val isLocal = currentName == Constants.PROVIDER_LOCAL
 
-    // Backend devices registered by ggml for this APK + device (Vulkan presence, GPU name).
-    // Empty when backends have not been initialized yet; the selector then keeps every option.
-    val backendDevices = remember(isLocal) {
-        if (isLocal) com.newoether.agora.api.LlamaEngine.listBackendDevices()
-        else emptyList()
-    }
-    val vulkanDevice = backendDevices.firstOrNull { it.isGpu }
     val customConfig = customProviders.firstOrNull { it.name == currentName }
     val isCustom = customConfig != null
 
@@ -451,97 +448,10 @@ fun SettingsProviderDetailPage(
                     title = stringResource(R.string.advanced_title),
                     items = listOf(
                         {
-                            var runtimeMenuExpanded by remember { mutableStateOf(false) }
-                            val runtimeLabel = when (localRuntimePreference) {
-                                "cpu" -> stringResource(R.string.local_runtime_cpu)
-                                "vulkan" -> stringResource(R.string.local_runtime_vulkan)
-                                else -> stringResource(R.string.local_runtime_auto)
-                            }
-                            SettingsItem(
-                                headlineContent = {
-                                    Text(stringResource(R.string.local_runtime_title))
-                                },
-                                supportingContent = {
-                                    Text(stringResource(R.string.local_runtime_desc))
-                                },
-                                leadingContent = {
-                                    Icon(
-                                        Icons.Default.Memory,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                trailingContent = {
-                                    Box {
-                                        Text(
-                                            runtimeLabel,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(end = 4.dp),
-                                        )
-                                        DropdownMenu(
-                                            expanded = runtimeMenuExpanded,
-                                            onDismissRequest = { runtimeMenuExpanded = false },
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                            tonalElevation = 16.dp,
-                                            shape = RoundedCornerShape(12.dp),
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.local_runtime_auto)) },
-                                                leadingIcon = {
-                                                    if (localRuntimePreference == "auto") {
-                                                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                                    }
-                                                },
-                                                onClick = {
-                                                    viewModel.settings.setLocalRuntimePreference("auto")
-                                                    runtimeMenuExpanded = false
-                                                },
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.local_runtime_cpu)) },
-                                                leadingIcon = {
-                                                    if (localRuntimePreference == "cpu") {
-                                                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                                    }
-                                                },
-                                                onClick = {
-                                                    viewModel.settings.setLocalRuntimePreference("cpu")
-                                                    runtimeMenuExpanded = false
-                                                },
-                                            )
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        if (vulkanDevice != null &&
-                                                            vulkanDevice.description.isNotBlank() &&
-                                                            vulkanDevice.description != vulkanDevice.name
-                                                        ) {
-                                                            stringResource(
-                                                                R.string.local_runtime_vulkan_with_device,
-                                                                vulkanDevice.description,
-                                                            )
-                                                        } else {
-                                                            stringResource(R.string.local_runtime_vulkan)
-                                                        }
-                                                    )
-                                                },
-                                                leadingIcon = {
-                                                    if (localRuntimePreference == "vulkan") {
-                                                        Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                                    }
-                                                },
-                                                enabled = backendDevices.isEmpty() || vulkanDevice != null,
-                                                onClick = {
-                                                    viewModel.settings.setLocalRuntimePreference("vulkan")
-                                                    runtimeMenuExpanded = false
-                                                },
-                                            )
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.clickable { runtimeMenuExpanded = true },
+                            LocalRuntimeSettingItem(
+                                localRuntimePreference = localRuntimePreference,
+                                isLocal = isLocal,
+                                onSelect = viewModel.settings::setLocalRuntimePreference,
                             )
                         },
                         {
@@ -589,7 +499,9 @@ fun SettingsProviderDetailPage(
                     apiKeys = apiKeys,
                     currentName = currentName,
                     activeApiKeyIds = activeApiKeyIds,
-                    onActivateKey = viewModel.settings::setActiveApiKey,
+                    onActivateKey = { provider, id ->
+                        viewModel.settings.setActiveApiKey(provider, id)
+                    },
                     onEditKey = { showKeyDialog = it },
                     onDeleteKey = { showDeleteKeyConfirm = it },
                 )

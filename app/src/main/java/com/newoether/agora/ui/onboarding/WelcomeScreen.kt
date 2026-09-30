@@ -84,6 +84,7 @@ import com.newoether.agora.data.CustomEndpointProtocol
 import com.newoether.agora.data.CustomProviderConfig
 import com.newoether.agora.data.LocalChatModelConfig
 import com.newoether.agora.data.modelAliasDisplayName
+import com.newoether.agora.data.repository.upsertApiKey
 import com.newoether.agora.ui.components.TypewriterMode
 import com.newoether.agora.ui.components.TypewriterText
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy

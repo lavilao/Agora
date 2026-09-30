@@ -221,8 +221,8 @@ class DeepSeekChatImporter {
     }
 
     /** DeepSeek epochs are seconds; tolerate milliseconds and missing values. */
-    private fun toEpochMillis(primary: Double, fallback: Double): Long {
-        val candidate = if (primary > 0) primary else fallback
+    private fun toEpochMillis(primary: Double, fallback: Double?): Long {
+        val candidate = if (primary > 0) primary else (fallback ?: 0.0)
         if (candidate <= 0) return System.currentTimeMillis()
         return if (candidate > 1_000_000_000_000.0) candidate.toLong()
         else (candidate * 1000.0).toLong()

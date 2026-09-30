@@ -84,7 +84,7 @@ internal fun DeepSeekImportPreviewDialog(
     onDismiss: () -> Unit,
 ) {
     var selectedIds by remember(preview) {
-        mutableStateOf(preview.conversations.mapTo(mutableSetOf()) { it.uuid })
+        mutableStateOf<Set<String>>(preview.conversations.mapTo(mutableSetOf()) { it.uuid })
     }
     var strategy by remember(preview) { mutableStateOf(DataImporter.ImportStrategy.MERGE) }
 
@@ -220,7 +220,7 @@ internal fun GptImportPreviewDialog(
     onDismiss: () -> Unit,
 ) {
     var selectedIds by remember(preview) {
-        mutableStateOf(preview.conversations.mapTo(mutableSetOf()) { it.uuid })
+        mutableStateOf<Set<String>>(preview.conversations.mapTo(mutableSetOf()) { it.uuid })
     }
     var strategy by remember(preview) { mutableStateOf(DataImporter.ImportStrategy.MERGE) }
 

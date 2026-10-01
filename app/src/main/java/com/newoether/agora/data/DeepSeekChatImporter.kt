@@ -21,16 +21,21 @@ import kotlinx.serialization.json.decodeFromStream
 /**
  * Imports chat history from a DeepSeek export ("Settings → Export chat history").
  *
- * DeepSeek has changed the export schema several times, so the parser is
- * deliberately tolerant instead of tied to one snapshot:
+ * The official export is a JSON array of conversations whose messages live in a
+ * `mapping` tree: each node may carry a `message.fragments` array where the
+ * fragment `type` distinguishes `REQUEST` (user text), `RESPONSE` (assistant
+ * answer), `SEARCH` (web-search query) and reasoning spellings. That tree is
+ * parsed natively below. DeepSeek has also changed the schema across releases,
+ * so everything else is deliberately tolerant instead of tied to one snapshot:
  *
  *  - **Container**: a top-level array, or an object whose `data` /
  *    `conversations` / `chats` / `list` / `biz_data` (…) field holds the
  *    conversations, with one extra nesting level accepted in between.
  *  - **Conversation**: `title` / `name` / `topic` for display, `id` falls back
  *    to a title hash, timestamps come from any known date field.
- *  - **Messages**: taken from `messages` / `list` / `chat_messages` / … or, when
- *    nothing matches, from the first array of message-like objects found.
+ *  - **Messages**: from the official `mapping` node tree first, else from
+ *    `messages` / `list` / `chat_messages` / … or, when nothing matches, from
+ *    the first array of message-like objects found.
  *  - **Message**: role from `role` / `sender` / `from` / `author` (string or
  *    `{"role": …}` object), content from `content` / `message` / `text` / … as
  *    a plain string, a number, an OpenAI-style parts array, or an object with a
@@ -305,9 +310,16 @@ class DeepSeekChatImporter {
 
     private fun parseConversation(obj: JsonObject): DeepSeekConversation? {
         val title = firstString(obj, *TITLE_KEYS).orEmpty()
-        val messages = findMessageArray(obj)
-            ?.mapNotNull(::parseMessage)
-            .orEmpty()
+        // The official export keeps messages in a `mapping` node tree; only fall
+        // back to the tolerant array heuristics when no mapping is present.
+        val mapping = obj["mapping"] as? JsonObject
+        val messages = if (mapping != null) {
+            parseMappingMessages(mapping)
+        } else {
+            findMessageArray(obj)
+                ?.mapNotNull(::parseMessage)
+                .orEmpty()
+        }
         if (title.isBlank() && messages.isEmpty()) return null
         return DeepSeekConversation(
             id = firstString(obj, *ID_KEYS).orEmpty(),
@@ -329,6 +341,91 @@ class DeepSeekChatImporter {
             if (candidates.isNotEmpty() && candidates.all(::looksLikeMessage)) return candidates
         }
         return null
+    }
+
+    /**
+     * Flattens the official export's `mapping` tree into linear messages.
+     *
+     * The mapping holds one entry per node; a node's `message.fragments` array
+     * carries the actual text, where `type` is `REQUEST` (user), `RESPONSE`
+     * (assistant), `SEARCH` (web-search query) or a reasoning spelling. Turned
+     * branches appear as sibling nodes, so every message-bearing node is
+     * collected and the result is sorted chronologically with the mapping's
+     * insertion order as tie-breaker — nothing from a regeneration is dropped.
+     */
+    private fun parseMappingMessages(mapping: JsonObject): List<DeepSeekMessage> {
+        data class Entry(val insertionIndex: Int, val timestamp: Double, val message: DeepSeekMessage)
+
+        val entries = mutableListOf<Entry>()
+        for (nodeElement in mapping.values) {
+            val node = nodeElement as? JsonObject ?: continue
+            val payload = node["message"] as? JsonObject ?: continue
+            val fragments = (payload["fragments"] as? JsonArray)
+                ?.filterIsInstance<JsonObject>().orEmpty()
+            if (fragments.isEmpty()) continue
+
+            val isUser = fragments.any { fragmentType(it).equals("REQUEST", ignoreCase = true) }
+            val textParts = mutableListOf<String>()
+            val searchParts = mutableListOf<String>()
+            val thoughtParts = mutableListOf<String>()
+            val attachments = mutableListOf<DeepSeekAttachment>()
+
+            for (fragment in fragments) {
+                val type = fragmentType(fragment)
+                val content = extractText(fragment["content"]).orEmpty()
+                val target = when {
+                    type.contains("THINK") || type.contains("REASONING") -> thoughtParts
+                    type == "SEARCH" -> searchParts
+                    type.contains("FILE") || type.contains("IMAGE") || type.contains("ATTACH") -> {
+                        parseFragmentAttachments(fragment)?.let { attachments.addAll(it) }
+                        textParts
+                    }
+                    else -> textParts // REQUEST, RESPONSE and unknown types stay visible.
+                }
+                if (content.isNotBlank()) target.add(content)
+            }
+
+            var text = textParts.joinToString("\n\n")
+            for (query in searchParts) {
+                text += "\n\n[Web search: $query]"
+            }
+            val reasoning = thoughtParts.joinToString("\n\n").takeIf { it.isNotBlank() }
+            if (text.isBlank() && reasoning == null) continue
+
+            entries.add(
+                Entry(
+                    insertionIndex = entries.size,
+                    timestamp = firstTimestamp(payload, "inserted_at"),
+                    message = DeepSeekMessage(
+                        role = if (isUser) "user" else "assistant",
+                        content = text,
+                        time = firstTimestamp(payload, "inserted_at"),
+                        deepSeekThink = reasoning,
+                        attachments = attachments,
+                    ),
+                )
+            )
+        }
+
+        return entries
+            .sortedWith(compareBy({ it.timestamp }, { it.insertionIndex }))
+            .map { it.message }
+    }
+
+    private fun fragmentType(fragment: JsonObject): String =
+        ((fragment["type"] as? JsonPrimitive)?.content ?: "").trim().uppercase()
+
+    /** Attachment-ish fragments keep their file metadata for the preview notice. */
+    private fun parseFragmentAttachments(fragment: JsonObject): List<DeepSeekAttachment>? {
+        val attachments = mutableListOf<DeepSeekAttachment>()
+        for (key in ATTACHMENT_KEYS) {
+            (fragment[key] as? JsonArray)?.filterIsInstance<JsonObject>()?.forEach { item ->
+                val name = firstString(item, "name", "file_name", "filename", "title")
+                val url = firstString(item, "url", "link")
+                if (name != null || url != null) attachments.add(DeepSeekAttachment(name, url))
+            }
+        }
+        return attachments.ifEmpty { null }
     }
 
     private fun looksLikeMessage(obj: JsonObject): Boolean =
@@ -478,7 +575,7 @@ class DeepSeekChatImporter {
         )
         val CONVERSATION_DATE_KEYS = arrayOf(
             "date", "update_time", "updated_at", "updatedAt", "create_time", "created_at",
-            "createTime", "last_updated", "timestamp",
+            "createTime", "inserted_at", "last_updated", "timestamp",
         )
         val ROLE_KEYS = arrayOf("role", "sender", "from", "author", "participant")
         val CONTENT_KEYS = arrayOf(

@@ -19,10 +19,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
 import com.newoether.agora.api.LlamaEngine
+import com.newoether.agora.api.LocalModelRuntime
 
 /**
  * "Local Runtime" selector shown in the Advanced group of the local provider
@@ -40,9 +42,20 @@ internal fun LocalRuntimeSettingItem(
     onSelect: (String) -> Unit,
 ) {
     // Backend devices registered by ggml for this APK + device (Vulkan presence, GPU name).
-    // Empty when backends have not been initialized yet; the selector then keeps every option.
-    val backendDevices = remember(isLocal) {
-        if (isLocal) LlamaEngine.listBackendDevices() else emptyList()
+    // The app normally registers backends during startup, but this item can be composed
+    // before that finishes (fresh install, slow database gate) — a premature query would
+    // see a CPU-only registry and wrongly grey out Vulkan. Initializing here is
+    // idempotent and cheap once the startup path has already run.
+    val context = LocalContext.current
+    val backendDevices = remember(isLocal, context) {
+        if (isLocal) {
+            runCatching {
+                LocalModelRuntime.initialize(context.applicationInfo.nativeLibraryDir)
+            }
+            LlamaEngine.listBackendDevices()
+        } else {
+            emptyList()
+        }
     }
     // Loader version queried independently of the backend registry: when no GPU device
     // registers, this distinguishes "driver too old" from "backend failed to init".

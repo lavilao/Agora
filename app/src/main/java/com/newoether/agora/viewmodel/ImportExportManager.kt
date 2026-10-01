@@ -319,6 +319,7 @@ class ImportExportManager(
             try {
                 _claudeImportProgress.value = 0.2f
                 importSizeError(uri)?.let {
+                    _claudeImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.claude_import_error_detail, it)))
                     return@launch
                 }
@@ -326,6 +327,7 @@ class ImportExportManager(
                 val importer = ClaudeChatImporter()
                 val parseResult = importer.extractAndParse { openImportStream(uri) }
                 if (parseResult.isFailure) {
+                    _claudeImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.claude_import_error_detail, parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error))))
                     return@launch
                 }
@@ -336,6 +338,7 @@ class ImportExportManager(
                 val importData = importer.toImportFormat(parsed, selectedIds)
 
                 if (preview.totalMessageCount == 0) {
+                    _claudeImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.claude_import_no_data)))
                     return@launch
                 }
@@ -423,6 +426,7 @@ class ImportExportManager(
             try {
                 _gptImportProgress.value = 0.2f
                 importSizeError(uri)?.let {
+                    _gptImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.gpt_import_error_detail, it)))
                     return@launch
                 }
@@ -430,6 +434,7 @@ class ImportExportManager(
                 val importer = GptChatImporter()
                 val parseResult = importer.extractAndParse { openImportStream(uri) }
                 if (parseResult.isFailure) {
+                    _gptImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.gpt_import_error_detail, parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error))))
                     return@launch
                 }
@@ -440,6 +445,7 @@ class ImportExportManager(
                 val importData = importer.toImportFormat(parsed, selectedIds)
 
                 if (preview.totalMessageCount == 0) {
+                    _gptImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.gpt_import_no_data)))
                     return@launch
                 }
@@ -523,6 +529,7 @@ class ImportExportManager(
             try {
                 _deepseekImportProgress.value = 0.2f
                 importSizeError(uri)?.let {
+                    _deepseekImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_error_detail, it)))
                     return@launch
                 }
@@ -530,6 +537,7 @@ class ImportExportManager(
                 val importer = DeepSeekChatImporter()
                 val parseResult = importer.extractAndParse { openImportStream(uri) }
                 if (parseResult.isFailure) {
+                    _deepseekImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_error_detail, parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error))))
                     return@launch
                 }
@@ -540,6 +548,7 @@ class ImportExportManager(
                 val importData = importer.toImportFormat(parsed, selectedIds)
 
                 if (preview.totalMessageCount == 0) {
+                    _deepseekImportProgress.value = null
                     emitSnackbar(SnackbarEvent(app.getString(R.string.deepseek_import_no_data)))
                     return@launch
                 }

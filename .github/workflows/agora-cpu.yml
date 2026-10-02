@@ -1,0 +1,268 @@
+# ============================================================================
+#  Agora · Workflow CPU (sin Vulkan)
+#
+#  Build alternativo SOLO CPU para armeabi-v7a: mismo runtime de ggml-cpu
+#  (NEON forzado por el toolchain + OpenMP + -mfpu=neon-vfpv4), sin la capa
+#  ggml-vulkan. Al no cross-compilar Vulkan se omiten shaderc/glslc,
+#  SPIRV-Headers y Vulkan-Headers de host: menos pasos y build más rápido.
+#  La app detecta que no hay backend GPU y muestra Vulkan en gris con su
+#  estado (comportamiento esperado en este sabor de build).
+#
+#  Se dispara SOLO manualmente (workflow_dispatch): Actions → Run workflow.
+# ============================================================================
+name: Agora APK (CPU, build manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options: [debug, release]
+
+env:
+  JAVA_VERSION: '21'
+  NDK_VERSION: '28.2.13676358'
+  CMAKE_VERSION: '3.22.1'
+  TARGET_ABI: 'armeabi-v7a'
+
+jobs:
+  build-armeabiv7-cpu:
+    name: APK armeabi-v7a · CPU+OpenMP (sin Vulkan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo + submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Info del pin de llama.cpp
+        run: >-
+          git -C thirdparty/llama.cpp log -1 --format='llama.cpp: %h %ci %s'
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Android SDK + NDK r28c + CMake 3.22.1
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}"
+          log-accepted-licenses: true
+
+      - name: local.properties
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
+          } > local.properties
+
+      - name: chmod +x gradlew
+        run: chmod +x ./gradlew
+
+      # ------------------------------------------------------------------
+      # Parches: ABI + cmake (solo lo que necesita el build CPU)
+      # ------------------------------------------------------------------
+      - name: Patch build.gradle.kts (solo ABI)
+        run: |
+          set -euo pipefail
+          sed -i 's/abiFilters += listOf("arm64-v8a")/abiFilters += listOf("${{ env.TARGET_ABI }}")/' app/build.gradle.kts
+          sed -i 's/abiFilters += "x86_64"/abiFilters += "${{ env.TARGET_ABI }}"/' app/build.gradle.kts
+          grep -q 'abiFilters += listOf("${{ env.TARGET_ABI }}")' app/build.gradle.kts || { echo "defaultConfig no parcheado"; exit 1; }
+          grep -q 'abiFilters += "${{ env.TARGET_ABI }}"' app/build.gradle.kts || { echo "buildType debug no parcheado"; exit 1; }
+          echo "build.gradle.kts parcheado (ABI armv7, sin args cmake extra)"
+
+      - name: Patch CMakeLists.txt (OpenMP + armv7 + neon-vfpv4)
+        run: |
+          set -euo pipefail
+          cat > /tmp/patch_cmake.py <<'PYEOF'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          cmake = path.read_text()
+
+          # 1) GGML_OPENMP ON (Vulkan queda OFF: valor por defecto de Agora)
+          if 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)' not in cmake:
+              if 'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)' not in cmake:
+                  raise SystemExit("no encuentro la linea GGML_OPENMP")
+              cmake = cmake.replace(
+                  'set(GGML_OPENMP OFF CACHE BOOL "" FORCE)',
+                  'set(GGML_OPENMP ON CACHE BOOL "" FORCE)', 1)
+
+          # 2) ALL_VARIANTS condicional (variantes armv8.x no existen en 32-bit)
+          old = 'set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)'
+          new = '\n'.join([
+              'if(ANDROID_ABI STREQUAL "armeabi-v7a")',
+              '    set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)',
+              '    set(GGML_CPU_ARM_ARCH "armv7-a" CACHE STRING "" FORCE)',
+              '    set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)',
+              'else()',
+              '    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)',
+              'endif()',
+          ])
+          if 'set(GGML_CPU_ARM_ARCH "armv7-a"' not in cmake:
+              if old not in cmake:
+                  raise SystemExit("no encuentro GGML_CPU_ALL_VARIANTS ON")
+              cmake = cmake.replace(old, new, 1)
+
+          # 3) rama armv7: backend SOLO ggml-cpu (sin ggml-vulkan)
+          branch = ('elseif(ANDROID_ABI STREQUAL "armeabi-v7a")\n'
+                    '    set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)\n\n')
+          if 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)' not in cmake:
+              marker = 'elseif(ANDROID_ABI STREQUAL "x86_64")\n'
+              if marker not in cmake:
+                  raise SystemExit("no encuentro el dispatch de ABI")
+              cmake = cmake.replace(marker, branch + marker, 1)
+
+          # 4) armv7 + VFPv4 (Cortex-A53 en ROM 32-bit): el toolchain del NDK
+          #    r28 ya fuerza -mfpu=neon para armeabi-v7a (kernels NEON de ggml
+          #    activos), pero neon a secas es VFPv3. Subir ggml-cpu a
+          #    neon-vfpv4 activa VFMA (__ARM_FEATURE_FMA, paths de quants.c)
+          #    y las conversiones FP16 hardware de VFPv4 (escalares d/id).
+          neon = '\n'.join([
+              '# armv7 con VFPv4: VFMA + conversiones FP16 hardware (mejora el',
+              '# -mfpu=neon que el toolchain del NDK ya anade para armeabi-v7a).',
+              'if(ANDROID_ABI STREQUAL "armeabi-v7a")',
+              '    if(TARGET ggml-cpu)',
+              '        target_compile_options(ggml-cpu PRIVATE -mfpu=neon-vfpv4)',
+              '    endif()',
+              'endif()',
+              '',
+              '']) + '\n'
+          anchor_neon = 'foreach(backend IN LISTS AGORA_ANDROID_CPU_BACKENDS)'
+          if '-mfpu=neon-vfpv4' not in cmake:
+              if anchor_neon not in cmake:
+                  raise SystemExit("no encuentro el foreach de backends")
+              cmake = cmake.replace(anchor_neon, neon + anchor_neon, 1)
+
+          path.write_text(cmake)
+          print("Patched CMakeLists.txt OK (CPU)")
+          PYEOF
+          python3 /tmp/patch_cmake.py app/src/main/cpp/CMakeLists.txt
+          grep -q 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)'        app/src/main/cpp/CMakeLists.txt || { echo "OpenMP no ON"; exit 1; }
+          grep -q 'set(GGML_VULKAN OFF CACHE BOOL "" FORCE)'       app/src/main/cpp/CMakeLists.txt || { echo "Vulkan no quedo OFF"; exit 1; }
+          grep -q 'set(GGML_CPU_ARM_ARCH "armv7-a"'                app/src/main/cpp/CMakeLists.txt || { echo "falta ARM_ARCH armv7"; exit 1; }
+          grep -q 'set(AGORA_ANDROID_CPU_BACKENDS ggml-cpu)'       app/src/main/cpp/CMakeLists.txt || { echo "rama armv7 sin ggml-cpu"; exit 1; }
+          grep -q 'target_compile_options(ggml-cpu PRIVATE -mfpu=neon-vfpv4)' app/src/main/cpp/CMakeLists.txt || { echo "falta neon-vfpv4"; exit 1; }
+          echo "CMakeLists.txt parcheado y verificado (CPU)"
+
+      - name: Copiar libomp.so del NDK a jniLibs
+        run: |
+          set -euo pipefail
+          TC="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64"
+          JNILIBS="app/src/main/jniLibs/${{ env.TARGET_ABI }}"
+          mkdir -p "$JNILIBS"
+          LIBOMP="$(ls "$TC"/lib/clang/*/lib/linux/arm/libomp.so 2>/dev/null | head -1 || true)"
+          [ -n "$LIBOMP" ] || LIBOMP="$TC/sysroot/usr/lib/arm-linux-androideabi/libomp.so"
+          [ -n "$LIBOMP" ] || { echo "ERROR: libomp.so no está en el NDK"; exit 1; }
+          cp "$LIBOMP" "$JNILIBS/libomp.so"
+          ls -la "$JNILIBS/libomp.so"
+
+      - name: Patch + build proot (armeabi-v7a)
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+
+          cat > /tmp/patch_proot.py <<'PYEOF'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          for old, new in [
+              ('CROSS_PREFIX="aarch64-linux-android26"', 'CROSS_PREFIX="armv7a-linux-androideabi26"'),
+              ('SYSROOT="$BLD/sysroot/arm64-v8a"', 'SYSROOT="$BLD/sysroot/armeabi-v7a"'),
+              ('BLD_DIR="$BLD/build-proot-arm64-v8a"', 'BLD_DIR="$BLD/build-proot-armeabi-v7a"'),
+              ('JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/arm64-v8a"', 'JNILIBS="$SCRIPT_DIR/app/src/main/jniLibs/armeabi-v7a"'),
+              ('FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/arm64-v8a"', 'FDROID_JNILIBS="$SCRIPT_DIR/app/src/fdroid/jniLibs/armeabi-v7a"'),
+          ]:
+              if old not in text:
+                  raise SystemExit("no puedo parchear build-proot.sh: " + old)
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          print("Patched build-proot.sh OK")
+          PYEOF
+
+          python3 /tmp/patch_proot.py build-proot.sh
+          chmod +x build-proot.sh
+          bash build-proot.sh --force
+
+          for lib in libproot_exec.so libproot_loader.so libtalloc.so; do
+            [ -f "app/src/main/jniLibs/${{ env.TARGET_ABI }}/$lib" ] || { echo "ERROR: falta $lib"; exit 1; }
+          done
+          echo "Runtime de proot armv7 completo"
+
+      - name: Configurar gradle.properties
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.workers.max=4
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.suppressUnsupportedCompileSdk=36
+          EOF
+
+      - name: Build APK Release (armeabi-v7a · CPU+OpenMP)
+        if: github.event.inputs.build_type == 'release'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidRelease --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/release/app-fdroid-release.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
+
+      - name: Build APK Debug (armeabi-v7a · CPU+OpenMP)
+        if: github.event.inputs.build_type == 'debug'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidDebug --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
+
+      - name: Verificar librerías nativas dentro del APK
+        if: always()
+        run: |
+          set -euo pipefail
+          APKS=$(find app/build/outputs/apk -name '*.apk' -type f)
+          [ -n "$APKS" ] || { echo "No hay APKs"; exit 1; }
+          for apk in $APKS; do
+            echo "=== $(basename "$apk") ==="
+            for lib in libomp.so libagora_llama.so libggml-cpu.so \
+                       libmtmd.so libc++_shared.so \
+                       libproot_exec.so; do
+              unzip -l "$apk" | grep -q "lib/armeabi-v7a/$lib" \
+                && echo "  OK: $lib" \
+                || { echo "  FALTA: $lib  →  la app crasheará al cargar"; exit 1; }
+            done
+            # Build CPU: ggml-vulkan NO debe estar dentro del APK
+            if unzip -l "$apk" | grep -q "lib/armeabi-v7a/libggml-vulkan.so"; then
+              echo "  ERROR: libggml-vulkan.so presente en un build CPU"; exit 1
+            fi
+            echo "  OK: sin libggml-vulkan.so (build CPU confirmado)"
+          done
+          echo "APK verificado: CPU+OpenMP armv7 completo"
+
+      - name: Subir APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-armeabiv7-cpu
+          path: |
+            app/build/outputs/apk/fdroid/release/
+            app/build/outputs/apk/fdroid/debug/
+          if-no-files-found: error
+          retention-days: 30

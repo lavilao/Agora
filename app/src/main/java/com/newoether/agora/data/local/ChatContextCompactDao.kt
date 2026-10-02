@@ -125,7 +125,14 @@ interface ChatContextCompactDao {
     suspend fun touchRun(runId: String, at: Long): Int
 
     @Query("DELETE FROM messages WHERE id IN (:ids)")
-    suspend fun deleteMessagesByIds(ids: List<String>)
+    suspend fun deleteMessagesByIdsRaw(ids: List<String>)
+
+    /** Batched to respect SQLite's per-statement bound-parameter ceiling (see
+     * [ChatDao.findExistingMessageIds]); deleting a full imported
+     * conversation exceeds it with the raw query. */
+    suspend fun deleteMessagesByIds(ids: List<String>) {
+        ids.chunked(SQLITE_MAX_BIND_PARAMETERS).forEach { deleteMessagesByIdsRaw(it) }
+    }
 
     @Query("UPDATE messages SET parentId = :replacementParentId WHERE parentId = :removedMessageId")
     suspend fun reparentMessageChildren(removedMessageId: String, replacementParentId: String?): Int

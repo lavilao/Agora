@@ -223,7 +223,18 @@ interface SemanticIndexDao {
     suspend fun upsertEmbedding(embedding: EmbeddingEntity)
 
     @Query("DELETE FROM embeddings WHERE messageId IN (:messageIds)")
-    suspend fun deleteEmbeddingsForMessages(messageIds: List<String>): Int
+    suspend fun deleteEmbeddingsForMessagesRaw(messageIds: List<String>): Int
+
+    /** Batched to respect SQLite's per-statement bound-parameter ceiling (see
+     * [com.newoether.agora.data.local.ChatDao.findExistingMessageIds]);
+     * full-history imports exceed it with the raw query. */
+    suspend fun deleteEmbeddingsForMessages(messageIds: List<String>): Int {
+        var deleted = 0
+        messageIds.chunked(SQLITE_MAX_BIND_PARAMETERS).forEach {
+            deleted += deleteEmbeddingsForMessagesRaw(it)
+        }
+        return deleted
+    }
 
     @Query("DELETE FROM embeddings WHERE modelId = :modelId")
     suspend fun deleteEmbeddingsForModel(modelId: String): Int

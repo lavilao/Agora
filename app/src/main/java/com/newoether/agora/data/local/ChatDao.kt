@@ -22,6 +22,11 @@ private fun decodeSelectionMap(raw: String?): MutableMap<String?, String> =
 internal fun encodeSelectionMap(selections: Map<String?, String>): String =
     Json.encodeToString(selections.mapKeys { it.key ?: "null" })
 
+/** SQLite's per-statement bound-parameter ceiling on older Android releases
+ * (999 for the bundled pre-3.32 engines; 900 leaves headroom for any fixed
+ * parameters a statement might add). */
+internal const val SQLITE_MAX_BIND_PARAMETERS = 900
+
 @Dao
 interface ChatDao :
     ChatAutomationDao,
@@ -627,7 +632,13 @@ interface ChatDao :
     suspend fun insertEmbeddings(embeddings: List<EmbeddingEntity>): LongArray
 
     @Query("SELECT * FROM embeddings WHERE messageId IN (:messageIds)")
-    suspend fun getEmbeddingsByMessageIds(messageIds: List<String>): List<EmbeddingEntity>
+    suspend fun getEmbeddingsByMessageIdsRaw(messageIds: List<String>): List<EmbeddingEntity>
+
+    /** Batched to respect SQLite's per-statement bound-parameter ceiling (see
+     * [findExistingMessageIds]); forking a full imported conversation
+     * exceeds it with the raw query. */
+    suspend fun getEmbeddingsByMessageIds(messageIds: List<String>): List<EmbeddingEntity> =
+        messageIds.chunked(SQLITE_MAX_BIND_PARAMETERS).flatMap { getEmbeddingsByMessageIdsRaw(it) }
 
     @Query("SELECT * FROM embeddings WHERE messageId = :messageId LIMIT 1")
     suspend fun getEmbedding(messageId: String): EmbeddingEntity?
@@ -636,7 +647,13 @@ interface ChatDao :
     suspend fun getAllEmbeddings(): List<EmbeddingEntity>
 
     @Query("SELECT * FROM messages WHERE id IN (:ids)")
-    suspend fun getMessagesByIds(ids: List<String>): List<MessageEntity>
+    suspend fun getMessagesByIdsRaw(ids: List<String>): List<MessageEntity>
+
+    /** Batched to respect SQLite's per-statement bound-parameter ceiling (see
+     * [findExistingMessageIds]); deleting a full imported conversation
+     * exceeds it with the raw query. */
+    suspend fun getMessagesByIds(ids: List<String>): List<MessageEntity> =
+        ids.chunked(SQLITE_MAX_BIND_PARAMETERS).flatMap { getMessagesByIdsRaw(it) }
 
     @Query("UPDATE conversations SET draftText = :text, draftAttachments = :attachments, dataChangedAt = :at WHERE id = :id")
     suspend fun updateDraft(id: String, text: String, attachments: String?, at: Long)
@@ -687,7 +704,14 @@ interface ChatDao :
     suspend fun deleteAllConversations()
 
     @Query("SELECT id FROM messages WHERE id IN (:ids)")
-    suspend fun findExistingMessageIds(ids: List<String>): List<String>
+    suspend fun findExistingMessageIdsRaw(ids: List<String>): List<String>
+
+    /** Android's bundled SQLite (pre-3.32, API <= 30) allows at most 999 bound
+     * parameters per compiled statement, so unbounded id collections are
+     * queried in batches to avoid "too many SQL variables" (full-history
+     * third-party imports exceed the ceiling). */
+    suspend fun findExistingMessageIds(ids: List<String>): List<String> =
+        ids.chunked(SQLITE_MAX_BIND_PARAMETERS).flatMap { findExistingMessageIdsRaw(it) }
 
 
     @Transaction

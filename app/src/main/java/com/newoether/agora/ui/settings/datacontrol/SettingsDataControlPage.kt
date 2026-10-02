@@ -57,6 +57,10 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
     val deepseekImportPreview by viewModel.importExport.deepseekImportPreview.collectAsState()
     val deepseekImportProgress by viewModel.importExport.deepseekImportProgress.collectAsState()
     val deepseekImportResult by viewModel.importExport.deepseekImportResult.collectAsState()
+
+    val qwenImportPreview by viewModel.importExport.qwenImportPreview.collectAsState()
+    val qwenImportProgress by viewModel.importExport.qwenImportProgress.collectAsState()
+    val qwenImportResult by viewModel.importExport.qwenImportResult.collectAsState()
     var showExportDialog by remember { mutableStateOf(false) }
     var showImportPreviewDialog by remember { mutableStateOf(false) }
     var importUri by remember { mutableStateOf<Uri?>(null) }
@@ -79,7 +83,11 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
     var showDeepSeekImportDialog by remember { mutableStateOf(false) }
     var deepseekFileUri by remember { mutableStateOf<Uri?>(null) }
     var showDeepSeekSuccessDialog by remember { mutableStateOf(false) }
-    // Provider awaiting REPLACE confirmation ("claude" | "gpt" | "deepseek").
+
+    var showQwenImportDialog by remember { mutableStateOf(false) }
+    var qwenFileUri by remember { mutableStateOf<Uri?>(null) }
+    var showQwenSuccessDialog by remember { mutableStateOf(false) }
+    // Provider awaiting REPLACE confirmation ("claude" | "gpt" | "deepseek" | "qwen").
     var pendingExternalReplace by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
 
     // Auto Backup
@@ -161,6 +169,16 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         }
     }
 
+    // Qwen chat file picker launcher
+    val qwenChatLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            qwenFileUri = uri
+            viewModel.importExport.previewQwenChat(uri)
+        }
+    }
+
     // Show import preview dialog when preview is loaded
     LaunchedEffect(importPreview, importPreviewLoading) {
         if (importPreview != null && !importPreviewLoading) {
@@ -171,13 +189,14 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
     val isClaudeImporting = claudeImportProgress != null
     val isGptImporting = gptImportProgress != null
     val isDeepSeekImporting = deepseekImportProgress != null
+    val isQwenImporting = qwenImportProgress != null
     val isNativeProgressVisible = importPreviewLoading || isExporting || isImporting
     val nativeProgressTitle = when {
         importPreviewLoading -> R.string.loading_label
         isExporting -> R.string.exporting_label
         else -> R.string.importing_label
     }
-    val isThirdPartyImporting = isClaudeImporting || isGptImporting || isDeepSeekImporting
+    val isThirdPartyImporting = isClaudeImporting || isGptImporting || isDeepSeekImporting || isQwenImporting
 
     val showDocFab by viewModel.settings.showDocumentationFab.collectAsState()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -242,6 +261,16 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                             },
                             modifier = Modifier.clickable { deepseekChatLauncher.launch(arrayOf("application/json", "application/zip", "*/*")) }
                         )
+                    },
+                    {
+                        SettingsItem(
+                            headlineContent = { Text(stringResource(R.string.qwen_import_title)) },
+                            supportingContent = { Text(stringResource(R.string.qwen_import_subtitle)) },
+                            leadingContent = {
+                                Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            modifier = Modifier.clickable { qwenChatLauncher.launch(arrayOf("application/json", "application/zip", "*/*")) }
+                        )
                     }
                 ))
 
@@ -298,6 +327,21 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                     }
                 }
 
+                // Show Qwen import dialog when preview is loaded
+                LaunchedEffect(qwenImportPreview) {
+                    if (qwenImportPreview != null) {
+                        pendingExternalReplace = null
+                        showQwenImportDialog = true
+                    }
+                }
+
+                // Show Qwen import success dialog when result is available
+                LaunchedEffect(qwenImportResult) {
+                    if (qwenImportResult != null) {
+                        showQwenSuccessDialog = true
+                    }
+                }
+
                 if (showDocFab) { Spacer(modifier = Modifier.height(80.dp)) }
         }
 
@@ -306,11 +350,12 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
         }
 
         if (isThirdPartyImporting) {
-            val progress = claudeImportProgress ?: gptImportProgress ?: deepseekImportProgress ?: 0f
+            val progress = claudeImportProgress ?: gptImportProgress ?: deepseekImportProgress ?: qwenImportProgress ?: 0f
             val label = when {
                 isClaudeImporting -> stringResource(R.string.claude_import_progress)
                 isGptImporting -> stringResource(R.string.gpt_import_progress)
-                else -> stringResource(R.string.deepseek_import_progress)
+                isDeepSeekImporting -> stringResource(R.string.deepseek_import_progress)
+                else -> stringResource(R.string.qwen_import_progress)
             }
             AlertDialog(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -553,10 +598,20 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
-                    else -> {
+                    "deepseek" -> {
                         viewModel.importExport.clearDeepSeekImportState()
                         deepseekFileUri?.let { uri ->
                             viewModel.importExport.importDeepSeekChat(
+                                uri,
+                                DataImporter.ImportStrategy.REPLACE,
+                                selectedIds,
+                            )
+                        }
+                    }
+                    else -> {
+                        viewModel.importExport.clearQwenImportState()
+                        qwenFileUri?.let { uri ->
+                            viewModel.importExport.importQwenChat(
                                 uri,
                                 DataImporter.ImportStrategy.REPLACE,
                                 selectedIds,
@@ -570,7 +625,8 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
                 when (provider) {
                     "claude" -> showClaudeImportDialog = true
                     "gpt" -> showGptImportDialog = true
-                    else -> showDeepSeekImportDialog = true
+                    "deepseek" -> showDeepSeekImportDialog = true
+                    else -> showQwenImportDialog = true
                 }
             },
         )
@@ -699,6 +755,40 @@ fun SettingsDataControlPage(viewModel: ChatViewModel, onBack: () -> Unit) {
             onDismiss = {
                 showDeepSeekSuccessDialog = false
                 viewModel.importExport.clearDeepSeekImportState()
+            },
+        )
+    }
+
+    // Qwen import preview dialog (state lives inside the dialog)
+    if (showQwenImportDialog && qwenImportPreview != null) {
+        QwenImportPreviewDialog(
+            preview = qwenImportPreview!!,
+            onImport = { strategy, finalIds ->
+                showQwenImportDialog = false
+                if (strategy == DataImporter.ImportStrategy.REPLACE) {
+                    pendingExternalReplace = "qwen" to finalIds
+                } else {
+                    viewModel.importExport.clearQwenImportState()
+                    qwenFileUri?.let { uri ->
+                        viewModel.importExport.importQwenChat(uri, strategy, finalIds)
+                    }
+                }
+            },
+            onDismiss = {
+                showQwenImportDialog = false
+                pendingExternalReplace = null
+                viewModel.importExport.clearQwenImportState()
+            },
+        )
+    }
+
+    // Qwen import success dialog
+    if (showQwenSuccessDialog && qwenImportResult != null) {
+        QwenImportSuccessDialog(
+            result = qwenImportResult!!,
+            onDismiss = {
+                showQwenSuccessDialog = false
+                viewModel.importExport.clearQwenImportState()
             },
         )
     }

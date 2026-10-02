@@ -142,35 +142,36 @@ class ChatDaoExternalImportReplaceTest {
     fun claudeAndGptEntrypointsPreserveSelectedReplaceAndIncrementalMergeContracts() {
         val manager = mainSource("viewmodel/ImportExportManager.kt").readText().replace("\r\n", "\n")
 
+        // Claude, GPT, DeepSeek and Qwen each own one third-party import path.
         assertTrue(
-            "Claude and GPT must filter the parsed archive to the selected subset",
+            "Every third-party importer must filter the parsed archive to the selected subset",
             Regex("""toImportFormat\(parsed, selectedIds\)""")
-                .findAll(manager)
-                .count() == 2,
-        )
-        assertTrue(
-            "Claude and GPT Replace and Merge must use the Repository graph transaction",
-            Regex("""conversations\.importExternalConversationGraph\(""")
                 .findAll(manager)
                 .count() == 4,
         )
         assertTrue(
-            "Claude and GPT Replace must select replacement twice",
-            Regex("""replace = true,""").findAll(manager).count() == 2,
+            "Every importer's Replace and Merge must use the Repository graph transaction",
+            Regex("""conversations\.importExternalConversationGraph\(""")
+                .findAll(manager)
+                .count() == 8,
+        )
+        assertTrue(
+            "Every importer's Replace must select replacement once",
+            Regex("""replace = true,""").findAll(manager).count() == 4,
         )
         assertTrue(
             "External Replace must not delete conversations outside the DAO transaction",
             "conversations.deleteAllConversations()" !in manager,
         )
         assertTrue(
-            "Claude and GPT Merge must retain the existing-ID incremental path",
+            "Every importer's Merge must retain the existing-ID incremental path",
             Regex("""val existingConvIds = conversations\.getAllConversationsList\(\)""")
                 .findAll(manager)
-                .count() == 2,
+                .count() == 4,
         )
         assertTrue(
-            "Claude and GPT Merge must select incremental import twice",
-            Regex("""replace = false,""").findAll(manager).count() == 2,
+            "Every importer's Merge must select incremental import once",
+            Regex("""replace = false,""").findAll(manager).count() == 4,
         )
     }
 

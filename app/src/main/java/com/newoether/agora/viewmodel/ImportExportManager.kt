@@ -9,6 +9,7 @@ import com.newoether.agora.data.DataExporter
 import com.newoether.agora.data.DataImporter
 import com.newoether.agora.data.DeepSeekChatImporter
 import com.newoether.agora.data.GptChatImporter
+import com.newoether.agora.data.QwenChatImporter
 import com.newoether.agora.data.MemoryManager
 import com.newoether.agora.data.SkillManager
 import com.newoether.agora.data.SettingsManager
@@ -176,6 +177,18 @@ class ImportExportManager(
     private val _deepseekImportResult = MutableStateFlow<DeepSeekChatImporter.ImportResult?>(null)
     val deepseekImportResult: StateFlow<DeepSeekChatImporter.ImportResult?> =
         _deepseekImportResult.asStateFlow()
+
+    // Qwen import state
+    private val _qwenImportPreview = MutableStateFlow<QwenChatImporter.ImportPreview?>(null)
+    val qwenImportPreview: StateFlow<QwenChatImporter.ImportPreview?> =
+        _qwenImportPreview.asStateFlow()
+
+    private val _qwenImportProgress = MutableStateFlow<Float?>(null)
+    val qwenImportProgress: StateFlow<Float?> = _qwenImportProgress.asStateFlow()
+
+    private val _qwenImportResult = MutableStateFlow<QwenChatImporter.ImportResult?>(null)
+    val qwenImportResult: StateFlow<QwenChatImporter.ImportResult?> =
+        _qwenImportResult.asStateFlow()
 
     fun exportData(uri: Uri, categories: Set<DataExporter.ExportCategory>, includeApiKeys: Boolean) {
         _exportProgress.value = 0f
@@ -591,6 +604,107 @@ class ImportExportManager(
             } finally {
                 // Early exits (oversize, parse failure, no data) must not freeze the dialog at 40%.
                 _deepseekImportProgress.value = null
+            }
+        }
+    }
+
+    fun previewQwenChat(uri: Uri) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                importSizeError(uri)?.let {
+                    emitSnackbar(SnackbarEvent(it)); _qwenImportPreview.value = null; return@launch
+                }
+                val importer = QwenChatImporter()
+                val parseResult = importer.extractAndParse { openImportStream(uri) }
+                if (parseResult.isSuccess) {
+                    _qwenImportPreview.value = importer.preview(parseResult.getOrThrow())
+                } else {
+                    emitSnackbar(SnackbarEvent(parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error)))
+                    _qwenImportPreview.value = null
+                }
+            } catch (e: OutOfMemoryError) {
+                emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
+                _qwenImportPreview.value = null
+            } catch (e: Exception) {
+                emitSnackbar(SnackbarEvent(e.localizedMessage ?: app.getString(R.string.unknown_error)))
+                _qwenImportPreview.value = null
+            }
+        }
+    }
+
+    fun clearQwenImportState() {
+        _qwenImportPreview.value = null
+        _qwenImportProgress.value = null
+        _qwenImportResult.value = null
+    }
+
+    fun importQwenChat(uri: Uri, strategy: ImportStrategy, selectedIds: Set<String>) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                _qwenImportProgress.value = 0.2f
+                importSizeError(uri)?.let {
+                    _qwenImportProgress.value = null
+                    emitSnackbar(SnackbarEvent(app.getString(R.string.qwen_import_error_detail, it)))
+                    return@launch
+                }
+
+                val importer = QwenChatImporter()
+                val parseResult = importer.extractAndParse { openImportStream(uri) }
+                if (parseResult.isFailure) {
+                    _qwenImportProgress.value = null
+                    emitSnackbar(SnackbarEvent(app.getString(R.string.qwen_import_error_detail, parseResult.exceptionOrNull()?.localizedMessage ?: app.getString(R.string.parse_error))))
+                    return@launch
+                }
+
+                _qwenImportProgress.value = 0.4f
+                val parsed = parseResult.getOrThrow()
+                val preview = importer.preview(parsed)
+                val importData = importer.toImportFormat(parsed, selectedIds)
+
+                if (preview.totalMessageCount == 0) {
+                    _qwenImportProgress.value = null
+                    emitSnackbar(SnackbarEvent(app.getString(R.string.qwen_import_no_data)))
+                    return@launch
+                }
+
+                _qwenImportProgress.value = 0.6f
+
+                val chatEntities = importData.conversations.map { ce ->
+                    ChatEntity(ce.id, ce.title, ce.lastUpdated, dataChangedAt = 0L, selectedBranchesJson = ce.selectedBranchesJson, systemPromptId = ce.systemPromptId, modelId = ce.modelId)
+                }
+                if (strategy == ImportStrategy.REPLACE) {
+                    val graph = planImportedLegacyMessages(importData.messages)
+                    conversations.importExternalConversationGraph(
+                        conversations = chatEntities,
+                        runs = graph.runs,
+                        messages = graph.messages,
+                        replace = true,
+                    )
+                    _qwenImportProgress.value = 0.8f
+                    _qwenImportResult.value = QwenChatImporter.ImportResult(chatEntities.size, graph.messages.size)
+                } else {
+                    val existingConvIds = conversations.getAllConversationsList().map { it.id }.toSet()
+                    val existingMsgIds = conversations.findExistingMessageIds(importData.messages.map { it.id }).toSet()
+                    val newCh = chatEntities.filterNot { it.id in existingConvIds }
+                    val newMessageDrafts = importData.messages.filterNot { it.id in existingMsgIds }
+                    val graph = planImportedLegacyMessages(newMessageDrafts)
+                    conversations.importExternalConversationGraph(
+                        conversations = newCh,
+                        runs = graph.runs,
+                        messages = graph.messages,
+                        replace = false,
+                    )
+                    _qwenImportProgress.value = 0.8f
+                    _qwenImportResult.value = QwenChatImporter.ImportResult(newCh.size, graph.messages.size)
+                }
+                onDataChanged()
+            } catch (e: OutOfMemoryError) {
+                emitSnackbar(SnackbarEvent(app.getString(R.string.import_out_of_memory)))
+            } catch (e: Exception) {
+                emitSnackbar(SnackbarEvent(app.getString(R.string.qwen_import_error_detail, e.localizedMessage ?: "")))
+            } finally {
+                // Early exits (oversize, parse failure, no data) must not freeze the dialog at 40%.
+                _qwenImportProgress.value = null
             }
         }
     }

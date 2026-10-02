@@ -832,4 +832,15 @@
     <string name="deepseek_import_progress">Đang nhập…</string>
     <string name="deepseek_import_no_data">Tệp này không chứa dữ liệu có thể nhập.</string>
     <string name="deepseek_import_attachments_notice">Tệp đính kèm được liệt kê trong tệp nhưng nội dung của chúng không thể khôi phục nên sẽ không được nhập.</string>
+    <string name="qwen_import_title">Nhập từ Qwen</string>
+    <string name="qwen_import_subtitle">Nhập các cuộc trò chuyện từ tệp xuất .json của Qwen.</string>
+    <string name="qwen_import_conversations">Cuộc trò chuyện</string>
+    <string name="qwen_import_messages">Tin nhắn</string>
+    <string name="qwen_import_error_detail">Nhập thất bại: %1$s</string>
+    <string name="qwen_import_success">Nhập thành công</string>
+    <string name="qwen_import_success_detail">Đã nhập %1$d cuộc trò chuyện (%2$d tin nhắn).</string>
+    <string name="qwen_import_import">Nhập</string>
+    <string name="qwen_import_progress">Đang nhập…</string>
+    <string name="qwen_import_no_data">Tệp này không chứa dữ liệu có thể nhập.</string>
+    <string name="qwen_import_attachments_notice">Tệp đính kèm được liệt kê trong tệp nhưng nội dung của chúng không thể khôi phục nên sẽ không được nhập.</string>
 </resources>

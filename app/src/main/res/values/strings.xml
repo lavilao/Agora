@@ -811,4 +811,15 @@
     <string name="deepseek_import_progress">Importing…</string>
     <string name="deepseek_import_no_data">This file contains no importable data.</string>
     <string name="deepseek_import_attachments_notice">Attachments are listed in the file but their files cannot be recovered, so they are not imported.</string>
+    <string name="qwen_import_title">Import from Qwen</string>
+    <string name="qwen_import_subtitle">Import conversations from a Qwen export .json file.</string>
+    <string name="qwen_import_conversations">Conversations</string>
+    <string name="qwen_import_messages">Messages</string>
+    <string name="qwen_import_error_detail">Failed to import: %1$s</string>
+    <string name="qwen_import_success">Import Successful</string>
+    <string name="qwen_import_success_detail">Imported %1$d conversations (%2$d messages).</string>
+    <string name="qwen_import_import">Import</string>
+    <string name="qwen_import_progress">Importing…</string>
+    <string name="qwen_import_no_data">This file contains no importable data.</string>
+    <string name="qwen_import_attachments_notice">Attachments are listed in the file but their files cannot be recovered, so they are not imported.</string>
 </resources>

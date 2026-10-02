@@ -826,4 +826,15 @@
     <string name="deepseek_import_progress">Импортирование…</string>
     <string name="deepseek_import_no_data">Этот файл не содержит данных для импорта.</string>
     <string name="deepseek_import_attachments_notice">Вложения указаны в файле, но их содержимое невозможно восстановить, поэтому они не импортируются.</string>
+    <string name="qwen_import_title">Импорт из Qwen</string>
+    <string name="qwen_import_subtitle">Импорт диалогов из файла экспорта Qwen .json.</string>
+    <string name="qwen_import_conversations">Диалоги</string>
+    <string name="qwen_import_messages">Сообщения</string>
+    <string name="qwen_import_error_detail">Не удалось импортировать: %1$s</string>
+    <string name="qwen_import_success">Импорт выполнен</string>
+    <string name="qwen_import_success_detail">Импортировано диалогов: %1$d (сообщений: %2$d).</string>
+    <string name="qwen_import_import">Импорт</string>
+    <string name="qwen_import_progress">Импортирование…</string>
+    <string name="qwen_import_no_data">Этот файл не содержит данных для импорта.</string>
+    <string name="qwen_import_attachments_notice">Вложения указаны в файле, но их содержимое невозможно восстановить, поэтому они не импортируются.</string>
 </resources>

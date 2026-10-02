@@ -14,13 +14,19 @@ class DataControlImportStrategySourceContractTest {
             "app/src/main/java/com/newoether/agora/ui/settings/datacontrol/SettingsDataControlPage.kt",
         ).readText().normalizeLines() + sourceFile(
             "app/src/main/java/com/newoether/agora/ui/settings/datacontrol/NativeDataSelectionDialogs.kt",
+        ).readText().normalizeLines() + sourceFile(
+            "app/src/main/java/com/newoether/agora/ui/settings/datacontrol/ThirdPartyImportDialogs.kt",
         ).readText().normalizeLines()
 
-        assertEquals(3, Regex("""\bPillTabSwitcher\(""").findAll(page).count())
+        // Native selection + the Claude, GPT, DeepSeek and Qwen preview dialogs.
+        assertEquals(5, Regex("""\bPillTabSwitcher\(""").findAll(page).count())
         assertFalse(page.contains("StrategyChip("))
         assertFalse(page.contains("FilterChip("))
         assertTrue(page.contains("var claudeImportStrategy by remember"))
         assertTrue(page.contains("var gptImportStrategy by remember"))
+        assertTrue(
+            page.contains("var strategy by remember(preview) { mutableStateOf(DataImporter.ImportStrategy.MERGE) }"),
+        )
         assertTrue(
             Regex(
                 """importClaudeChat\(\s*uri,\s*claudeImportStrategy,\s*finalIds,""",
@@ -39,9 +45,10 @@ class DataControlImportStrategySourceContractTest {
             "app/src/main/java/com/newoether/agora/ui/settings/datacontrol/SettingsDataControlPage.kt",
         ).readText().normalizeLines()
 
-        assertTrue(page.contains("pendingExternalReplace = true to finalIds"))
-        assertTrue(page.contains("pendingExternalReplace = false to finalIds"))
-        assertTrue(page.contains("pendingExternalReplace?.let { (isClaude, selectedIds) ->"))
+        assertTrue(page.contains("pendingExternalReplace = \"claude\" to finalIds"))
+        assertTrue(page.contains("pendingExternalReplace = \"deepseek\" to finalIds"))
+        assertTrue(page.contains("pendingExternalReplace = \"qwen\" to finalIds"))
+        assertTrue(page.contains("pendingExternalReplace?.let { (provider, selectedIds) ->"))
         assertTrue(page.contains("R.string.external_import_replace_confirm_title"))
         assertTrue(page.contains("fontWeight = FontWeight.Bold"))
         assertTrue(page.contains("contentColor = MaterialTheme.colorScheme.error"))

@@ -820,4 +820,15 @@
     <string name="deepseek_import_progress">正在导入…</string>
     <string name="deepseek_import_no_data">此文件不包含可导入的数据。</string>
     <string name="deepseek_import_attachments_notice">附件已在文件中列出，但其内容无法恢复，因此不会被导入。</string>
+    <string name="qwen_import_title">从 Qwen 导入</string>
+    <string name="qwen_import_subtitle">从 Qwen 导出的 .json 文件导入对话。</string>
+    <string name="qwen_import_conversations">对话</string>
+    <string name="qwen_import_messages">消息</string>
+    <string name="qwen_import_error_detail">导入失败：%1$s</string>
+    <string name="qwen_import_success">导入成功</string>
+    <string name="qwen_import_success_detail">已导入 %1$d 个对话（%2$d 条消息）。</string>
+    <string name="qwen_import_import">导入</string>
+    <string name="qwen_import_progress">正在导入…</string>
+    <string name="qwen_import_no_data">此文件不包含可导入的数据。</string>
+    <string name="qwen_import_attachments_notice">附件已在文件中列出，但其内容无法恢复，因此不会被导入。</string>
 </resources>

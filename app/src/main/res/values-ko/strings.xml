@@ -826,4 +826,15 @@
     <string name="deepseek_import_progress">가져오는 중…</string>
     <string name="deepseek_import_no_data">이 파일에는 가져올 데이터가 없습니다.</string>
     <string name="deepseek_import_attachments_notice">첨부 파일은 파일에 나열되어 있지만 내용을 복구할 수 없어 가져오지 않습니다.</string>
+    <string name="qwen_import_title">Qwen에서 가져오기</string>
+    <string name="qwen_import_subtitle">Qwen 내보낸 .json 파일에서 대화를 가져옵니다.</string>
+    <string name="qwen_import_conversations">대화</string>
+    <string name="qwen_import_messages">메시지</string>
+    <string name="qwen_import_error_detail">가져오기 실패: %1$s</string>
+    <string name="qwen_import_success">가져오기 성공</string>
+    <string name="qwen_import_success_detail">%1$d개의 대화(%2$d개 메시지)를 가져왔습니다.</string>
+    <string name="qwen_import_import">가져오기</string>
+    <string name="qwen_import_progress">가져오는 중…</string>
+    <string name="qwen_import_no_data">이 파일에는 가져올 데이터가 없습니다.</string>
+    <string name="qwen_import_attachments_notice">첨부 파일은 파일에 나열되어 있지만 내용을 복구할 수 없어 가져오지 않습니다.</string>
 </resources>

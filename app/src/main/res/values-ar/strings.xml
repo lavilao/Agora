@@ -826,4 +826,15 @@
     <string name="deepseek_import_progress">جارٍ الاستيراد…</string>
     <string name="deepseek_import_no_data">لا يحتوي هذا الملف على بيانات قابلة للاستيراد.</string>
     <string name="deepseek_import_attachments_notice">المرفقات مذكورة في الملف لكن لا يمكن استرجاع ملفاتها، لذلك لا يتم استيرادها.</string>
+    <string name="qwen_import_title">الاستيراد من Qwen</string>
+    <string name="qwen_import_subtitle">استيراد المحادثات من ملف تصدير Qwen بصيغة .json.</string>
+    <string name="qwen_import_conversations">المحادثات</string>
+    <string name="qwen_import_messages">الرسائل</string>
+    <string name="qwen_import_error_detail">فشل الاستيراد: %1$s</string>
+    <string name="qwen_import_success">تم الاستيراد بنجاح</string>
+    <string name="qwen_import_success_detail">تم استيراد %1$d من المحادثات (%2$d رسالة).</string>
+    <string name="qwen_import_import">استيراد</string>
+    <string name="qwen_import_progress">جارٍ الاستيراد…</string>
+    <string name="qwen_import_no_data">لا يحتوي هذا الملف على بيانات قابلة للاستيراد.</string>
+    <string name="qwen_import_attachments_notice">المرفقات مذكورة في الملف لكن لا يمكن استرجاع ملفاتها، لذلك لا يتم استيرادها.</string>
 </resources>

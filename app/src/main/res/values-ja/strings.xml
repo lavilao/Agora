@@ -826,4 +826,15 @@
     <string name="deepseek_import_progress">インポート中…</string>
     <string name="deepseek_import_no_data">このファイルにはインポート可能なデータがありません。</string>
     <string name="deepseek_import_attachments_notice">添付ファイルはファイル内に記載されていますが、その内容を復元できないため、インポートされません。</string>
+    <string name="qwen_import_title">Qwen からインポート</string>
+    <string name="qwen_import_subtitle">Qwen のエクスポート .json ファイルから会話をインポートします。</string>
+    <string name="qwen_import_conversations">会話</string>
+    <string name="qwen_import_messages">メッセージ</string>
+    <string name="qwen_import_error_detail">インポートに失敗しました: %1$s</string>
+    <string name="qwen_import_success">インポート成功</string>
+    <string name="qwen_import_success_detail">%1$d 件の会話（%2$d 件のメッセージ）をインポートしました。</string>
+    <string name="qwen_import_import">インポート</string>
+    <string name="qwen_import_progress">インポート中…</string>
+    <string name="qwen_import_no_data">このファイルにはインポート可能なデータがありません。</string>
+    <string name="qwen_import_attachments_notice">添付ファイルはファイル内に記載されていますが、その内容を復元できないため、インポートされません。</string>
 </resources>

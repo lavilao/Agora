@@ -826,4 +826,15 @@
     <string name="deepseek_import_progress">Import en cours…</string>
     <string name="deepseek_import_no_data">Ce fichier ne contient aucune donnée importable.</string>
     <string name="deepseek_import_attachments_notice">Les pièces jointes sont listées dans le fichier, mais leurs contenus ne peuvent pas être récupérés ; elles ne sont donc pas importées.</string>
+    <string name="qwen_import_title">Importer depuis Qwen</string>
+    <string name="qwen_import_subtitle">Importe des conversations depuis un fichier d’export Qwen .json.</string>
+    <string name="qwen_import_conversations">Conversations</string>
+    <string name="qwen_import_messages">Messages</string>
+    <string name="qwen_import_error_detail">Échec de l’import : %1$s</string>
+    <string name="qwen_import_success">Import réussi</string>
+    <string name="qwen_import_success_detail">%1$d conversations importées (%2$d messages).</string>
+    <string name="qwen_import_import">Importer</string>
+    <string name="qwen_import_progress">Import en cours…</string>
+    <string name="qwen_import_no_data">Ce fichier ne contient aucune donnée importable.</string>
+    <string name="qwen_import_attachments_notice">Les pièces jointes sont listées dans le fichier, mais leurs contenus ne peuvent pas être récupérés ; elles ne sont donc pas importées.</string>
 </resources>

@@ -20,14 +20,14 @@ Before a native import, Agora loads a preview and lists the categories present. 
 
 Native preview loading, import, and export use non-cancelable circular progress dialogs labeled **Loading…**, **Importing…**, and **Exporting…** respectively.
 
-## ChatGPT and Claude Imports
+## ChatGPT, Claude, DeepSeek and Qwen Imports
 
-ChatGPT and Claude export ZIP files can be imported directly. Preview the export and choose which conversations to import.
+ChatGPT and Claude export ZIP files, as well as DeepSeek and Qwen export JSON files, can be imported directly. Preview the export and choose which conversations to import.
 
 - **Merge** keeps other existing conversations and imports the selected conversations.
 - **Replace** deletes all existing conversations and keeps only the selected imported conversations. Agora shows a second destructive confirmation before it starts.
 
-These imports use a non-cancelable percentage-based linear progress dialog. Claude attachment records may contain metadata without the original attachment bytes, depending on the source export.
+These imports use a non-cancelable percentage-based linear progress dialog. Claude attachment records may contain metadata without the original attachment bytes, depending on the source export. DeepSeek and Qwen attachments are metadata-only in the export and are reported in the preview without being imported.
 
 ## Automatic Backup
 

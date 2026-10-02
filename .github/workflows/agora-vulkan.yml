@@ -203,6 +203,27 @@ jobs:
                   raise SystemExit("no encuentro el add_subdirectory de llama.cpp")
               cmake = cmake.replace(anchor, define + anchor, 1)
 
+          # 6) armv7 + VFPv4 (Cortex-A53 en ROM 32-bit): el toolchain del NDK
+          #    r28 ya fuerza -mfpu=neon para armeabi-v7a (kernels NEON de ggml
+          #    activos), pero neon a secas es VFPv3. Subir ggml-cpu a
+          #    neon-vfpv4 activa VFMA (__ARM_FEATURE_FMA, paths de quants.c)
+          #    y las conversiones FP16 hardware de VFPv4 (escalares d/id).
+          neon = '\n'.join([
+              '# armv7 con VFPv4: VFMA + conversiones FP16 hardware (mejora el',
+              '# -mfpu=neon que el toolchain del NDK ya anade para armeabi-v7a).',
+              'if(ANDROID_ABI STREQUAL "armeabi-v7a")',
+              '    if(TARGET ggml-cpu)',
+              '        target_compile_options(ggml-cpu PRIVATE -mfpu=neon-vfpv4)',
+              '    endif()',
+              'endif()',
+              '',
+              '']) + '\n'
+          anchor_neon = 'foreach(backend IN LISTS AGORA_ANDROID_CPU_BACKENDS)'
+          if '-mfpu=neon-vfpv4' not in cmake:
+              if anchor_neon not in cmake:
+                  raise SystemExit("no encuentro el foreach de backends")
+              cmake = cmake.replace(anchor_neon, neon + anchor_neon, 1)
+
           path.write_text(cmake)
           print("Patched CMakeLists.txt OK")
           PYEOF
@@ -211,6 +232,7 @@ jobs:
           grep -q 'set(GGML_OPENMP ON CACHE BOOL "" FORCE)'        app/src/main/cpp/CMakeLists.txt || { echo "OpenMP no ON"; exit 1; }
           grep -q 'ggml-cpu ggml-vulkan'                            app/src/main/cpp/CMakeLists.txt || { echo "rama armv7 sin ggml-vulkan"; exit 1; }
           grep -q 'VULKAN_HPP_TYPESAFE_CONVERSION'                 app/src/main/cpp/CMakeLists.txt || { echo "falta TYPESAFE"; exit 1; }
+          grep -q 'target_compile_options(ggml-cpu PRIVATE -mfpu=neon-vfpv4)' app/src/main/cpp/CMakeLists.txt || { echo "falta neon-vfpv4"; exit 1; }
           echo "CMakeLists.txt parcheado y verificado"
 
       - name: Copiar libomp.so del NDK a jniLibs

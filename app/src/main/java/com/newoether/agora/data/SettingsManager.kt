@@ -178,6 +178,17 @@ class SettingsManager(private val context: Context) {
     val localRuntimePreference: Flow<String> = context.dataStore.data.map {
         normalizeLocalRuntimePreference(it[LOCAL_RUNTIME_PREFERENCE])
     }
+    /** Engine capability switches as one atomic snapshot; see [LocalEngineTuning]. */
+    val localEngineTuning: Flow<LocalEngineTuning> = context.dataStore.data.map { prefs ->
+        LocalEngineTuning(
+            flashAttention = normalizeLocalFlashAttention(prefs[LOCAL_FLASH_ATTENTION]),
+            useMmap = prefs[LOCAL_MMAP] ?: DEFAULT_LOCAL_MMAP,
+            cacheTypeK = normalizeLocalKvCacheType(prefs[LOCAL_CACHE_TYPE_K]),
+            cacheTypeV = normalizeLocalKvCacheType(prefs[LOCAL_CACHE_TYPE_V]),
+            swaFull = prefs[LOCAL_SWA_FULL] ?: DEFAULT_LOCAL_SWA_FULL,
+            threads = normalizeLocalThreads(prefs[LOCAL_THREADS]),
+        )
+    }
     val customProviders: Flow<List<CustomProviderConfig>> = modelPreferenceStore.customProviders
 
     val showDocumentationFab: Flow<Boolean> = context.dataStore.data.map { it[SHOW_DOCUMENTATION_FAB] ?: true }
@@ -567,6 +578,42 @@ class SettingsManager(private val context: Context) {
     suspend fun saveLocalRuntimePreference(preference: String) {
         context.dataStore.edit {
             it[LOCAL_RUNTIME_PREFERENCE] = normalizeLocalRuntimePreference(preference)
+        }
+    }
+
+    suspend fun saveLocalFlashAttention(mode: String) {
+        context.dataStore.edit {
+            it[LOCAL_FLASH_ATTENTION] = normalizeLocalFlashAttention(mode)
+        }
+    }
+
+    suspend fun saveLocalMmap(enabled: Boolean) {
+        context.dataStore.edit {
+            it[LOCAL_MMAP] = enabled
+        }
+    }
+
+    suspend fun saveLocalCacheTypeK(type: String) {
+        context.dataStore.edit {
+            it[LOCAL_CACHE_TYPE_K] = normalizeLocalKvCacheType(type)
+        }
+    }
+
+    suspend fun saveLocalCacheTypeV(type: String) {
+        context.dataStore.edit {
+            it[LOCAL_CACHE_TYPE_V] = normalizeLocalKvCacheType(type)
+        }
+    }
+
+    suspend fun saveLocalSwaFull(enabled: Boolean) {
+        context.dataStore.edit {
+            it[LOCAL_SWA_FULL] = enabled
+        }
+    }
+
+    suspend fun saveLocalThreads(threads: Int) {
+        context.dataStore.edit {
+            it[LOCAL_THREADS] = normalizeLocalThreads(threads)
         }
     }
 

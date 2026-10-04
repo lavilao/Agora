@@ -133,10 +133,35 @@ enum class LlamaBackendPreference(val nativeValue: String) {
     }
 }
 
+/**
+ * Engine capability switches for the embedded llama.cpp runtime, mirroring the toggles
+ * koboldcpp exposes on its command line. Applied when a model is loaded, so changing any
+ * of them takes effect from the next load of the resident model.
+ *
+ * @param flashAttention "auto" (backend decides), "on" or "off" (-fa / --flash-attn).
+ * @param useMmap memory-map the GGUF instead of reading it into RAM (--mmap / --no-mmap).
+ * @param cacheTypeK KV cache element type for K (-ctk): f32, f16, bf16, q8_0, q4_0,
+ *   q4_1, iq4_nl, q5_0 or q5_1.
+ * @param cacheTypeV KV cache element type for V (-ctv); quantized values need Flash
+ *   Attention, otherwise the engine keeps V in f16.
+ * @param swaFull full-size SWA KV cache (--swa-full): restores long-conversation KV reuse
+ *   on sliding-window models at the cost of memory.
+ * @param threads CPU threads for decode and prefill; 0 keeps the engine default (--threads).
+ */
+data class LlamaEngineOptions(
+    val flashAttention: String = "auto",
+    val useMmap: Boolean = true,
+    val cacheTypeK: String = "f16",
+    val cacheTypeV: String = "f16",
+    val swaFull: Boolean = false,
+    val threads: Int = 0,
+)
+
 class LlamaChatEngine(
     val modelPath: String,
     val nCtx: Int = 2048,
     val backendPreference: LlamaBackendPreference = LlamaBackendPreference.AUTO,
+    val engineOptions: LlamaEngineOptions = LlamaEngineOptions(),
 ) : Closeable {
     companion object {
         private const val TAG = "LlamaChatEngine"
@@ -153,7 +178,9 @@ class LlamaChatEngine(
     private var loadedMmprojPath: String? = null
     private val lock = ReentrantReadWriteLock()
 
-    private external fun nativeChatLoadModel(path: String, nCtx: Int, backendPref: String): Long
+    private external fun nativeChatLoadModel(
+        path: String, nCtx: Int, backendPref: String, options: LlamaEngineOptions,
+    ): Long
     private external fun nativeChatGetTemplate(handle: Long): String?
     private external fun nativeChatApplyTemplate(
         handle: Long,
@@ -178,9 +205,14 @@ class LlamaChatEngine(
 
     fun isLoaded(): Boolean = nativeHandle != 0L
 
-    fun matches(path: String, contextSize: Int, backend: LlamaBackendPreference): Boolean =
+    fun matches(
+        path: String,
+        contextSize: Int,
+        backend: LlamaBackendPreference,
+        options: LlamaEngineOptions,
+    ): Boolean =
         nativeHandle != 0L && modelPath == path && nCtx == contextSize &&
-            backendPreference == backend
+            backendPreference == backend && engineOptions == options
 
     fun load(): Boolean {
         if (!File(modelPath).exists()) {
@@ -189,12 +221,19 @@ class LlamaChatEngine(
         }
         lock.writeLock().lock()
         try {
-            nativeHandle = nativeChatLoadModel(modelPath, nCtx, backendPreference.nativeValue)
+            nativeHandle = nativeChatLoadModel(
+                modelPath, nCtx, backendPreference.nativeValue, engineOptions,
+            )
             if (nativeHandle == 0L) {
                 DebugLog.e(TAG, "Failed to load model")
                 return false
             }
-            DebugLog.d(TAG, "Model loaded, nCtx=$nCtx, backend=${backendPreference.nativeValue}")
+            DebugLog.d(
+                TAG,
+                "Model loaded, nCtx=$nCtx, backend=${backendPreference.nativeValue}, " +
+                    "options=${engineOptions.flashAttention}/${engineOptions.cacheTypeK}/" +
+                    "${engineOptions.cacheTypeV}",
+            )
             return true
         } finally {
             lock.writeLock().unlock()

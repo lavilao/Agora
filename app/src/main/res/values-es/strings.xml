@@ -814,6 +814,21 @@
     <string name="local_runtime_vulkan_status_old">El dispositivo informa de Vulkan %1$s. El backend de Vulkan requiere Vulkan 1.2 o superior, por lo que la aceleración GPU no está disponible en este dispositivo.</string>
     <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s está presente, pero el backend de GPU no pudo inicializarse.</string>
     <string name="local_runtime_vulkan_status_no_loader">Vulkan no está disponible en este sistema.</string>
+    <string name="local_engine_tuning_title">Ajuste del motor</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">Calcula la atención en una sola pasada fusionada, sin materializar la matriz completa de puntuaciones. Suele ser más rápido y ligero; la caché V cuantizada lo requiere. Auto lo activa cuando el backend lo admite. Se aplica desde la próxima carga del modelo.</string>
+    <string name="local_engine_on">Activado</string>
+    <string name="local_engine_off">Desactivado</string>
+    <string name="local_mmap_title">Mapear el archivo del modelo en memoria</string>
+    <string name="local_mmap_desc">Lee el archivo del modelo a través de la caché de páginas en lugar de copiarlo a la RAM. Desactivarlo cambia cargas más lentas y más memoria por velocidades de generación más estables. Se aplica desde la próxima carga del modelo.</string>
+    <string name="local_kv_cache_k_title">Tipo de caché KV (K)</string>
+    <string name="local_kv_cache_v_title">Tipo de caché KV (V)</string>
+    <string name="local_kv_cache_desc">Tipo de elemento de las claves de atención en caché. Los tipos cuantizados reducen mucho la memoria en contextos largos con un pequeño coste de calidad. Se aplica desde la próxima carga del modelo.</string>
+    <string name="local_kv_cache_v_desc">Tipo de elemento de los valores de atención en caché. Los tipos cuantizados requieren Flash Attention; de lo contrario, V se mantiene en f16. Se aplica desde la próxima carga del modelo.</string>
+    <string name="local_swa_full_title">Caché SWA de tamaño completo</string>
+    <string name="local_swa_full_desc">Los modelos de ventana deslizante recortan su caché al tamaño de la ventana de atención para ahorrar memoria, lo que impide reutilizar los turnos anteriores. Actívalo para conversaciones largas. Se aplica desde la próxima carga del modelo.</string>
+    <string name="local_threads_title">Hilos de CPU</string>
+    <string name="local_threads_desc">Hilos que usa el motor para el prefill y la generación. Menos hilos puede ayudar cuando los núcleos se ralentizan juntos. Se aplica desde la próxima carga del modelo.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Importar de DeepSeek</string>
     <string name="deepseek_import_subtitle">Importa conversaciones de un archivo .json exportado de DeepSeek.</string>

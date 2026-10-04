@@ -799,6 +799,21 @@
     <string name="local_runtime_vulkan_status_old">Device reports Vulkan %1$s. The Vulkan backend requires Vulkan 1.2 or newer, so GPU acceleration is unavailable on this device.</string>
     <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s is present, but the GPU backend failed to initialize.</string>
     <string name="local_runtime_vulkan_status_no_loader">Vulkan is not available on this system.</string>
+    <string name="local_engine_tuning_title">Engine Tuning</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">Compute attention in one fused pass without materializing the full score matrix. Usually faster and leaner, and required for a quantized V cache. Auto enables it whenever the backend supports it. Applies from the next model load.</string>
+    <string name="local_engine_on">On</string>
+    <string name="local_engine_off">Off</string>
+    <string name="local_mmap_title">Memory-map model file</string>
+    <string name="local_mmap_desc">Read the model file through the page cache instead of copying it into RAM. Turning it off trades slower loads and higher memory for steadier generation speeds. Applies from the next model load.</string>
+    <string name="local_kv_cache_k_title">KV cache type K</string>
+    <string name="local_kv_cache_v_title">KV cache type V</string>
+    <string name="local_kv_cache_desc">Element type of the cached attention keys. Quantized types greatly shrink long-context memory for a small quality cost. Applies from the next model load.</string>
+    <string name="local_kv_cache_v_desc">Element type of the cached attention values. Quantized types require Flash Attention; otherwise V stays in f16. Applies from the next model load.</string>
+    <string name="local_swa_full_title">Full-size SWA cache</string>
+    <string name="local_swa_full_desc">Sliding-window models trim their cache to the attention window to save memory, which stops earlier turns from being reused. Turn on for long conversations. Applies from the next model load.</string>
+    <string name="local_threads_title">CPU threads</string>
+    <string name="local_threads_desc">Threads the engine uses for prefill and generation. Fewer threads can help when the cores throttle together. Applies from the next model load.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Import from DeepSeek</string>
     <string name="deepseek_import_subtitle">Import conversations from a DeepSeek export .json file.</string>

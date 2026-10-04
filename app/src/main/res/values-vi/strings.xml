@@ -820,6 +820,21 @@
     <string name="local_runtime_vulkan_status_old">Thiết bị báo cáo Vulkan %1$s. Backend Vulkan yêu cầu Vulkan 1.2 trở lên nên không thể dùng tăng tốc GPU trên thiết bị này.</string>
     <string name="local_runtime_vulkan_status_init_failed">Có Vulkan %1$s nhưng không thể khởi tạo backend GPU.</string>
     <string name="local_runtime_vulkan_status_no_loader">Vulkan không khả dụng trên hệ thống này.</string>
+    <string name="local_engine_tuning_title">Tinh chỉnh engine</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">Tính attention trong một lượt hợp nhất, không tạo toàn bộ ma trận điểm. Thường nhanh hơn và tiết kiệm hơn; bắt buộc với bộ nhớ V lượng tử hóa. Tự động bật khi backend hỗ trợ. Áp dụng từ lần tải mô hình tiếp theo.</string>
+    <string name="local_engine_on">Bật</string>
+    <string name="local_engine_off">Tắt</string>
+    <string name="local_mmap_title">Ánh xạ tệp mô hình vào bộ nhớ</string>
+    <string name="local_mmap_desc">Đọc tệp mô hình qua bộ nhớ đệm trang thay vì sao chép vào RAM. Tắt nó đánh đổi thời gian tải chậm hơn và nhiều bộ nhớ hơn để lấy tốc độ tạo ổn định hơn. Áp dụng từ lần tải mô hình tiếp theo.</string>
+    <string name="local_kv_cache_k_title">Kiểu bộ nhớ KV K</string>
+    <string name="local_kv_cache_v_title">Kiểu bộ nhớ KV V</string>
+    <string name="local_kv_cache_desc">Kiểu phần tử của khóa attention được lưu. Kiểu lượng tử hóa giảm mạnh bộ nhớ ngữ cảnh dài với chi phí chất lượng nhỏ. Áp dụng từ lần tải mô hình tiếp theo.</string>
+    <string name="local_kv_cache_v_desc">Kiểu phần tử của giá trị attention được lưu. Kiểu lượng tử hóa cần Flash Attention, nếu không V giữ ở f16. Áp dụng từ lần tải mô hình tiếp theo.</string>
+    <string name="local_swa_full_title">Bộ nhớ SWA kích thước đầy đủ</string>
+    <string name="local_swa_full_desc">Các mô hình cửa sổ trượt cắt bớt bộ nhớ theo cửa sổ attention để tiết kiệm RAM, khiến không thể tái dùng các lượt trước. Bật cho các cuộc trò chuyện dài. Áp dụng từ lần tải mô hình tiếp theo.</string>
+    <string name="local_threads_title">Luồng CPU</string>
+    <string name="local_threads_desc">Số luồng engine dùng cho tiền điền và tạo văn bản. Giảm luồng có thể giúp khi các nhân bị giới hạn cùng nhau. Áp dụng từ lần tải mô hình tiếp theo.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Nhập từ DeepSeek</string>
     <string name="deepseek_import_subtitle">Nhập các cuộc trò chuyện từ tệp xuất .json của DeepSeek.</string>

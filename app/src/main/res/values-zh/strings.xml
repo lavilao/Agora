@@ -808,6 +808,21 @@
     <string name="local_runtime_vulkan_status_old">设备报告的 Vulkan 版本为 %1$s。Vulkan 后端需要 Vulkan 1.2 或更高版本，因此此设备无法使用 GPU 加速。</string>
     <string name="local_runtime_vulkan_status_init_failed">存在 Vulkan %1$s，但无法初始化 GPU 后端。</string>
     <string name="local_runtime_vulkan_status_no_loader">此系统不支持 Vulkan。</string>
+    <string name="local_engine_tuning_title">引擎调优</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">以单次融合计算注意力，无需展开完整的得分矩阵。通常更快、更省内存；量化 V 缓存必须开启。自动模式在后端支持时启用。下次加载模型时生效。</string>
+    <string name="local_engine_on">开</string>
+    <string name="local_engine_off">关</string>
+    <string name="local_mmap_title">内存映射模型文件</string>
+    <string name="local_mmap_desc">通过页缓存读取模型文件，而不是复制进内存。关闭它意味着更慢的加载和更多内存，但生成速度更稳定。下次加载模型时生效。</string>
+    <string name="local_kv_cache_k_title">KV 缓存类型 K</string>
+    <string name="local_kv_cache_v_title">KV 缓存类型 V</string>
+    <string name="local_kv_cache_desc">缓存的注意力键的元素类型。量化类型以轻微的质量损失大幅降低长上下文内存。下次加载模型时生效。</string>
+    <string name="local_kv_cache_v_desc">缓存的注意力值的元素类型。量化类型需要 Flash Attention，否则 V 保持 f16。下次加载模型时生效。</string>
+    <string name="local_swa_full_title">全尺寸 SWA 缓存</string>
+    <string name="local_swa_full_desc">滑动窗口模型会把缓存裁剪到注意力窗口以节省内存，这会阻止复用之前的轮次。长对话时请开启。下次加载模型时生效。</string>
+    <string name="local_threads_title">CPU 线程</string>
+    <string name="local_threads_desc">引擎用于预填充和生成的线程数。当核心同时降频时，减少线程可能有帮助。下次加载模型时生效。</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">从 DeepSeek 导入</string>
     <string name="deepseek_import_subtitle">从 DeepSeek 导出的 .json 文件导入对话。</string>

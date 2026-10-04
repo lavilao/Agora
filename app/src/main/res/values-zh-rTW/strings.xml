@@ -817,6 +817,21 @@
     <string name="local_runtime_vulkan_status_old">裝置回報的 Vulkan 版本為 %1$s。Vulkan 後端需要 Vulkan 1.2 或更新版本，因此此裝置無法使用 GPU 加速。</string>
     <string name="local_runtime_vulkan_status_init_failed">存在 Vulkan %1$s，但無法初始化 GPU 後端。</string>
     <string name="local_runtime_vulkan_status_no_loader">此系統不支援 Vulkan。</string>
+    <string name="local_engine_tuning_title">引擎調校</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">以單次融合計算注意力，無需展開完整的得分矩陣。通常更快、更省記憶體；量化 V 快取必須開啟。自動模式在後端支援時啟用。下次載入模型時生效。</string>
+    <string name="local_engine_on">開</string>
+    <string name="local_engine_off">關</string>
+    <string name="local_mmap_title">記憶體映射模型檔案</string>
+    <string name="local_mmap_desc">透過頁面快取讀取模型檔案，而非複製進記憶體。關閉它代表更慢的載入與更多記憶體，但生成速度更穩定。下次載入模型時生效。</string>
+    <string name="local_kv_cache_k_title">KV 快取類型 K</string>
+    <string name="local_kv_cache_v_title">KV 快取類型 V</string>
+    <string name="local_kv_cache_desc">快取的注意力鍵的元素類型。量化類型以輕微的品質損失大幅降低長上下文記憶體。下次載入模型時生效。</string>
+    <string name="local_kv_cache_v_desc">快取的注意力值的元素類型。量化類型需要 Flash Attention，否則 V 維持 f16。下次載入模型時生效。</string>
+    <string name="local_swa_full_title">全尺寸 SWA 快取</string>
+    <string name="local_swa_full_desc">滑動視窗模型會將快取裁剪到注意力視窗以節省記憶體，這會阻止複用之前的輪次。長對話時請開啟。下次載入模型時生效。</string>
+    <string name="local_threads_title">CPU 執行緒</string>
+    <string name="local_threads_desc">引擎用於預填與生成的執行緒數。當核心同時降頻時，減少執行緒可能有幫助。下次載入模型時生效。</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">從 DeepSeek 匯入</string>
     <string name="deepseek_import_subtitle">從 DeepSeek 匯出的 .json 檔案匯入對話。</string>

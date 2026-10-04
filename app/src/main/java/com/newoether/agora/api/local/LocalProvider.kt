@@ -75,6 +75,7 @@ class LocalProvider(
         val backendPreference = LlamaBackendPreference.fromNative(
             settings.localRuntimePreference.first()
         )
+        val engineTuning = settings.localEngineTuning.first()
 
         // The process runtime owns strict FIFO admission and the single Chat-or-Embedding resident.
         // This block covers model/context mutation, template rendering, and complete generation.
@@ -82,6 +83,14 @@ class LocalProvider(
             modelPath = modelConfig.localFilePath,
             nCtx = modelConfig.nCtx,
             backendPreference = backendPreference,
+            engineOptions = LlamaEngineOptions(
+                flashAttention = engineTuning.flashAttention,
+                useMmap = engineTuning.useMmap,
+                cacheTypeK = engineTuning.cacheTypeK,
+                cacheTypeV = engineTuning.cacheTypeV,
+                swaFull = engineTuning.swaFull,
+                threads = engineTuning.threads,
+            ),
         ) { engine ->
 
         // Build template messages, collecting images per-message with <__media__> markers

@@ -814,6 +814,21 @@
     <string name="local_runtime_vulkan_status_old">Устройство сообщает о Vulkan %1$s. Для бэкенда Vulkan требуется версия 1.2 или новее, поэтому ускорение GPU на этом устройстве недоступно.</string>
     <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s присутствует, но не удалось инициализировать GPU-бэкенд.</string>
     <string name="local_runtime_vulkan_status_no_loader">Vulkan недоступен в этой системе.</string>
+    <string name="local_engine_tuning_title">Настройка движка</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">Вычисляет внимание одним объединённым проходом, не материализуя полную матрицу оценок. Обычно быстрее и экономичнее; обязателен для квантованного V-кэша. «Авто» включает его, когда бэкенд поддерживает. Применится при следующей загрузке модели.</string>
+    <string name="local_engine_on">Вкл</string>
+    <string name="local_engine_off">Выкл</string>
+    <string name="local_mmap_title">Отображение файла модели в память</string>
+    <string name="local_mmap_desc">Читает файл модели через страничный кэш вместо копирования в ОЗУ. Отключение меняет более медленную загрузку и больший расход памяти на более стабильную скорость генерации. Применится при следующей загрузке модели.</string>
+    <string name="local_kv_cache_k_title">Тип KV-кэша K</string>
+    <string name="local_kv_cache_v_title">Тип KV-кэша V</string>
+    <string name="local_kv_cache_desc">Тип элементов кэшированных ключей внимания. Квантованные типы заметно сокращают память на длинных контекстах при небольшом снижении качества. Применится при следующей загрузке модели.</string>
+    <string name="local_kv_cache_v_desc">Тип элементов кэшированных значений внимания. Квантованные типы требуют Flash Attention, иначе V остаётся в f16. Применится при следующей загрузке модели.</string>
+    <string name="local_swa_full_title">SWA-кэш полного размера</string>
+    <string name="local_swa_full_desc">Модели со скользящим окном обрезают кэш до окна внимания ради экономии памяти, что мешает повторному использованию прошлых ходов. Включите для долгих бесед. Применится при следующей загрузке модели.</string>
+    <string name="local_threads_title">Потоки CPU</string>
+    <string name="local_threads_desc">Число потоков движка для предзаполнения и генерации. Меньше потоков может помочь, когда ядра сбрасывают частоту одновременно. Применится при следующей загрузке модели.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Импорт из DeepSeek</string>
     <string name="deepseek_import_subtitle">Импорт диалогов из файла экспорта DeepSeek .json.</string>

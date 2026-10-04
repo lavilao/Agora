@@ -20,6 +20,7 @@ internal sealed interface LocalModelIdentity {
         override val canonicalPath: String,
         val nCtx: Int,
         val backendPreference: LlamaBackendPreference,
+        val engineOptions: LlamaEngineOptions,
     ) : LocalModelIdentity
 
     data class Embedding(
@@ -135,10 +136,13 @@ internal object LocalModelRuntime {
         modelPath: String,
         nCtx: Int,
         backendPreference: LlamaBackendPreference = LlamaBackendPreference.AUTO,
+        engineOptions: LlamaEngineOptions = LlamaEngineOptions(),
         block: suspend (LlamaChatEngine) -> Unit,
     ): Boolean = tasks.run {
         if (nativeBackendDirectory == null) return@run false
-        val identity = LocalModelIdentity.Chat(canonicalize(modelPath), nCtx, backendPreference)
+        val identity = LocalModelIdentity.Chat(
+            canonicalize(modelPath), nCtx, backendPreference, engineOptions,
+        )
         val current = resident
         val engine = if (current is Resident.Chat && current.identity == identity) {
             current.engine
@@ -148,6 +152,7 @@ internal object LocalModelRuntime {
                 identity.canonicalPath,
                 identity.nCtx,
                 identity.backendPreference,
+                identity.engineOptions,
             )
             if (!loaded.load()) {
                 loaded.close()

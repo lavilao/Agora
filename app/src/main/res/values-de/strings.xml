@@ -814,6 +814,21 @@
     <string name="local_runtime_vulkan_status_old">Das Gerät meldet Vulkan %1$s. Das Vulkan-Backend erfordert Vulkan 1.2 oder neuer; GPU-Beschleunigung ist auf diesem Gerät daher nicht verfügbar.</string>
     <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s ist vorhanden, aber das GPU-Backend konnte nicht initialisiert werden.</string>
     <string name="local_runtime_vulkan_status_no_loader">Vulkan ist auf diesem System nicht verfügbar.</string>
+    <string name="local_engine_tuning_title">Engine-Optimierung</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">Berechnet die Attention in einem einzigen verschmolzenen Durchlauf, ohne die volle Score-Matrix zu materialisieren. Meist schneller und sparsamer; für einen quantisierten V-Cache erforderlich. Auto aktiviert es, sobald das Backend es unterstützt. Greift ab dem nächsten Laden des Modells.</string>
+    <string name="local_engine_on">Ein</string>
+    <string name="local_engine_off">Aus</string>
+    <string name="local_mmap_title">Modelldatei per mmap einbinden</string>
+    <string name="local_mmap_desc">Liest die Modelldatei über den Seiten-Cache, statt sie in den Arbeitsspeicher zu kopieren. Deaktivieren tauscht langsamere Ladezeiten und mehr Speicher gegen stabilere Generierungsgeschwindigkeiten. Greift ab dem nächsten Laden des Modells.</string>
+    <string name="local_kv_cache_k_title">KV-Cache-Typ K</string>
+    <string name="local_kv_cache_v_title">KV-Cache-Typ V</string>
+    <string name="local_kv_cache_desc">Elementtyp der zwischengespeicherten Attention-Keys. Quantisierte Typen senken den Speicherbedarf langer Kontexte deutlich bei kleinem Qualitätsverlust. Greift ab dem nächsten Laden des Modells.</string>
+    <string name="local_kv_cache_v_desc">Elementtyp der zwischengespeicherten Attention-Values. Quantisierte Typen erfordern Flash Attention; andernfalls bleibt V bei f16. Greift ab dem nächsten Laden des Modells.</string>
+    <string name="local_swa_full_title">Voll großer SWA-Cache</string>
+    <string name="local_swa_full_desc">Modelle mit Sliding-Window-Attention trimmen ihren Cache auf das Attention-Fenster, um Speicher zu sparen, was die Wiederverwendung früherer Turns verhindert. Für lange Gespräche einschalten. Greift ab dem nächsten Laden des Modells.</string>
+    <string name="local_threads_title">CPU-Threads</string>
+    <string name="local_threads_desc">Threads, die die Engine für Prefill und Generierung nutzt. Weniger Threads können helfen, wenn Kerne gemeinsam gedrosselt werden. Greift ab dem nächsten Laden des Modells.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Aus DeepSeek importieren</string>
     <string name="deepseek_import_subtitle">Importiert Unterhaltungen aus einer DeepSeek-Exportdatei (.json).</string>

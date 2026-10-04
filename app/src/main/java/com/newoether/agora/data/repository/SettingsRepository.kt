@@ -14,6 +14,7 @@ import com.newoether.agora.data.DEFAULT_DYNAMIC_COLOR
 import com.newoether.agora.data.DEFAULT_LOCAL_MODEL_IDLE_RETENTION_MINUTES
 import com.newoether.agora.data.DEFAULT_LOCAL_LOW_CONTEXT_MODE_ENABLED
 import com.newoether.agora.data.DEFAULT_LOCAL_RUNTIME_PREFERENCE
+import com.newoether.agora.data.LocalEngineTuning
 import com.newoether.agora.data.DEFAULT_SCHEME_STYLE
 import com.newoether.agora.data.ConversationSettings
 import com.newoether.agora.data.CustomEndpointProtocol
@@ -251,6 +252,10 @@ class SettingsRepository(
     val localRuntimePreference: StateFlow<String> = hot(
         settingsManager.localRuntimePreference,
         DEFAULT_LOCAL_RUNTIME_PREFERENCE,
+    )
+    val localEngineTuning: StateFlow<LocalEngineTuning> = hot(
+        settingsManager.localEngineTuning,
+        LocalEngineTuning(),
     )
     val customProviders: StateFlow<List<CustomProviderConfig>> = hot(settingsManager.customProviders, emptyList())
     val lastModelsFetchFingerprint: StateFlow<String> = hot(settingsManager.lastModelsFetchFingerprint, "")
@@ -743,6 +748,24 @@ class SettingsRepository(
     }
     fun setLocalRuntimePreference(preference: String) = scope.launch {
         settingsManager.saveLocalRuntimePreference(preference)
+    }
+    fun setLocalFlashAttention(mode: String) = scope.launch {
+        settingsManager.saveLocalFlashAttention(mode)
+    }
+    fun setLocalMmap(enabled: Boolean) = scope.launch {
+        settingsManager.saveLocalMmap(enabled)
+    }
+    fun setLocalCacheTypeK(type: String) = scope.launch {
+        settingsManager.saveLocalCacheTypeK(type)
+    }
+    fun setLocalCacheTypeV(type: String) = scope.launch {
+        settingsManager.saveLocalCacheTypeV(type)
+    }
+    fun setLocalSwaFull(enabled: Boolean) = scope.launch {
+        settingsManager.saveLocalSwaFull(enabled)
+    }
+    fun setLocalThreads(threads: Int) = scope.launch {
+        settingsManager.saveLocalThreads(threads)
     }
     suspend fun saveEmbeddingModels(models: List<EmbeddingModelConfig>) = settingsManager.saveEmbeddingModels(models)
     suspend fun setActiveEmbeddingModelId(id: String) = settingsManager.setActiveEmbeddingModelId(id)

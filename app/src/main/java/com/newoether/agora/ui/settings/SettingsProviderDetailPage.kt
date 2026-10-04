@@ -77,12 +77,10 @@ fun SettingsProviderDetailPage(
     val anthropicCacheEnabled by viewModel.settings.anthropicCacheEnabled.collectAsState()
     val anthropicCacheTtl by viewModel.settings.anthropicCacheTtl.collectAsState()
     val localChatModels by viewModel.settings.localChatModels.collectAsState()
-    val localModelIdleRetentionMinutes by
-        viewModel.settings.localModelIdleRetentionMinutes.collectAsState()
-    val localLowContextModeEnabled by
-        viewModel.settings.localLowContextModeEnabled.collectAsState()
-    val localRuntimePreference by
-        viewModel.settings.localRuntimePreference.collectAsState()
+    val localModelIdleRetentionMinutes by viewModel.settings.localModelIdleRetentionMinutes.collectAsState()
+    val localLowContextModeEnabled by viewModel.settings.localLowContextModeEnabled.collectAsState()
+    val localRuntimePreference by viewModel.settings.localRuntimePreference.collectAsState()
+    val localEngineTuning by viewModel.settings.localEngineTuning.collectAsState()
     val showDocFab by viewModel.settings.showDocumentationFab.collectAsState()
 
     var currentName by rememberSaveable(providerName) { mutableStateOf(providerName) }
@@ -491,6 +489,7 @@ fun SettingsProviderDetailPage(
                         },
                     ),
                 )
+                LocalEngineTuningGroup(localEngineTuning, viewModel.settings)
             }
 
             // API Keys (non-Local)

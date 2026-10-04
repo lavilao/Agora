@@ -814,6 +814,21 @@
     <string name="local_runtime_vulkan_status_old">يُبلّغ الجهاز عن Vulkan %1$s. يتطلب خلفية Vulkan الإصدار 1.2 أو أحدث، لذا لا يتوفر تسريع GPU على هذا الجهاز.</string>
     <string name="local_runtime_vulkan_status_init_failed">‏Vulkan %1$s موجود، لكن تعذّر تهيئة خلفية GPU.</string>
     <string name="local_runtime_vulkan_status_no_loader">‏Vulkan غير متوفر على هذا النظام.</string>
+    <string name="local_engine_tuning_title">ضبط المحرك</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">يحسب الانتباه في تمريرة واحدة مدمجة دون توليد مصفوفة الدرجات الكاملة. عادةً أسرع وأوفر للذاكرة، ومطلوب لذاكرة V المكممة. الوضع التلقائي يفعّله عندما تدعمه الواجهة الخلفية. يُطبَّق من تحميل النموذج التالي.</string>
+    <string name="local_engine_on">مُفعّل</string>
+    <string name="local_engine_off">مُعطّل</string>
+    <string name="local_mmap_title">ربط ملف النموذج بالذاكرة</string>
+    <string name="local_mmap_desc">يقرأ ملف النموذج عبر ذاكرة الصفحات بدلًا من نسخه إلى الذاكرة. تعطيله يقايض تحميلًا أبطأ وذاكرة أكبر بسرعات توليد أكثر ثباتًا. يُطبَّق من تحميل النموذج التالي.</string>
+    <string name="local_kv_cache_k_title">نوع ذاكرة KV للمفاتيح</string>
+    <string name="local_kv_cache_v_title">نوع ذاكرة KV للقيم</string>
+    <string name="local_kv_cache_desc">نوع عنصر مفاتيح الانتباه المخزنة. الأنواع المكممة تقلل ذاكرة السياقات الطويلة كثيرًا مقابل خسارة صغيرة في الجودة. يُطبَّق من تحميل النموذج التالي.</string>
+    <string name="local_kv_cache_v_desc">نوع عنصر قيم الانتباه المخزنة. الأنواع المكممة تتطلب Flash Attention، وإلا تبقى V بصيغة f16. يُطبَّق من تحميل النموذج التالي.</string>
+    <string name="local_swa_full_title">ذاكرة SWA بالحجم الكامل</string>
+    <string name="local_swa_full_desc">نماذج النافذة المنزلقة تقصّ ذاكرتها على نافذة الانتباه لتوفير الذاكرة، ما يمنع إعادة استخدام الأدوار السابقة. فعّله للمحادثات الطويلة. يُطبَّق من تحميل النموذج التالي.</string>
+    <string name="local_threads_title">خيوط المعالج</string>
+    <string name="local_threads_desc">عدد الخيوط التي يستخدمها المحرك للمعالجة المسبقة والتوليد. تقليل الخيوط قد يساعد عندما تبطئ الأنوية معًا. يُطبَّق من تحميل النموذج التالي.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">الاستيراد من DeepSeek</string>
     <string name="deepseek_import_subtitle">استيراد المحادثات من ملف تصدير DeepSeek بصيغة .json.</string>

@@ -88,6 +88,13 @@ internal val LOCAL_LOW_CONTEXT_MODE_ENABLED =
     booleanPreferencesKey("local_low_context_mode_enabled")
 /** Runtime backend for local models: "auto" | "cpu" | "vulkan". */
 internal val LOCAL_RUNTIME_PREFERENCE = stringPreferencesKey("local_runtime_preference")
+/** Engine capability switches for local models (koboldcpp-derived). */
+internal val LOCAL_FLASH_ATTENTION = stringPreferencesKey("local_flash_attention")
+internal val LOCAL_MMAP = booleanPreferencesKey("local_mmap")
+internal val LOCAL_CACHE_TYPE_K = stringPreferencesKey("local_cache_type_k")
+internal val LOCAL_CACHE_TYPE_V = stringPreferencesKey("local_cache_type_v")
+internal val LOCAL_SWA_FULL = booleanPreferencesKey("local_swa_full")
+internal val LOCAL_THREADS = intPreferencesKey("local_threads")
 internal val CUSTOM_PROVIDERS_JSON = stringPreferencesKey("custom_providers_json")
 internal val SHELL_ENABLED = booleanPreferencesKey("shell_enabled")
 internal val AUTOMATION_TOOLS_ENABLED = booleanPreferencesKey("automation_tools_enabled")

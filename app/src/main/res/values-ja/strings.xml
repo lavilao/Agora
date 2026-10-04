@@ -814,6 +814,21 @@
     <string name="local_runtime_vulkan_status_old">デバイスは Vulkan %1$s を報告しています。Vulkan バックエンドには Vulkan 1.2 以降が必要なため、このデバイスでは GPU アクセラレーションを利用できません。</string>
     <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s は存在しますが、GPU バックエンドを初期化できませんでした。</string>
     <string name="local_runtime_vulkan_status_no_loader">このシステムでは Vulkan を利用できません。</string>
+    <string name="local_engine_tuning_title">エンジンチューニング</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">スコア行列全体を展開せず、単一の融合パスでアテンションを計算します。通常は高速で省メモリです。量子化されたVキャッシュには必須です。「自動」はバックエンドが対応していれば有効になります。次回のモデル読み込みから適用されます。</string>
+    <string name="local_engine_on">オン</string>
+    <string name="local_engine_off">オフ</string>
+    <string name="local_mmap_title">モデルファイルのメモリマップ</string>
+    <string name="local_mmap_desc">モデルファイルをRAMへコピーせず、ページキャッシュ経由で読み込みます。無効にすると、読み込みが遅くなりメモリ使用量が増える代わりに、生成速度が安定します。次回のモデル読み込みから適用されます。</string>
+    <string name="local_kv_cache_k_title">KVキャッシュの型 K</string>
+    <string name="local_kv_cache_v_title">KVキャッシュの型 V</string>
+    <string name="local_kv_cache_desc">キャッシュされたアテンションキーの要素型です。量子化型はわずかな品質低下と引き換えに、長いコンテキストのメモリを大幅に削減します。次回のモデル読み込みから適用されます。</string>
+    <string name="local_kv_cache_v_desc">キャッシュされたアテンション値の要素型です。量子化型にはFlash Attentionが必要で、無効な場合はVはf16のままになります。次回のモデル読み込みから適用されます。</string>
+    <string name="local_swa_full_title">フルサイズSWAキャッシュ</string>
+    <string name="local_swa_full_desc">スライディングウィンドウモデルはメモリ節約のためキャッシュをアテンションウィンドウに切り詰めますが、それ以前のターンの再利用を妨げます。長い会話ではオンにしてください。次回のモデル読み込みから適用されます。</string>
+    <string name="local_threads_title">CPUスレッド</string>
+    <string name="local_threads_desc">プリフィルと生成にエンジンが使うスレッド数です。コアが同時に熱制限を受ける場合、減らすと効果があります。次回のモデル読み込みから適用されます。</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">DeepSeek からインポート</string>
     <string name="deepseek_import_subtitle">DeepSeek のエクスポート .json ファイルから会話をインポートします。</string>

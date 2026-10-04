@@ -814,6 +814,21 @@
     <string name="local_runtime_vulkan_status_old">기기가 Vulkan %1$s을(를) 보고합니다. Vulkan 백엔드에는 Vulkan 1.2 이상이 필요하므로 이 기기에서는 GPU 가속을 사용할 수 없습니다.</string>
     <string name="local_runtime_vulkan_status_init_failed">Vulkan %1$s이(가) 있지만 GPU 백엔드를 초기화하지 못했습니다.</string>
     <string name="local_runtime_vulkan_status_no_loader">이 시스템에서는 Vulkan을 사용할 수 없습니다.</string>
+    <string name="local_engine_tuning_title">엔진 튜닝</string>
+    <string name="local_flash_attention_title">Flash Attention</string>
+    <string name="local_flash_attention_desc">전체 스코어 행렬을 만들지 않고 하나의 융합 패스로 어텐션을 계산합니다. 대체로 더 빠르고 메모리도 적게 쓰며, 양자화된 V 캐시에 필수입니다. '자동'은 백엔드가 지원하면 활성화됩니다. 다음 모델 로드부터 적용됩니다.</string>
+    <string name="local_engine_on">켜기</string>
+    <string name="local_engine_off">끄기</string>
+    <string name="local_mmap_title">모델 파일 메모리 매핑</string>
+    <string name="local_mmap_desc">모델 파일을 RAM으로 복사하지 않고 페이지 캐시를 통해 읽습니다. 끄면 로드가 느려지고 메모리는 늘지만 생성 속도가 더 안정됩니다. 다음 모델 로드부터 적용됩니다.</string>
+    <string name="local_kv_cache_k_title">KV 캐시 유형 K</string>
+    <string name="local_kv_cache_v_title">KV 캐시 유형 V</string>
+    <string name="local_kv_cache_desc">캐시된 어텐션 키의 요소 유형입니다. 양자화 유형은 약간의 품질 저하를 감수하고 긴 컨텍스트 메모리를 크게 줄입니다. 다음 모델 로드부터 적용됩니다.</string>
+    <string name="local_kv_cache_v_desc">캐시된 어텐션 값의 요소 유형입니다. 양자화 유형에는 Flash Attention이 필요하며, 없으면 V는 f16으로 유지됩니다. 다음 모델 로드부터 적용됩니다.</string>
+    <string name="local_swa_full_title">전체 크기 SWA 캐시</string>
+    <string name="local_swa_full_desc">슬라이딩 윈도우 모델은 메모리 절약을 위해 캐시를 어텐션 창 크기로 줄여 이전 턴의 재사용을 막습니다. 긴 대화에서는 켜 두세요. 다음 모델 로드부터 적용됩니다.</string>
+    <string name="local_threads_title">CPU 스레드</string>
+    <string name="local_threads_desc">프리필과 생성에 엔진이 사용하는 스레드 수입니다. 코어가 함께 속도 제한을 받을 때 줄이면 도움이 됩니다. 다음 모델 로드부터 적용됩니다.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">DeepSeek에서 가져오기</string>
     <string name="deepseek_import_subtitle">DeepSeek 내콤을 .json 파일에서 대화를 가져옵니다.</string>

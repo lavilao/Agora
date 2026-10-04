@@ -17,13 +17,18 @@
 #include "llama_chat_generation.h"
 #include "llama_chat_handle.h"
 #include "llama_chat_log.h"
+#include "llama_chat_options.h"
 #include "llama_chat_parser.h"
 #include "llama_chat_template.h"
 
 using agora::chat::ChatHandle;
+using agora::chat::EngineOptions;
 using agora::chat::NativeChatCallbacks;
 using agora::chat::NativeChatParser;
 using agora::chat::TemplateSamplingMetadata;
+using agora::chat::engine_option_flash_attn;
+using agora::chat::engine_option_ggml_type;
+using agora::chat::read_engine_options;
 using agora::chat::CALLBACK_TOKEN_BATCH;
 using agora::chat::CALLBACK_BYTE_BATCH;
 using agora::chat::clear_text_cache;
@@ -80,7 +85,8 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
-    JNIEnv * env, jclass /*clazz*/, jstring path, jint n_ctx, jstring backend_pref) {
+    JNIEnv * env, jclass /*clazz*/, jstring path, jint n_ctx, jstring backend_pref,
+    jobject options) {
 
     std::string path_str;
     if (!read_java_path(env, path, path_str)) return 0;
@@ -93,6 +99,12 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
         backend_pref_str = "auto";
     }
 
+    EngineOptions engine_options;
+    if (!read_engine_options(env, options, engine_options)) {
+        LOGE("Unable to read engine options");
+        return 0;
+    }
+
     ChatHandle * handle = new ChatHandle();
     if (!handle) {
         return 0;
@@ -101,6 +113,7 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
 
     const auto load_started = std::chrono::steady_clock::now();
     llama_model_params model_params = llama_model_default_params();
+    model_params.use_mmap = engine_options.use_mmap;
 
     // Explicit single-device pin for cpu/vulkan. The array only needs to outlive
     // llama_model_load_from_file, which consumes it synchronously below.
@@ -151,8 +164,35 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
     // prompt-eval throughput is unaffected because it is compute-bound well below 512 tokens.
     ctx_params.n_batch = std::min(512, n_ctx);
 
+    // Koboldcpp-derived engine capability switches.
+    ctx_params.flash_attn_type = engine_option_flash_attn(engine_options.flash_attention);
+    ctx_params.swa_full = engine_options.swa_full;
+    if (engine_options.threads > 0) {
+        ctx_params.n_threads = engine_options.threads;
+        ctx_params.n_threads_batch = engine_options.threads;
+    }
+    ggml_type type_k = engine_option_ggml_type(engine_options.cache_type_k);
+    ggml_type type_v = engine_option_ggml_type(engine_options.cache_type_v);
+    // llama_init_from_model rejects a quantized V cache without Flash Attention outright; the
+    // requested attention choice wins and the cache stays in its element type instead.
+    if (ggml_is_quantized(type_v) && ctx_params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_DISABLED) {
+        LOGD("Quantized V cache requires flash attention; keeping V cache at f16");
+        type_v = GGML_TYPE_F16;
+    }
+    ctx_params.type_k = type_k;
+    ctx_params.type_v = type_v;
+
     const auto context_started = std::chrono::steady_clock::now();
     handle->ctx = llama_init_from_model(handle->model, ctx_params);
+    if (!handle->ctx && (type_k != GGML_TYPE_F16 || type_v != GGML_TYPE_F16)) {
+        // Per-model incompatibilities (K/V block sizes not dividing the head size) surface as a
+        // null context. Retry once with element-type caches instead of refusing the model.
+        LOGE("Context creation failed with K=%s/V=%s; retrying with f16 caches",
+             engine_options.cache_type_k.c_str(), engine_options.cache_type_v.c_str());
+        ctx_params.type_k = GGML_TYPE_F16;
+        ctx_params.type_v = GGML_TYPE_F16;
+        handle->ctx = llama_init_from_model(handle->model, ctx_params);
+    }
     if (!handle->ctx) {
         LOGE("Failed to create context");
         llama_model_free(handle->model);
@@ -175,6 +215,14 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
     LOGD("Chat load: model_ms=%lld, context_ms=%lld, total_ms=%lld, n_ctx=%d, n_ctx_train=%d",
          (long long)model_ms, (long long)context_ms, (long long)total_ms,
          n_ctx, llama_model_n_ctx_train(handle->model));
+    LOGD("Engine options: flash_attn=%s, mmap=%s, cache_k=%s, cache_v=%s, swa_full=%s, threads=%d",
+         engine_options.flash_attention.c_str(),
+         engine_options.use_mmap ? "on" : "off",
+         ctx_params.type_k == GGML_TYPE_F16 && engine_options.cache_type_k != "f16"
+             ? "f16 (fallback)" : engine_options.cache_type_k.c_str(),
+         ctx_params.type_v == GGML_TYPE_F16 && engine_options.cache_type_v != "f16"
+             ? "f16 (fallback)" : engine_options.cache_type_v.c_str(),
+         engine_options.swa_full ? "on" : "off", ctx_params.n_threads);
 
     return reinterpret_cast<jlong>(handle);
 }

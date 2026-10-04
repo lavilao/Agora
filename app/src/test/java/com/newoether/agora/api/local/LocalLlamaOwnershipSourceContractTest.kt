@@ -343,12 +343,25 @@ class LocalLlamaOwnershipSourceContractTest {
         val capacityCheck = text.indexOf("n_tokens + min_generation_room > n_ctx")
         val cacheMutation = text.indexOf("prepare_text_cache(handle, tokens)")
         assertTrue(capacityCheck >= 0 && cacheMutation > capacityCheck)
-        assertTrue(text.contains("for (int32_t off = cached_tokens; off < n_tokens"))
+        // The smart-cache restore must run before the live cache is aligned, so a stale
+        // conversation snapshot can still beat the resident prefix.
+        val snapshotRestore = text.indexOf("smartcache_restore(handle, tokens)")
+        assertTrue(snapshotRestore >= 0 && snapshotRestore < cacheMutation)
+        assertTrue(text.contains("for (int32_t off = cached_tokens; off < prefill_end"))
         assertTrue(text.contains("handle->decoded_tokens.insert("))
         assertTrue(text.contains("handle->decoded_tokens.push_back(new_token_id);"))
+        // Speculative rounds hold the last prompt token back and decode it together with
+        // the draft; the single-token path stays the non-speculative fallback.
+        assertTrue(text.contains("const bool speculating = handle->spec != nullptr"))
+        assertTrue(text.contains("const int32_t prefill_end = speculating ? n_tokens - 1 : n_tokens"))
+        assertTrue(text.contains("common_speculative_draft("))
+        assertTrue(text.contains("common_sampler_sample_and_accept_n(smpl, handle->ctx, draft)"))
+        assertTrue(text.contains("common_speculative_accept("))
+        assertTrue(text.contains("static_cast<llama_pos>(handle->decoded_tokens.size()), -1"))
+        assertTrue(text.contains("smartcache_save(handle)"))
         assertEquals(2, Regex("const int32_t decode_result = llama_decode")
             .findAll(text).count())
-        assertEquals(2, Regex("clear_text_cache\\(handle\\);")
+        assertEquals(3, Regex("clear_text_cache\\(handle\\);")
             .findAll(text).count())
         val prefillDecode = text.indexOf("llama_decode(handle->ctx, batch)")
         val prefillLedger = text.indexOf("handle->decoded_tokens.insert(")
@@ -356,6 +369,32 @@ class LocalLlamaOwnershipSourceContractTest {
         val generatedLedger = text.indexOf("handle->decoded_tokens.push_back(new_token_id)")
         assertTrue(prefillDecode >= 0 && prefillLedger > prefillDecode)
         assertTrue(generatedDecode >= 0 && generatedLedger > generatedDecode)
+    }
+
+    @Test
+    fun `speculative decoding clamps drafts and commits only verified tokens`() {
+        val native = mainCppSource("llama_chat_jni.cpp")
+        val speculative = mainCppSource("llama_chat_speculative.cpp")
+        val generation = mainCppSource("llama_chat_generation.cpp")
+
+        // The verification batch [id_last, draft...] is bounded by n_batch, room, budget.
+        assertTrue(native.contains("const int32_t draft_cap = std::min(std::min(n_batch - 1, room), budget)"))
+        // Draft sizes that would exceed the room clear instead of overflowing the batch.
+        assertTrue(native.contains("if (draft_cap <= 0 || draft.empty())"))
+        // Recurrent-style memories cannot drop unverified cells, so they stay plain.
+        assertTrue(speculative.contains("COMMON_CONTEXT_SEQ_RM_TYPE_PART"))
+        assertTrue(speculative.contains("spec_runtime_free(handle)"))
+        // The speculator outlives the draft contexts it creates, but the model is ours.
+        assertTrue(speculative.contains("common_speculative_free(handle->spec)"))
+        assertTrue(speculative.contains("llama_model_free(handle->draft_model)"))
+        // Fast-forward off always reprocesses (koboldcpp --nofastforward).
+        assertTrue(generation.contains("if (!handle->fast_forward)"))
+        // Smart context surgery keeps the shared head and drops the divergent middle.
+        assertTrue(generation.contains("longest_prompt_prefix_in_cache("))
+        assertTrue(generation.contains("context_shift_middle("))
+        // Snapshots restore only when they beat the live prefix and save after generation.
+        assertTrue(generation.contains("llama_state_seq_set_data("))
+        assertTrue(generation.contains("llama_state_seq_get_data("))
     }
 
     @Test

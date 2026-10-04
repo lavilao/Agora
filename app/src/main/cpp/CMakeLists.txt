@@ -80,6 +80,7 @@ add_library(agora_llama SHARED
     llama_chat_callbacks.cpp
     llama_chat_template.cpp
     llama_chat_generation.cpp
+    llama_chat_speculative.cpp
 )
 target_link_libraries(agora_llama llama llama-common mtmd log)
 target_include_directories(agora_llama PRIVATE ${LLAMA_CPP_DIR}/include ${LLAMA_CPP_DIR}/tools/mtmd)

@@ -90,6 +90,20 @@ class LocalProvider(
                 cacheTypeV = engineTuning.cacheTypeV,
                 swaFull = engineTuning.swaFull,
                 threads = engineTuning.threads,
+                speculativeType = if (
+                    engineTuning.speculativeType == "draft" && modelConfig.draftModelPath.isBlank()
+                ) "off" else engineTuning.speculativeType,
+                specDraftAmount = engineTuning.specDraftAmount,
+                ngramMatch = engineTuning.ngramMatch,
+                draftModelPath = modelConfig.draftModelPath,
+                smartCache = engineTuning.smartCache,
+                smartCacheSlots = engineTuning.smartCacheSlots,
+                smartContext = engineTuning.smartContext,
+                contextShift = engineTuning.contextShift,
+                fastForward = engineTuning.fastForward,
+                directIo = engineTuning.directIo,
+                nBatch = engineTuning.nBatch,
+                nUbatch = engineTuning.nUbatch,
             ),
         ) { engine ->
 

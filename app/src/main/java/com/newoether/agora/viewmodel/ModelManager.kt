@@ -44,6 +44,7 @@ class ModelManager(
             if (model != null) {
                 if (model.localFilePath.isNotBlank()) java.io.File(model.localFilePath).delete()
                 if (model.mmprojPath.isNotBlank()) java.io.File(model.mmprojPath).delete()
+                if (model.draftModelPath.isNotBlank()) java.io.File(model.draftModelPath).delete()
             }
             val models = settings.localChatModels.value.filter { it.id != uuid }
             settings.saveLocalChatModels(models)
@@ -58,7 +59,7 @@ class ModelManager(
 
     fun updateLocalChatModel(
         uuid: String, newModelId: String, newAlias: String, nCtx: Int, temperature: Float, topP: Float, maxTokens: Int,
-        mmprojPath: String = ""
+        mmprojPath: String = "", draftModelPath: String = ""
     ) {
         scope.launch(Dispatchers.IO) {
             if (isLocalModelIdTaken(newModelId, excludeId = uuid)) return@launch
@@ -66,8 +67,11 @@ class ModelManager(
             if (oldModel.mmprojPath.isNotBlank() && oldModel.mmprojPath != mmprojPath) {
                 java.io.File(oldModel.mmprojPath).delete()
             }
+            if (oldModel.draftModelPath.isNotBlank() && oldModel.draftModelPath != draftModelPath) {
+                java.io.File(oldModel.draftModelPath).delete()
+            }
             val models = settings.localChatModels.value.map {
-                if (it.id == uuid) it.copy(modelId = newModelId, alias = newAlias, nCtx = nCtx, temperature = temperature, topP = topP, maxTokens = maxTokens, mmprojPath = mmprojPath)
+                if (it.id == uuid) it.copy(modelId = newModelId, alias = newAlias, nCtx = nCtx, temperature = temperature, topP = topP, maxTokens = maxTokens, mmprojPath = mmprojPath, draftModelPath = draftModelPath)
                 else it
             }
             settings.saveLocalChatModels(models)

@@ -2,12 +2,25 @@
 
 #include "llama.h"
 #include "chat.h"
+#include "speculative.h"
 #include "mtmd.h"
 #include <atomic>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace agora::chat {
+
+struct EngineOptions;
+
+// One saved KV cache snapshot. The token mirror doubles as the match key: a snapshot is
+// worth restoring only while it is a longer prefix of the incoming prompt than the live
+// cache (koboldcpp --smartcache, "saving KV cache snapshots to RAM").
+struct KvSnapshot {
+    std::vector<llama_token> tokens;
+    std::vector<uint8_t> state;
+    uint64_t last_used = 0;
+};
 
 struct ChatHandle {
     llama_model * model   = nullptr;
@@ -23,6 +36,24 @@ struct ChatHandle {
     std::atomic<bool> cancelled{false};
     std::vector<llama_token> decoded_tokens;
     mtmd_context * mtmd_ctx = nullptr;  // multimodal context (for vision models)
+
+    // ── Engine options as loaded; gates cache behavior during generation ──
+    bool smart_context = true;
+    bool context_shift = true;
+    bool fast_forward = true;
+    bool smart_cache = false;
+
+    // ── Speculative decoding runtime (koboldcpp --usemtp/--draftmodel/--draftamount) ──
+    // spec_params must outlive spec: the n-gram containers and the draft model pointer it
+    // carries are owned here and referenced by the speculator.
+    common_params_speculative spec_params;
+    common_speculative * spec = nullptr;
+    llama_model * draft_model = nullptr;
+
+    // ── Smart cache slots (koboldcpp --smartcache [limit]) ──
+    std::vector<KvSnapshot> snapshots;
+    int32_t smart_cache_slots = 1;
+    uint64_t snapshot_clock = 0;
 };
 
 } // namespace agora::chat

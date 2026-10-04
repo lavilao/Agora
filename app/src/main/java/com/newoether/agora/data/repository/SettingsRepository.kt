@@ -749,24 +749,23 @@ class SettingsRepository(
     fun setLocalRuntimePreference(preference: String) = scope.launch {
         settingsManager.saveLocalRuntimePreference(preference)
     }
-    fun setLocalFlashAttention(mode: String) = scope.launch {
-        settingsManager.saveLocalFlashAttention(mode)
-    }
-    fun setLocalMmap(enabled: Boolean) = scope.launch {
-        settingsManager.saveLocalMmap(enabled)
-    }
-    fun setLocalCacheTypeK(type: String) = scope.launch {
-        settingsManager.saveLocalCacheTypeK(type)
-    }
-    fun setLocalCacheTypeV(type: String) = scope.launch {
-        settingsManager.saveLocalCacheTypeV(type)
-    }
-    fun setLocalSwaFull(enabled: Boolean) = scope.launch {
-        settingsManager.saveLocalSwaFull(enabled)
-    }
-    fun setLocalThreads(threads: Int) = scope.launch {
-        settingsManager.saveLocalThreads(threads)
-    }
+    fun setLocalFlashAttention(mode: String) = scope.launch { settingsManager.saveLocalFlashAttention(mode) }
+    fun setLocalMmap(enabled: Boolean) = scope.launch { settingsManager.saveLocalMmap(enabled) }
+    fun setLocalCacheTypeK(type: String) = scope.launch { settingsManager.saveLocalCacheTypeK(type) }
+    fun setLocalCacheTypeV(type: String) = scope.launch { settingsManager.saveLocalCacheTypeV(type) }
+    fun setLocalSwaFull(enabled: Boolean) = scope.launch { settingsManager.saveLocalSwaFull(enabled) }
+    fun setLocalThreads(threads: Int) = scope.launch { settingsManager.saveLocalThreads(threads) }
+    fun setLocalSpeculativeType(type: String) = scope.launch { settingsManager.saveLocalSpeculativeType(type) }
+    fun setLocalSpecDraftAmount(amount: Int) = scope.launch { settingsManager.saveLocalSpecDraftAmount(amount) }
+    fun setLocalNgramMatch(match: Int) = scope.launch { settingsManager.saveLocalNgramMatch(match) }
+    fun setLocalSmartCache(enabled: Boolean) = scope.launch { settingsManager.saveLocalSmartCache(enabled) }
+    fun setLocalSmartCacheSlots(slots: Int) = scope.launch { settingsManager.saveLocalSmartCacheSlots(slots) }
+    fun setLocalSmartContext(enabled: Boolean) = scope.launch { settingsManager.saveLocalSmartContext(enabled) }
+    fun setLocalContextShift(enabled: Boolean) = scope.launch { settingsManager.saveLocalContextShift(enabled) }
+    fun setLocalFastForward(enabled: Boolean) = scope.launch { settingsManager.saveLocalFastForward(enabled) }
+    fun setLocalDirectIo(enabled: Boolean) = scope.launch { settingsManager.saveLocalDirectIo(enabled) }
+    fun setLocalNBatch(size: Int) = scope.launch { settingsManager.saveLocalNBatch(size) }
+    fun setLocalNUbatch(size: Int) = scope.launch { settingsManager.saveLocalNUbatch(size) }
     suspend fun saveEmbeddingModels(models: List<EmbeddingModelConfig>) = settingsManager.saveEmbeddingModels(models)
     suspend fun setActiveEmbeddingModelId(id: String) = settingsManager.setActiveEmbeddingModelId(id)
     suspend fun saveAutoBackupEnabled(enabled: Boolean) = settingsManager.saveAutoBackupEnabled(enabled)

@@ -17,6 +17,17 @@ size_t prepare_text_cache(
     const std::vector<llama_token> & prompt_tokens
 );
 
+// Restores the KV snapshot with the longest prompt-prefix match when it beats the live
+// cache (koboldcpp --smartcache). Returns true when the live cache was replaced.
+bool smartcache_restore(
+    ChatHandle * handle,
+    const std::vector<llama_token> & prompt_tokens
+);
+
+// Persists the live cache as a snapshot, respecting the slot limit and dropping
+// snapshots that became dead weight (their tokens no longer prefix the live cache).
+void smartcache_save(ChatHandle * handle);
+
 bool token_to_piece(
     const llama_vocab * vocab,
     llama_token token,

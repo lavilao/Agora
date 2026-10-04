@@ -147,6 +147,24 @@ enum class LlamaBackendPreference(val nativeValue: String) {
  * @param swaFull full-size SWA KV cache (--swa-full): restores long-conversation KV reuse
  *   on sliding-window models at the cost of memory.
  * @param threads CPU threads for decode and prefill; 0 keeps the engine default (--threads).
+ * @param speculativeType "off", an n-gram speculator ("ngram_simple", "ngram_map_k",
+ *   "ngram_map_k4v", "ngram_mod") or "draft" (--usemtp / --spec-type). "draft" needs a
+ *   per-model draft GGUF ([draftModelPath]).
+ * @param specDraftAmount tokens drafted per verification chunk (--draftamount).
+ * @param ngramMatch n-gram hash window for ngram_mod (--spec-ngram-mod-n-match).
+ * @param draftModelPath small model whose guesses the main model verifies in one batch
+ *   (--draftmodel); must share the main model's vocabulary.
+ * @param smartCache keep KV snapshots in RAM so switching conversations restores instead
+ *   of re-prefilling (--smartcache).
+ * @param smartCacheSlots how many conversation snapshots to keep (--smartcache limit).
+ * @param smartContext reuse the KV across middle-diverged prompts, e.g. after context
+ *   compaction kept the head and dropped old middle turns (--smartcontext).
+ * @param contextShift trim and shift the KV window instead of reprocessing (--noshift off).
+ * @param fastForward reuse the previous prompt's KV prefix; off always reprocesses
+ *   (--nofastforward).
+ * @param directIo read the GGUF with direct I/O, bypassing the page cache (--usedirectio).
+ * @param nBatch logical batch size; 0 keeps the engine default of min(512, ctx) (--batchsize).
+ * @param nUbatch physical batch size; 0 keeps the library default (--ubatchsize).
  */
 data class LlamaEngineOptions(
     val flashAttention: String = "auto",
@@ -155,6 +173,18 @@ data class LlamaEngineOptions(
     val cacheTypeV: String = "f16",
     val swaFull: Boolean = false,
     val threads: Int = 0,
+    val speculativeType: String = "off",
+    val specDraftAmount: Int = 4,
+    val ngramMatch: Int = 24,
+    val draftModelPath: String = "",
+    val smartCache: Boolean = false,
+    val smartCacheSlots: Int = 1,
+    val smartContext: Boolean = true,
+    val contextShift: Boolean = true,
+    val fastForward: Boolean = true,
+    val directIo: Boolean = false,
+    val nBatch: Int = 0,
+    val nUbatch: Int = 0,
 )
 
 class LlamaChatEngine(

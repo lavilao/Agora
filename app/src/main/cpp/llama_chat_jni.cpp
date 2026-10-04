@@ -19,6 +19,7 @@
 #include "llama_chat_log.h"
 #include "llama_chat_options.h"
 #include "llama_chat_parser.h"
+#include "llama_chat_speculative.h"
 #include "llama_chat_template.h"
 
 using agora::chat::ChatHandle;
@@ -33,6 +34,8 @@ using agora::chat::CALLBACK_TOKEN_BATCH;
 using agora::chat::CALLBACK_BYTE_BATCH;
 using agora::chat::clear_text_cache;
 using agora::chat::prepare_text_cache;
+using agora::chat::smartcache_restore;
+using agora::chat::smartcache_save;
 using agora::chat::token_to_piece;
 using agora::chat::init_chat_sampler;
 using agora::chat::is_preserved_token;
@@ -114,6 +117,8 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
     const auto load_started = std::chrono::steady_clock::now();
     llama_model_params model_params = llama_model_default_params();
     model_params.use_mmap = engine_options.use_mmap;
+    // koboldcpp --usedirectio: bypass the page cache when the storage supports it.
+    model_params.use_direct_io = engine_options.direct_io;
 
     // Explicit single-device pin for cpu/vulkan. The array only needs to outlive
     // llama_model_load_from_file, which consumes it synchronously below.
@@ -162,7 +167,16 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
     // n_ctx made memory grow with the square of the context — the OOM on large-context local
     // models (#53). 512 is llama.cpp's own default and prefill is chunked to match; on-device
     // prompt-eval throughput is unaffected because it is compute-bound well below 512 tokens.
-    ctx_params.n_batch = std::min(512, n_ctx);
+    // The koboldcpp --batchsize / --ubatchsize switches let the user raise it for speculative
+    // verification batches or lower it to shave the logits buffer.
+    ctx_params.n_batch = engine_options.n_batch > 0
+        ? std::min(engine_options.n_batch, n_ctx)
+        : std::min(512, n_ctx);
+    if (engine_options.n_ubatch > 0) {
+        ctx_params.n_ubatch = std::min<uint32_t>(
+            static_cast<uint32_t>(engine_options.n_ubatch), ctx_params.n_batch
+        );
+    }
 
     // Koboldcpp-derived engine capability switches.
     ctx_params.flash_attn_type = engine_option_flash_attn(engine_options.flash_attention);
@@ -202,6 +216,19 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
 
     llama_set_abort_callback(handle->ctx, abort_callback, handle);
 
+    // Generation-time gates (koboldcpp --smartcache/--smartcontext/--noshift/--nofastforward).
+    handle->smart_context = engine_options.smart_context;
+    handle->context_shift = engine_options.context_shift;
+    handle->fast_forward = engine_options.fast_forward;
+    handle->smart_cache = engine_options.smart_cache;
+    handle->smart_cache_slots = engine_options.smart_cache_slots;
+    handle->snapshots.reserve(
+        static_cast<size_t>(engine_options.smart_cache_slots)
+    );
+
+    // Speculative decoding runtime (koboldcpp --usemtp/--draftmodel/--draftamount).
+    spec_runtime_init(handle, engine_options, requested_device);
+
     const auto load_finished = std::chrono::steady_clock::now();
     const auto model_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         model_finished - model_started
@@ -215,14 +242,24 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatLoadModel(
     LOGD("Chat load: model_ms=%lld, context_ms=%lld, total_ms=%lld, n_ctx=%d, n_ctx_train=%d",
          (long long)model_ms, (long long)context_ms, (long long)total_ms,
          n_ctx, llama_model_n_ctx_train(handle->model));
-    LOGD("Engine options: flash_attn=%s, mmap=%s, cache_k=%s, cache_v=%s, swa_full=%s, threads=%d",
+    LOGD("Engine options: flash_attn=%s, mmap=%s, cache_k=%s, cache_v=%s, swa_full=%s, threads=%d, "
+         "spec=%s/%d, ngram_match=%d, smartcache=%s/%d, smartcontext=%s, contextshift=%s, "
+         "fastforward=%s, direct_io=%s, n_batch=%d, n_ubatch=%d",
          engine_options.flash_attention.c_str(),
          engine_options.use_mmap ? "on" : "off",
          ctx_params.type_k == GGML_TYPE_F16 && engine_options.cache_type_k != "f16"
              ? "f16 (fallback)" : engine_options.cache_type_k.c_str(),
          ctx_params.type_v == GGML_TYPE_F16 && engine_options.cache_type_v != "f16"
              ? "f16 (fallback)" : engine_options.cache_type_v.c_str(),
-         engine_options.swa_full ? "on" : "off", ctx_params.n_threads);
+         engine_options.swa_full ? "on" : "off", ctx_params.n_threads,
+         engine_options.speculative_type.c_str(), engine_options.spec_draft_amount,
+         engine_options.ngram_match,
+         engine_options.smart_cache ? "on" : "off", engine_options.smart_cache_slots,
+         engine_options.smart_context ? "on" : "off",
+         engine_options.context_shift ? "on" : "off",
+         engine_options.fast_forward ? "on" : "off",
+         engine_options.direct_io ? "on" : "off",
+         ctx_params.n_batch, ctx_params.n_ubatch);
 
     return reinterpret_cast<jlong>(handle);
 }
@@ -298,17 +335,24 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
         return report_error(env, callback, callbacks, message, 0, 0);
     }
 
+    // A KV snapshot from another conversation can beat the live cache prefix
+    // (koboldcpp --smartcache); prepare_text_cache then aligns the restored cells.
+    smartcache_restore(handle, tokens);
     const int32_t cached_tokens = static_cast<int32_t>(prepare_text_cache(handle, tokens));
     const int32_t n_batch = static_cast<int32_t>(llama_n_batch(handle->ctx));
+    // Speculative decoding holds the last prompt token back so it can be evaluated in the
+    // same batch as the first draft chunk (koboldcpp --usemtp / --draftmodel).
+    const bool speculating = handle->spec != nullptr && n_tokens >= 2;
+    const int32_t prefill_end = speculating ? n_tokens - 1 : n_tokens;
     int32_t input_tokens = cached_tokens;
     const auto prefill_started = std::chrono::steady_clock::now();
-    for (int32_t off = cached_tokens; off < n_tokens; off += n_batch) {
+    for (int32_t off = cached_tokens; off < prefill_end; off += n_batch) {
         if (handle->cancelled.load(std::memory_order_relaxed)) {
-            LOGD("Cancelled during prefill at %d/%d tokens", off, n_tokens);
+            LOGD("Cancelled during prefill at %d/%d tokens", off, prefill_end);
             common_sampler_free(smpl);
             return report_done(env, callback, callbacks, "cancelled", input_tokens, 0);
         }
-        const int32_t chunk = std::min(n_batch, n_tokens - off);
+        const int32_t chunk = std::min(n_batch, prefill_end - off);
         llama_batch batch = llama_batch_get_one(tokens.data() + off, chunk);
         const int32_t decode_result = llama_decode(handle->ctx, batch);
         if (decode_result != 0) {
@@ -332,6 +376,11 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
         );
         input_tokens += chunk;
     }
+    if (speculating) {
+        // Feed the conversation history to the speculator once per request: the n-gram
+        // containers learn from it and the draft model context gets its prefill.
+        common_speculative_begin(handle->spec, handle->decoded_tokens);
+    }
     const auto prefill_finished = std::chrono::steady_clock::now();
     const auto prefill_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         prefill_finished - prefill_started
@@ -354,6 +403,8 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
     const bool context_limited = generation_limit < max_tokens;
 
     int32_t generated = 0;
+    int32_t spec_drafted = 0;
+    int32_t spec_accepted = 0;
     int32_t callback_tokens = 0;
     std::string utf8_pending;
     std::string callback_buffer;
@@ -361,6 +412,8 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
     const char * stop_reason = nullptr;
     std::string failure;
     bool consumer_closed = false;
+    // The held-back token the next decode evaluates (speculative mode only).
+    llama_token id_last = speculating ? tokens[n_tokens - 1] : LLAMA_TOKEN_NULL;
     const auto decode_started = std::chrono::steady_clock::now();
     while (generated < generation_limit) {
         if (handle->cancelled.load(std::memory_order_relaxed)) {
@@ -374,6 +427,108 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
             LOGD("Context full at %d tokens", generated);
             stop_reason = "context_full";
             break;
+        }
+
+        if (speculating) {
+            // ── Speculative round (koboldcpp --draftmodel / --draftamount) ──
+            llama_tokens draft = common_speculative_draft(
+                handle->spec, handle->spec_params, handle->decoded_tokens, id_last
+            );
+            // The verification batch is [id_last, draft...]: bounded by n_batch, by the
+            // context room left, and by the generation budget still to produce. An empty
+            // draft still evaluates id_last alone, which is the plain one-token path.
+            const int32_t room = n_ctx - n_ctx_used - 1;
+            const int32_t budget = generation_limit - generated - 1;
+            const int32_t draft_cap = std::min(std::min(n_batch - 1, room), budget);
+            if (draft_cap <= 0 || draft.empty()) {
+                draft.clear();
+            } else {
+                draft.resize(std::min(draft.size(), static_cast<size_t>(draft_cap)));
+            }
+            spec_drafted += static_cast<int32_t>(draft.size());
+            llama_batch batch = llama_batch_init(static_cast<int32_t>(1 + draft.size()), 0, 1);
+            common_batch_add(batch, id_last, n_ctx_used, { 0 }, true);
+            for (size_t i = 0; i < draft.size(); ++i) {
+                common_batch_add(batch, draft[i], n_ctx_used + 1 + i, { 0 }, true);
+            }
+            const int32_t spec_decode_result = llama_decode(handle->ctx, batch);
+            llama_batch_free(batch);
+            if (spec_decode_result != 0) {
+                const bool was_cancelled =
+                    handle->cancelled.load(std::memory_order_relaxed);
+                LOGE("Speculative decode failed (code=%d)", spec_decode_result);
+                clear_text_cache(handle);
+                if (was_cancelled) stop_reason = "cancelled";
+                else failure = "Decode failed";
+                break;
+            }
+            // Sample and verify: ids[0] continues id_last, ids[i] verifies draft[i-1].
+            const auto ids = common_sampler_sample_and_accept_n(smpl, handle->ctx, draft);
+            common_speculative_accept(
+                handle->spec, static_cast<uint16_t>(ids.size() - 1)
+            );
+            spec_accepted += static_cast<int32_t>(ids.size()) - 1;
+            // Commit the held token, then emit every accepted id. The last accepted id
+            // becomes the next round's held token: emitted now, committed only when the
+            // next round decodes it (speculative-simple's deferred tail).
+            handle->decoded_tokens.push_back(id_last);
+            bool round_eog = false;
+            for (size_t i = 0; i < ids.size(); ++i) {
+                const llama_token id = ids[i];
+                if (llama_vocab_is_eog(handle->vocab, id) &&
+                    !is_preserved_token(metadata, id)) {
+                    round_eog = true;
+                    break;
+                }
+                std::string piece;
+                if (!token_to_piece(handle->vocab, id, piece)) {
+                    failure = "Token conversion failed";
+                    break;
+                }
+                if (i + 1 < ids.size()) {
+                    handle->decoded_tokens.push_back(id);
+                } else {
+                    id_last = id;
+                }
+                generated++;
+                utf8_pending.append(piece);
+                callback_tokens++;
+            }
+            if (failure.empty() && round_eog) {
+                stop_reason = "eog";
+            }
+            // Drop any unaccepted draft cells so the cache matches the mirror.
+            llama_memory_seq_rm(
+                llama_get_memory(handle->ctx), 0,
+                static_cast<llama_pos>(handle->decoded_tokens.size()), -1
+            );
+            // Flush completed UTF-8 through the streaming callback.
+            const size_t complete_len = utf8_complete_prefix_len(utf8_pending);
+            if (complete_len > 0) {
+                callback_buffer.append(utf8_pending.data(), complete_len);
+                utf8_pending.erase(0, complete_len);
+            }
+            while (!callback_buffer.empty() &&
+                   (callback_tokens >= CALLBACK_TOKEN_BATCH ||
+                    callback_buffer.size() >= CALLBACK_BYTE_BATCH)) {
+                size_t emit_len = std::min(callback_buffer.size(), CALLBACK_BYTE_BATCH);
+                while (emit_len < callback_buffer.size() && emit_len > 0 &&
+                       (static_cast<unsigned char>(callback_buffer[emit_len]) & 0xC0) == 0x80) {
+                    emit_len--;
+                }
+                if (!parser.update(
+                        env, callback, callbacks,
+                        callback_buffer.data(), emit_len, true, failure
+                    )) {
+                    if (failure.empty()) failure = "Stream consumer closed";
+                    consumer_closed = true;
+                    break;
+                }
+                callback_buffer.erase(0, emit_len);
+                callback_tokens = 0;
+            }
+            if (consumer_closed || !failure.empty() || stop_reason) break;
+            continue;
         }
 
         llama_token new_token_id = common_sampler_sample(smpl, handle->ctx, -1);
@@ -467,12 +622,20 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatGenerate(
     const double tokens_per_second = decode_ms > 0
         ? generated * 1000.0 / static_cast<double>(decode_ms)
         : 0.0;
-    LOGD("Text decode: output_tokens=%d, duration_ms=%lld, tokens_per_second=%.2f, terminal=%s",
+    LOGD("Text decode: output_tokens=%d, duration_ms=%lld, tokens_per_second=%.2f, terminal=%s%s",
          generated, (long long)decode_ms, tokens_per_second,
-         failure.empty() ? stop_reason : "error");
+         failure.empty() ? stop_reason : "error",
+         speculating ? " (speculative)" : "");
+    if (speculating && spec_drafted > 0) {
+        LOGD("Speculative acceptance: %d/%d drafted tokens (%.1f%%)",
+             spec_accepted, spec_drafted, 100.0 * spec_accepted / spec_drafted);
+    }
     LOGD("Text request: input_tokens=%d, output_tokens=%d, total_ms=%lld",
          input_tokens, generated, (long long)request_ms);
     common_sampler_free(smpl);
+    if (failure.empty() && handle->smart_cache) {
+        smartcache_save(handle);
+    }
     if (!failure.empty()) {
         return report_error(
             env, callback, callbacks, failure.c_str(), input_tokens, generated,
@@ -865,7 +1028,9 @@ Java_com_newoether_agora_api_LlamaChatEngine_nativeChatFreeModel(
     if (!handle_ptr) return;
     ChatHandle * handle = reinterpret_cast<ChatHandle *>(handle_ptr);
 
+    spec_runtime_free(handle);
     if (handle->mtmd_ctx) mtmd_free(handle->mtmd_ctx);
+    handle->snapshots.clear();
     handle->chat_templates.reset();
     if (handle->ctx)   llama_free(handle->ctx);
     if (handle->model) llama_model_free(handle->model);

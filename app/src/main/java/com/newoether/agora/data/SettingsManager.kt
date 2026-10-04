@@ -24,6 +24,7 @@ class SettingsManager(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     internal val modelPreferenceStore = SettingsModelPreferenceStore(context.dataStore, json)
     internal val backupPreferenceStore = SettingsBackupPreferenceStore(context.dataStore)
+    internal val engineTuningStore = SettingsEngineTuningStore(context.dataStore)
 
     companion object {
         const val DEFAULT_PROXY_HOST = "127.0.0.1"
@@ -64,16 +65,10 @@ class SettingsManager(private val context: Context) {
         )
     }
     val visualizeContextRollout: Flow<Boolean> = context.dataStore.data.map { it[VISUALIZE_CONTEXT_ROLLOUT] ?: false }
-    val contextCompactEnabled: Flow<Boolean> = context.dataStore.data.map {
-        it[CONTEXT_COMPACT_ENABLED] ?: DEFAULT_CONTEXT_COMPACT_ENABLED
-    }
+    val contextCompactEnabled: Flow<Boolean> = context.dataStore.data.map { it[CONTEXT_COMPACT_ENABLED] ?: DEFAULT_CONTEXT_COMPACT_ENABLED }
     val contextCompactModel: Flow<String?> = context.dataStore.data.map { it[CONTEXT_COMPACT_MODEL] }
-    val contextCompactPrompt: Flow<String> = context.dataStore.data.map { pref ->
-        pref[CONTEXT_COMPACT_PROMPT]?.takeIf { it.isNotBlank() } ?: BuiltInPrompts.CONTEXT_COMPACT_SYSTEM
-    }
-    val contextCompactRetainCount: Flow<Int> = context.dataStore.data.map {
-        it[CONTEXT_COMPACT_RETAIN_COUNT] ?: DEFAULT_CONTEXT_COMPACT_RETAIN_COUNT
-    }
+    val contextCompactPrompt: Flow<String> = context.dataStore.data.map { pref -> pref[CONTEXT_COMPACT_PROMPT]?.takeIf { it.isNotBlank() } ?: BuiltInPrompts.CONTEXT_COMPACT_SYSTEM }
+    val contextCompactRetainCount: Flow<Int> = context.dataStore.data.map { it[CONTEXT_COMPACT_RETAIN_COUNT] ?: DEFAULT_CONTEXT_COMPACT_RETAIN_COUNT }
     val contextCompactPreserveSystemPrompt: Flow<Boolean> = context.dataStore.data.map {
         it[CONTEXT_COMPACT_PRESERVE_SYSTEM_PROMPT]
             ?: DEFAULT_CONTEXT_COMPACT_PRESERVE_SYSTEM_PROMPT
@@ -87,9 +82,7 @@ class SettingsManager(private val context: Context) {
     val googleSearchEnabled: Flow<Boolean> = context.dataStore.data.map { it[GOOGLE_SEARCH_ENABLED] ?: false }
     val thinkingEnabled: Flow<Boolean> = context.dataStore.data.map { it[THINKING_ENABLED] ?: true }
     val thinkingLevel: Flow<String> = context.dataStore.data.map { ThinkingLevels.normalize(it[THINKING_LEVEL]) }
-    val thinkingBudgetEnabled: Flow<Boolean> = context.dataStore.data.map { pref ->
-        pref[THINKING_BUDGET_ENABLED] ?: (ThinkingLevels.legacyBudgetTokens(pref[THINKING_LEVEL]) != null)
-    }
+    val thinkingBudgetEnabled: Flow<Boolean> = context.dataStore.data.map { pref -> pref[THINKING_BUDGET_ENABLED] ?: (ThinkingLevels.legacyBudgetTokens(pref[THINKING_LEVEL]) != null) }
     val thinkingBudgetTokens: Flow<Int> = context.dataStore.data.map { pref ->
         pref[THINKING_BUDGET_TOKENS]
             ?: ThinkingLevels.legacyBudgetTokens(pref[THINKING_LEVEL])
@@ -104,30 +97,20 @@ class SettingsManager(private val context: Context) {
         context.dataStore.data.map { it[OPENAI_RESPONSES_API_ENABLED] ?: false }
     val titleGenerationEnabled: Flow<Boolean> = context.dataStore.data.map { it[TITLE_GENERATION_ENABLED] ?: true }
     val titleGenerationModel: Flow<String?> = context.dataStore.data.map { it[TITLE_GENERATION_MODEL] }
-    val titleGenerationPrompt: Flow<String> = context.dataStore.data.map { pref ->
-        pref[TITLE_GENERATION_PROMPT]?.takeIf { it.isNotBlank() } ?: BuiltInPrompts.TITLE_GENERATION_SYSTEM
-    }
-    val titleGenerationNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map {
-        it[TITLE_GENERATION_NOTIFICATIONS_ENABLED] ?: true
-    }
-    val imageTranscriptionEnabled: Flow<Boolean> = context.dataStore.data.map {
-        it[IMAGE_TRANSCRIPTION_ENABLED] ?: true
-    }
+    val titleGenerationPrompt: Flow<String> = context.dataStore.data.map { pref -> pref[TITLE_GENERATION_PROMPT]?.takeIf { it.isNotBlank() } ?: BuiltInPrompts.TITLE_GENERATION_SYSTEM }
+    val titleGenerationNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { it[TITLE_GENERATION_NOTIFICATIONS_ENABLED] ?: true }
+    val imageTranscriptionEnabled: Flow<Boolean> = context.dataStore.data.map { it[IMAGE_TRANSCRIPTION_ENABLED] ?: true }
     val imageTranscriptionEnabledModels: Flow<Set<String>> = context.dataStore.data.map { it[IMAGE_TRANSCRIPTION_ENABLED_MODELS] ?: emptySet() }
     val imageTranscriptionModel: Flow<String?> = context.dataStore.data.map { it[IMAGE_TRANSCRIPTION_MODEL] }
     val imageTranscriptionBatchSize: Flow<Int> = context.dataStore.data.map { it[IMAGE_TRANSCRIPTION_BATCH_SIZE] ?: 3 }
-    val imageTranscriptionPrompt: Flow<String> = context.dataStore.data.map { pref ->
-        pref[IMAGE_TRANSCRIPTION_PROMPT]?.takeIf { it.isNotBlank() } ?: BuiltInPrompts.IMAGE_TRANSCRIPTION_USER
-    }
+    val imageTranscriptionPrompt: Flow<String> = context.dataStore.data.map { pref -> pref[IMAGE_TRANSCRIPTION_PROMPT]?.takeIf { it.isNotBlank() } ?: BuiltInPrompts.IMAGE_TRANSCRIPTION_USER }
 
     val accessPastConversations: Flow<Boolean> = context.dataStore.data.map { it[ACCESS_PAST_CONVERSATIONS] ?: true }
     val accessSavedMemories: Flow<Boolean> = context.dataStore.data.map { it[ACCESS_SAVED_MEMORIES] ?: true }
     val accessActiveMemory: Flow<Boolean> = context.dataStore.data.map { it[ACCESS_ACTIVE_MEMORY] ?: true }
     val accessSkills: Flow<Boolean> = context.dataStore.data.map { it[ACCESS_SKILLS] ?: true }
     /** Modify access follows the legacy single access_skills value until explicitly set. */
-    val accessSkillsModify: Flow<Boolean> = context.dataStore.data.map { pref ->
-        pref[ACCESS_SKILLS_MODIFY] ?: pref[ACCESS_SKILLS] ?: true
-    }
+    val accessSkillsModify: Flow<Boolean> = context.dataStore.data.map { pref -> pref[ACCESS_SKILLS_MODIFY] ?: pref[ACCESS_SKILLS] ?: true }
     val ragSearchEnabled: Flow<Boolean> = context.dataStore.data.map { it[RAG_SEARCH_ENABLED] ?: false }
     val modelSearchMethod: Flow<String> = context.dataStore.data.map { it[MODEL_SEARCH_METHOD] ?: "keyword" }
     val manualSearchMethod: Flow<String> = context.dataStore.data.map { it[MANUAL_SEARCH_METHOD] ?: "keyword" }
@@ -139,9 +122,7 @@ class SettingsManager(private val context: Context) {
 
     val appLanguage: Flow<String> = context.dataStore.data.map { it[APP_LANGUAGE] ?: "system" }
     val webSearchEnabled: Flow<Boolean> = context.dataStore.data.map { it[WEB_SEARCH_ENABLED] ?: true }
-    val webSearchProvider: Flow<String> = context.dataStore.data.map {
-        normalizeWebSearchProvider(it[WEB_SEARCH_PROVIDER])
-    }
+    val webSearchProvider: Flow<String> = context.dataStore.data.map { normalizeWebSearchProvider(it[WEB_SEARCH_PROVIDER]) }
     val webSearchApiKeys: Flow<Map<String, String>> = context.dataStore.data.map { preferences ->
         decodeWebSearchApiKeys(preferences, json)
     }
@@ -169,26 +150,11 @@ class SettingsManager(private val context: Context) {
     val autoUpdateCheck: Flow<Boolean> = context.dataStore.data.map { it[AUTO_UPDATE_CHECK] ?: true }
     val lastUpdateCheckTime: Flow<Long> = context.dataStore.data.map { it[LAST_UPDATE_CHECK_TIME] ?: 0L }
     val localChatModels: Flow<List<LocalChatModelConfig>> = modelPreferenceStore.localChatModels
-    val localModelIdleRetentionMinutes: Flow<Int> = context.dataStore.data.map {
-        normalizeLocalModelIdleRetentionMinutes(it[LOCAL_MODEL_IDLE_RETENTION_MINUTES])
-    }
-    val localLowContextModeEnabled: Flow<Boolean> = context.dataStore.data.map {
-        it[LOCAL_LOW_CONTEXT_MODE_ENABLED] ?: DEFAULT_LOCAL_LOW_CONTEXT_MODE_ENABLED
-    }
-    val localRuntimePreference: Flow<String> = context.dataStore.data.map {
-        normalizeLocalRuntimePreference(it[LOCAL_RUNTIME_PREFERENCE])
-    }
+    val localModelIdleRetentionMinutes: Flow<Int> = context.dataStore.data.map { normalizeLocalModelIdleRetentionMinutes(it[LOCAL_MODEL_IDLE_RETENTION_MINUTES]) }
+    val localLowContextModeEnabled: Flow<Boolean> = context.dataStore.data.map { it[LOCAL_LOW_CONTEXT_MODE_ENABLED] ?: DEFAULT_LOCAL_LOW_CONTEXT_MODE_ENABLED }
+    val localRuntimePreference: Flow<String> = context.dataStore.data.map { normalizeLocalRuntimePreference(it[LOCAL_RUNTIME_PREFERENCE]) }
     /** Engine capability switches as one atomic snapshot; see [LocalEngineTuning]. */
-    val localEngineTuning: Flow<LocalEngineTuning> = context.dataStore.data.map { prefs ->
-        LocalEngineTuning(
-            flashAttention = normalizeLocalFlashAttention(prefs[LOCAL_FLASH_ATTENTION]),
-            useMmap = prefs[LOCAL_MMAP] ?: DEFAULT_LOCAL_MMAP,
-            cacheTypeK = normalizeLocalKvCacheType(prefs[LOCAL_CACHE_TYPE_K]),
-            cacheTypeV = normalizeLocalKvCacheType(prefs[LOCAL_CACHE_TYPE_V]),
-            swaFull = prefs[LOCAL_SWA_FULL] ?: DEFAULT_LOCAL_SWA_FULL,
-            threads = normalizeLocalThreads(prefs[LOCAL_THREADS]),
-        )
-    }
+    val localEngineTuning: Flow<LocalEngineTuning> = engineTuningStore.localEngineTuning
     val customProviders: Flow<List<CustomProviderConfig>> = modelPreferenceStore.customProviders
 
     val showDocumentationFab: Flow<Boolean> = context.dataStore.data.map { it[SHOW_DOCUMENTATION_FAB] ?: true }
@@ -232,12 +198,8 @@ class SettingsManager(private val context: Context) {
 
     val themeMode: Flow<String> = context.dataStore.data.map { it[THEME_MODE] ?: "FOLLOW_DEVICE" }
     val amoledEnabled: Flow<Boolean> = context.dataStore.data.map { it[AMOLED_ENABLED] ?: false }
-    val colorScheme: Flow<String> = context.dataStore.data.map {
-        it[COLOR_SCHEME] ?: DEFAULT_COLOR_SCHEME
-    }
-    val dynamicColor: Flow<Boolean> = context.dataStore.data.map {
-        it[DYNAMIC_COLOR] ?: DEFAULT_DYNAMIC_COLOR
-    }
+    val colorScheme: Flow<String> = context.dataStore.data.map { it[COLOR_SCHEME] ?: DEFAULT_COLOR_SCHEME }
+    val dynamicColor: Flow<Boolean> = context.dataStore.data.map { it[DYNAMIC_COLOR] ?: DEFAULT_DYNAMIC_COLOR }
     val blurEffectsEnabled: Flow<Boolean> = context.dataStore.data.map { it[BLUR_EFFECTS_ENABLED] ?: true }
     val reduceMotion: Flow<Boolean> = context.dataStore.data.map { it[REDUCE_MOTION] ?: false }
     val stickToBottom: Flow<Boolean> = context.dataStore.data.map { it[STICK_TO_BOTTOM] ?: true }
@@ -246,9 +208,7 @@ class SettingsManager(private val context: Context) {
     val hapticsEnabled: Flow<Boolean> = context.dataStore.data.map { it[HAPTICS_ENABLED] ?: true }
     val detailedTokenUsage: Flow<Boolean> = context.dataStore.data.map { it[DETAILED_TOKEN_USAGE] ?: false }
     val toolCallDisplayMode: Flow<String> = context.dataStore.data.map { ToolCallDisplayModes.normalize(it[TOOL_CALL_DISPLAY_MODE]) }
-    val thinkingSegmentDisplayMode: Flow<String> = context.dataStore.data.map {
-        ThinkingSegmentDisplayModes.normalize(it[THINKING_SEGMENT_DISPLAY_MODE])
-    }
+    val thinkingSegmentDisplayMode: Flow<String> = context.dataStore.data.map { ThinkingSegmentDisplayModes.normalize(it[THINKING_SEGMENT_DISPLAY_MODE]) }
     val autoExpandActiveGroup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_EXPAND_ACTIVE_GROUP] ?: true }
     val schemeStyle: Flow<String> = context.dataStore.data.map { it[SCHEME_STYLE] ?: DEFAULT_SCHEME_STYLE }
     val fontPreference: Flow<String> = context.dataStore.data.map { it[FONT_PREFERENCE] ?: "app_default" }
@@ -333,9 +293,7 @@ class SettingsManager(private val context: Context) {
     suspend fun renameApiKeyProvider(oldProvider: String, newProvider: String) =
         modelPreferenceStore.renameApiKeyProvider(oldProvider, newProvider)
 
-    suspend fun saveSystemPrompts(prompts: List<SystemPromptEntry>) {
-        context.dataStore.edit { it[SYSTEM_PROMPTS_JSON] = json.encodeToString(prompts) }
-    }
+    suspend fun saveSystemPrompts(prompts: List<SystemPromptEntry>) { context.dataStore.edit { it[SYSTEM_PROMPTS_JSON] = json.encodeToString(prompts) } }
     suspend fun initializeFirstInstallDefaults(
         locale: Locale = Locale.getDefault(),
         now: Long = System.currentTimeMillis()
@@ -377,95 +335,39 @@ class SettingsManager(private val context: Context) {
             it[CONTEXT_TOKEN_BUDGET] = ContextBudget.normalize(window).toString()
         }
     }
-    suspend fun saveVisualizeContextRollout(enabled: Boolean) {
-        context.dataStore.edit { it[VISUALIZE_CONTEXT_ROLLOUT] = enabled }
-    }
-    suspend fun saveCodeExecutionEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[CODE_EXECUTION_ENABLED] = enabled }
-    }
-    suspend fun saveGoogleSearchEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[GOOGLE_SEARCH_ENABLED] = enabled }
-    }
-    suspend fun saveThinkingEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[THINKING_ENABLED] = enabled }
-    }
-    suspend fun saveThinkingLevel(level: String) {
-        context.dataStore.edit { it[THINKING_LEVEL] = ThinkingLevels.normalize(level) }
-    }
-    suspend fun saveThinkingBudgetEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[THINKING_BUDGET_ENABLED] = enabled }
-    }
-    suspend fun saveThinkingBudgetTokens(tokens: Int) {
-        context.dataStore.edit { it[THINKING_BUDGET_TOKENS] = tokens.coerceAtLeast(1) }
-    }
-    suspend fun saveOpenAiServiceTierEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[OPENAI_SERVICE_TIER_ENABLED] = enabled }
-    }
+    suspend fun saveVisualizeContextRollout(enabled: Boolean) { context.dataStore.edit { it[VISUALIZE_CONTEXT_ROLLOUT] = enabled } }
+    suspend fun saveCodeExecutionEnabled(enabled: Boolean) { context.dataStore.edit { it[CODE_EXECUTION_ENABLED] = enabled } }
+    suspend fun saveGoogleSearchEnabled(enabled: Boolean) { context.dataStore.edit { it[GOOGLE_SEARCH_ENABLED] = enabled } }
+    suspend fun saveThinkingEnabled(enabled: Boolean) { context.dataStore.edit { it[THINKING_ENABLED] = enabled } }
+    suspend fun saveThinkingLevel(level: String) { context.dataStore.edit { it[THINKING_LEVEL] = ThinkingLevels.normalize(level) } }
+    suspend fun saveThinkingBudgetEnabled(enabled: Boolean) { context.dataStore.edit { it[THINKING_BUDGET_ENABLED] = enabled } }
+    suspend fun saveThinkingBudgetTokens(tokens: Int) { context.dataStore.edit { it[THINKING_BUDGET_TOKENS] = tokens.coerceAtLeast(1) } }
+    suspend fun saveOpenAiServiceTierEnabled(enabled: Boolean) { context.dataStore.edit { it[OPENAI_SERVICE_TIER_ENABLED] = enabled } }
     suspend fun saveOpenAiServiceTier(tier: String) {
         context.dataStore.edit {
             it[OPENAI_SERVICE_TIER] = OpenAiServiceTiers.normalize(tier)
         }
     }
-    suspend fun saveOpenAiResponsesApiEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[OPENAI_RESPONSES_API_ENABLED] = enabled }
-    }
-    suspend fun saveTitleGenerationEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[TITLE_GENERATION_ENABLED] = enabled }
-    }
-    suspend fun saveTitleGenerationNotificationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[TITLE_GENERATION_NOTIFICATIONS_ENABLED] = enabled }
-    }
-    suspend fun saveAccessPastConversations(enabled: Boolean) {
-        context.dataStore.edit { it[ACCESS_PAST_CONVERSATIONS] = enabled }
-    }
-    suspend fun saveAccessSavedMemories(enabled: Boolean) {
-        context.dataStore.edit { it[ACCESS_SAVED_MEMORIES] = enabled }
-    }
-    suspend fun saveAccessActiveMemory(enabled: Boolean) {
-        context.dataStore.edit { it[ACCESS_ACTIVE_MEMORY] = enabled }
-    }
-    suspend fun saveAccessSkills(enabled: Boolean) {
-        context.dataStore.edit { it[ACCESS_SKILLS] = enabled }
-    }
-    suspend fun saveAccessSkillsModify(enabled: Boolean) {
-        context.dataStore.edit { it[ACCESS_SKILLS_MODIFY] = enabled }
-    }
-    suspend fun saveRagSearchEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[RAG_SEARCH_ENABLED] = enabled }
-    }
-    suspend fun saveAutoCacheEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[AUTO_CACHE_ENABLED] = enabled }
-    }
-    suspend fun saveShowUncachedNotification(enabled: Boolean) {
-        context.dataStore.edit { it[SHOW_UNCACHED_NOTIFICATION] = enabled }
-    }
-    suspend fun saveAutoUpdateCheck(enabled: Boolean) {
-        context.dataStore.edit { it[AUTO_UPDATE_CHECK] = enabled }
-    }
-    suspend fun saveLastUpdateCheckTime(time: Long) {
-        context.dataStore.edit { it[LAST_UPDATE_CHECK_TIME] = time }
-    }
-    suspend fun saveModelSearchMethod(method: String) {
-        context.dataStore.edit { it[MODEL_SEARCH_METHOD] = method }
-    }
-    suspend fun saveManualSearchMethod(method: String) {
-        context.dataStore.edit { it[MANUAL_SEARCH_METHOD] = method }
-    }
-    suspend fun saveEmbeddingModels(models: List<EmbeddingModelConfig>) {
-        context.dataStore.edit { it[EMBEDDING_MODELS_JSON] = json.encodeToString(models) }
-    }
-    suspend fun setActiveEmbeddingModelId(id: String) {
-        context.dataStore.edit { it[ACTIVE_EMBEDDING_MODEL_ID] = id }
-    }
-    suspend fun saveAppLanguage(language: String) {
-        context.dataStore.edit { it[APP_LANGUAGE] = language }
-    }
-    suspend fun saveWebSearchEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[WEB_SEARCH_ENABLED] = enabled }
-    }
-    suspend fun saveWebSearchProvider(provider: String) {
-        context.dataStore.edit { it[WEB_SEARCH_PROVIDER] = normalizeWebSearchProvider(provider) }
-    }
+    suspend fun saveOpenAiResponsesApiEnabled(enabled: Boolean) { context.dataStore.edit { it[OPENAI_RESPONSES_API_ENABLED] = enabled } }
+    suspend fun saveTitleGenerationEnabled(enabled: Boolean) { context.dataStore.edit { it[TITLE_GENERATION_ENABLED] = enabled } }
+    suspend fun saveTitleGenerationNotificationsEnabled(enabled: Boolean) { context.dataStore.edit { it[TITLE_GENERATION_NOTIFICATIONS_ENABLED] = enabled } }
+    suspend fun saveAccessPastConversations(enabled: Boolean) { context.dataStore.edit { it[ACCESS_PAST_CONVERSATIONS] = enabled } }
+    suspend fun saveAccessSavedMemories(enabled: Boolean) { context.dataStore.edit { it[ACCESS_SAVED_MEMORIES] = enabled } }
+    suspend fun saveAccessActiveMemory(enabled: Boolean) { context.dataStore.edit { it[ACCESS_ACTIVE_MEMORY] = enabled } }
+    suspend fun saveAccessSkills(enabled: Boolean) { context.dataStore.edit { it[ACCESS_SKILLS] = enabled } }
+    suspend fun saveAccessSkillsModify(enabled: Boolean) { context.dataStore.edit { it[ACCESS_SKILLS_MODIFY] = enabled } }
+    suspend fun saveRagSearchEnabled(enabled: Boolean) { context.dataStore.edit { it[RAG_SEARCH_ENABLED] = enabled } }
+    suspend fun saveAutoCacheEnabled(enabled: Boolean) { context.dataStore.edit { it[AUTO_CACHE_ENABLED] = enabled } }
+    suspend fun saveShowUncachedNotification(enabled: Boolean) { context.dataStore.edit { it[SHOW_UNCACHED_NOTIFICATION] = enabled } }
+    suspend fun saveAutoUpdateCheck(enabled: Boolean) { context.dataStore.edit { it[AUTO_UPDATE_CHECK] = enabled } }
+    suspend fun saveLastUpdateCheckTime(time: Long) { context.dataStore.edit { it[LAST_UPDATE_CHECK_TIME] = time } }
+    suspend fun saveModelSearchMethod(method: String) { context.dataStore.edit { it[MODEL_SEARCH_METHOD] = method } }
+    suspend fun saveManualSearchMethod(method: String) { context.dataStore.edit { it[MANUAL_SEARCH_METHOD] = method } }
+    suspend fun saveEmbeddingModels(models: List<EmbeddingModelConfig>) { context.dataStore.edit { it[EMBEDDING_MODELS_JSON] = json.encodeToString(models) } }
+    suspend fun setActiveEmbeddingModelId(id: String) { context.dataStore.edit { it[ACTIVE_EMBEDDING_MODEL_ID] = id } }
+    suspend fun saveAppLanguage(language: String) { context.dataStore.edit { it[APP_LANGUAGE] = language } }
+    suspend fun saveWebSearchEnabled(enabled: Boolean) { context.dataStore.edit { it[WEB_SEARCH_ENABLED] = enabled } }
+    suspend fun saveWebSearchProvider(provider: String) { context.dataStore.edit { it[WEB_SEARCH_PROVIDER] = normalizeWebSearchProvider(provider) } }
     suspend fun saveWebSearchApiKey(provider: String, apiKey: String) {
         context.dataStore.edit { prefs ->
             val current = com.newoether.agora.util.SecretCrypto.decrypt(prefs[WEB_SEARCH_API_KEYS_JSON] ?: "{}")
@@ -485,32 +387,18 @@ class SettingsManager(private val context: Context) {
             }
         }
     }
-    suspend fun saveWebSearchNumResults(n: Int) {
-        context.dataStore.edit { it[WEB_SEARCH_NUM_RESULTS] = n.coerceIn(1, 10) }
-    }
-    suspend fun saveWebSearchBaseUrl(url: String) {
-        context.dataStore.edit { it[WEB_SEARCH_BASE_URL] = url }
-    }
-    suspend fun saveImageGenEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[IMAGE_GEN_ENABLED] = enabled }
-    }
+    suspend fun saveWebSearchNumResults(n: Int) { context.dataStore.edit { it[WEB_SEARCH_NUM_RESULTS] = n.coerceIn(1, 10) } }
+    suspend fun saveWebSearchBaseUrl(url: String) { context.dataStore.edit { it[WEB_SEARCH_BASE_URL] = url } }
+    suspend fun saveImageGenEnabled(enabled: Boolean) { context.dataStore.edit { it[IMAGE_GEN_ENABLED] = enabled } }
     suspend fun saveImageGenModel(model: String?) {
         context.dataStore.edit {
             if (model == null) it.remove(IMAGE_GEN_MODEL) else it[IMAGE_GEN_MODEL] = model
         }
     }
-    suspend fun saveImageGenSize(size: String) {
-        context.dataStore.edit { it[IMAGE_GEN_SIZE] = size }
-    }
-    suspend fun saveSearchMatchLimit(n: Int) {
-        context.dataStore.edit { it[SEARCH_MATCH_LIMIT] = n }
-    }
-    suspend fun saveSearchContextWindow(n: Int) {
-        context.dataStore.edit { it[SEARCH_CONTEXT_WINDOW] = n }
-    }
-    suspend fun saveRagThreshold(threshold: Float) {
-        context.dataStore.edit { it[RAG_THRESHOLD] = threshold.toString() }
-    }
+    suspend fun saveImageGenSize(size: String) { context.dataStore.edit { it[IMAGE_GEN_SIZE] = size } }
+    suspend fun saveSearchMatchLimit(n: Int) { context.dataStore.edit { it[SEARCH_MATCH_LIMIT] = n } }
+    suspend fun saveSearchContextWindow(n: Int) { context.dataStore.edit { it[SEARCH_CONTEXT_WINDOW] = n } }
+    suspend fun saveRagThreshold(threshold: Float) { context.dataStore.edit { it[RAG_THRESHOLD] = threshold.toString() } }
     suspend fun saveDefaultTemperature(value: Float?) {
         context.dataStore.edit { prefs ->
             if (value == null) prefs.remove(DEFAULT_TEMPERATURE) else prefs[DEFAULT_TEMPERATURE] = value.toString()
@@ -571,9 +459,7 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    suspend fun saveLocalLowContextModeEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[LOCAL_LOW_CONTEXT_MODE_ENABLED] = enabled }
-    }
+    suspend fun saveLocalLowContextModeEnabled(enabled: Boolean) { context.dataStore.edit { it[LOCAL_LOW_CONTEXT_MODE_ENABLED] = enabled } }
 
     suspend fun saveLocalRuntimePreference(preference: String) {
         context.dataStore.edit {
@@ -581,41 +467,23 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    suspend fun saveLocalFlashAttention(mode: String) {
-        context.dataStore.edit {
-            it[LOCAL_FLASH_ATTENTION] = normalizeLocalFlashAttention(mode)
-        }
-    }
-
-    suspend fun saveLocalMmap(enabled: Boolean) {
-        context.dataStore.edit {
-            it[LOCAL_MMAP] = enabled
-        }
-    }
-
-    suspend fun saveLocalCacheTypeK(type: String) {
-        context.dataStore.edit {
-            it[LOCAL_CACHE_TYPE_K] = normalizeLocalKvCacheType(type)
-        }
-    }
-
-    suspend fun saveLocalCacheTypeV(type: String) {
-        context.dataStore.edit {
-            it[LOCAL_CACHE_TYPE_V] = normalizeLocalKvCacheType(type)
-        }
-    }
-
-    suspend fun saveLocalSwaFull(enabled: Boolean) {
-        context.dataStore.edit {
-            it[LOCAL_SWA_FULL] = enabled
-        }
-    }
-
-    suspend fun saveLocalThreads(threads: Int) {
-        context.dataStore.edit {
-            it[LOCAL_THREADS] = normalizeLocalThreads(threads)
-        }
-    }
+    suspend fun saveLocalFlashAttention(mode: String) = engineTuningStore.saveLocalFlashAttention(mode)
+    suspend fun saveLocalMmap(enabled: Boolean) = engineTuningStore.saveLocalMmap(enabled)
+    suspend fun saveLocalCacheTypeK(type: String) = engineTuningStore.saveLocalCacheTypeK(type)
+    suspend fun saveLocalCacheTypeV(type: String) = engineTuningStore.saveLocalCacheTypeV(type)
+    suspend fun saveLocalSwaFull(enabled: Boolean) = engineTuningStore.saveLocalSwaFull(enabled)
+    suspend fun saveLocalThreads(threads: Int) = engineTuningStore.saveLocalThreads(threads)
+    suspend fun saveLocalSpeculativeType(type: String) = engineTuningStore.saveLocalSpeculativeType(type)
+    suspend fun saveLocalSpecDraftAmount(amount: Int) = engineTuningStore.saveLocalSpecDraftAmount(amount)
+    suspend fun saveLocalNgramMatch(match: Int) = engineTuningStore.saveLocalNgramMatch(match)
+    suspend fun saveLocalSmartCache(enabled: Boolean) = engineTuningStore.saveLocalSmartCache(enabled)
+    suspend fun saveLocalSmartCacheSlots(slots: Int) = engineTuningStore.saveLocalSmartCacheSlots(slots)
+    suspend fun saveLocalSmartContext(enabled: Boolean) = engineTuningStore.saveLocalSmartContext(enabled)
+    suspend fun saveLocalContextShift(enabled: Boolean) = engineTuningStore.saveLocalContextShift(enabled)
+    suspend fun saveLocalFastForward(enabled: Boolean) = engineTuningStore.saveLocalFastForward(enabled)
+    suspend fun saveLocalDirectIo(enabled: Boolean) = engineTuningStore.saveLocalDirectIo(enabled)
+    suspend fun saveLocalNBatch(size: Int) = engineTuningStore.saveLocalNBatch(size)
+    suspend fun saveLocalNUbatch(size: Int) = engineTuningStore.saveLocalNUbatch(size)
 
     suspend fun saveCustomProviders(providers: List<CustomProviderConfig>) =
         modelPreferenceStore.saveCustomProviders(providers)
@@ -627,9 +495,7 @@ class SettingsManager(private val context: Context) {
         completed: List<CustomProviderIdentityMigration>,
     ) = modelPreferenceStore.clearLegacyCustomProviderNames(completed)
 
-    suspend fun saveContextCompactEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[CONTEXT_COMPACT_ENABLED] = enabled }
-    }
+    suspend fun saveContextCompactEnabled(enabled: Boolean) { context.dataStore.edit { it[CONTEXT_COMPACT_ENABLED] = enabled } }
     suspend fun saveContextCompactModel(model: String?) {
         context.dataStore.edit { prefs ->
             if (model == null) prefs.remove(CONTEXT_COMPACT_MODEL) else prefs[CONTEXT_COMPACT_MODEL] = model
@@ -644,9 +510,7 @@ class SettingsManager(private val context: Context) {
         require(count >= 0)
         context.dataStore.edit { it[CONTEXT_COMPACT_RETAIN_COUNT] = count }
     }
-    suspend fun saveContextCompactPreserveSystemPrompt(enabled: Boolean) {
-        context.dataStore.edit { it[CONTEXT_COMPACT_PRESERVE_SYSTEM_PROMPT] = enabled }
-    }
+    suspend fun saveContextCompactPreserveSystemPrompt(enabled: Boolean) { context.dataStore.edit { it[CONTEXT_COMPACT_PRESERVE_SYSTEM_PROMPT] = enabled } }
 
     suspend fun saveContextCompactThresholdPercent(percent: Int) {
         require(percent in CONTEXT_COMPACT_THRESHOLD_PERCENT_RANGE)
@@ -665,30 +529,22 @@ class SettingsManager(private val context: Context) {
             else it[TITLE_GENERATION_PROMPT] = prompt
         }
     }
-    suspend fun saveImageTranscriptionEnabledModels(models: Set<String>) {
-        context.dataStore.edit { it[IMAGE_TRANSCRIPTION_ENABLED_MODELS] = models }
-    }
-    suspend fun saveImageTranscriptionEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[IMAGE_TRANSCRIPTION_ENABLED] = enabled }
-    }
+    suspend fun saveImageTranscriptionEnabledModels(models: Set<String>) { context.dataStore.edit { it[IMAGE_TRANSCRIPTION_ENABLED_MODELS] = models } }
+    suspend fun saveImageTranscriptionEnabled(enabled: Boolean) { context.dataStore.edit { it[IMAGE_TRANSCRIPTION_ENABLED] = enabled } }
     suspend fun saveImageTranscriptionModel(model: String?) {
         context.dataStore.edit {
             if (model == null) it.remove(IMAGE_TRANSCRIPTION_MODEL)
             else it[IMAGE_TRANSCRIPTION_MODEL] = model
         }
     }
-    suspend fun saveImageTranscriptionBatchSize(size: Int) {
-        context.dataStore.edit { it[IMAGE_TRANSCRIPTION_BATCH_SIZE] = size.coerceIn(1, 10) }
-    }
+    suspend fun saveImageTranscriptionBatchSize(size: Int) { context.dataStore.edit { it[IMAGE_TRANSCRIPTION_BATCH_SIZE] = size.coerceIn(1, 10) } }
     suspend fun saveImageTranscriptionPrompt(prompt: String) {
         context.dataStore.edit {
             if (prompt.isBlank()) it.remove(IMAGE_TRANSCRIPTION_PROMPT)
             else it[IMAGE_TRANSCRIPTION_PROMPT] = prompt
         }
     }
-    suspend fun saveShowDocumentationFab(enabled: Boolean) {
-        context.dataStore.edit { it[SHOW_DOCUMENTATION_FAB] = enabled }
-    }
+    suspend fun saveShowDocumentationFab(enabled: Boolean) { context.dataStore.edit { it[SHOW_DOCUMENTATION_FAB] = enabled } }
     suspend fun saveDeveloperOptionsEnabled(enabled: Boolean) {
         context.dataStore.edit {
             it[DEVELOPER_OPTIONS_ENABLED] = enabled
@@ -703,18 +559,10 @@ class SettingsManager(private val context: Context) {
                 enabled && (it[DEVELOPER_OPTIONS_ENABLED] ?: false)
         }
     }
-    suspend fun saveShellEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[SHELL_ENABLED] = enabled }
-    }
-    suspend fun saveAutomationToolsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[AUTOMATION_TOOLS_ENABLED] = enabled }
-    }
-    suspend fun saveExactExecutionEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[EXACT_EXECUTION_ENABLED] = enabled }
-    }
-    suspend fun saveAutomationWakeLockEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[AUTOMATION_WAKE_LOCK_ENABLED] = enabled }
-    }
+    suspend fun saveShellEnabled(enabled: Boolean) { context.dataStore.edit { it[SHELL_ENABLED] = enabled } }
+    suspend fun saveAutomationToolsEnabled(enabled: Boolean) { context.dataStore.edit { it[AUTOMATION_TOOLS_ENABLED] = enabled } }
+    suspend fun saveExactExecutionEnabled(enabled: Boolean) { context.dataStore.edit { it[EXACT_EXECUTION_ENABLED] = enabled } }
+    suspend fun saveAutomationWakeLockEnabled(enabled: Boolean) { context.dataStore.edit { it[AUTOMATION_WAKE_LOCK_ENABLED] = enabled } }
     suspend fun saveProxyEnabled(enabled: Boolean) { context.dataStore.edit { it[PROXY_ENABLED] = enabled } }
     suspend fun saveProxyType(type: String) { context.dataStore.edit { it[PROXY_TYPE] = type } }
     suspend fun saveProxyHost(host: String) { context.dataStore.edit { it[PROXY_HOST] = host } }
@@ -723,98 +571,44 @@ class SettingsManager(private val context: Context) {
     suspend fun saveProxyPassword(pass: String) { context.dataStore.edit { it[PROXY_PASSWORD] = pass } }
     suspend fun saveProxyBypass(bypass: String) { context.dataStore.edit { it[PROXY_BYPASS] = bypass } }
 
-    suspend fun saveShellConfirmEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[SHELL_CONFIRM_ENABLED] = enabled }
-    }
-    suspend fun saveAskUserEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[ASK_USER_ENABLED] = enabled }
-    }
-    suspend fun saveShellDevices(devices: List<ShellDeviceConfig>) {
-        context.dataStore.edit { it[SHELL_DEVICES_JSON] = com.newoether.agora.util.SecretCrypto.encrypt(json.encodeToString(devices)) }
-    }
+    suspend fun saveShellConfirmEnabled(enabled: Boolean) { context.dataStore.edit { it[SHELL_CONFIRM_ENABLED] = enabled } }
+    suspend fun saveAskUserEnabled(enabled: Boolean) { context.dataStore.edit { it[ASK_USER_ENABLED] = enabled } }
+    suspend fun saveShellDevices(devices: List<ShellDeviceConfig>) { context.dataStore.edit { it[SHELL_DEVICES_JSON] = com.newoether.agora.util.SecretCrypto.encrypt(json.encodeToString(devices)) } }
     suspend fun saveMcpServers(servers: List<McpServerConfig>) {
         context.dataStore.edit {
             it[MCP_SERVERS_JSON] =
                 com.newoether.agora.util.SecretCrypto.encrypt(json.encodeToString(servers))
         }
     }
-    suspend fun saveSandboxEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[SANDBOX_ENABLED] = enabled }
-    }
-    suspend fun saveSandboxSharedStorageEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[SANDBOX_SHARED_STORAGE_ENABLED] = enabled }
-    }
-    suspend fun saveThemeMode(mode: String) {
-        context.dataStore.edit { it[THEME_MODE] = mode }
-    }
-    suspend fun saveAmoledEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[AMOLED_ENABLED] = enabled }
-    }
-    suspend fun saveColorScheme(scheme: String) {
-        context.dataStore.edit { it[COLOR_SCHEME] = scheme }
-    }
-    suspend fun saveDynamicColor(enabled: Boolean) {
-        context.dataStore.edit { it[DYNAMIC_COLOR] = enabled }
-    }
-    suspend fun saveBlurEffectsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[BLUR_EFFECTS_ENABLED] = enabled }
-    }
-    suspend fun saveReduceMotion(enabled: Boolean) {
-        context.dataStore.edit { it[REDUCE_MOTION] = enabled }
-    }
-    suspend fun saveStickToBottom(enabled: Boolean) {
-        context.dataStore.edit { it[STICK_TO_BOTTOM] = enabled }
-    }
-    suspend fun saveParseInlineDollarMath(enabled: Boolean) {
-        context.dataStore.edit { it[PARSE_INLINE_DOLLAR_MATH] = enabled }
-    }
-    suspend fun saveAutoWrapCodeBlocks(enabled: Boolean) {
-        context.dataStore.edit { it[AUTO_WRAP_CODE_BLOCKS] = enabled }
-    }
-    suspend fun saveHapticsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[HAPTICS_ENABLED] = enabled }
-    }
-    suspend fun saveDetailedTokenUsage(enabled: Boolean) {
-        context.dataStore.edit { it[DETAILED_TOKEN_USAGE] = enabled }
-    }
-    suspend fun saveToolCallDisplayMode(mode: String) {
-        context.dataStore.edit { it[TOOL_CALL_DISPLAY_MODE] = ToolCallDisplayModes.normalize(mode) }
-    }
+    suspend fun saveSandboxEnabled(enabled: Boolean) { context.dataStore.edit { it[SANDBOX_ENABLED] = enabled } }
+    suspend fun saveSandboxSharedStorageEnabled(enabled: Boolean) { context.dataStore.edit { it[SANDBOX_SHARED_STORAGE_ENABLED] = enabled } }
+    suspend fun saveThemeMode(mode: String) { context.dataStore.edit { it[THEME_MODE] = mode } }
+    suspend fun saveAmoledEnabled(enabled: Boolean) { context.dataStore.edit { it[AMOLED_ENABLED] = enabled } }
+    suspend fun saveColorScheme(scheme: String) { context.dataStore.edit { it[COLOR_SCHEME] = scheme } }
+    suspend fun saveDynamicColor(enabled: Boolean) { context.dataStore.edit { it[DYNAMIC_COLOR] = enabled } }
+    suspend fun saveBlurEffectsEnabled(enabled: Boolean) { context.dataStore.edit { it[BLUR_EFFECTS_ENABLED] = enabled } }
+    suspend fun saveReduceMotion(enabled: Boolean) { context.dataStore.edit { it[REDUCE_MOTION] = enabled } }
+    suspend fun saveStickToBottom(enabled: Boolean) { context.dataStore.edit { it[STICK_TO_BOTTOM] = enabled } }
+    suspend fun saveParseInlineDollarMath(enabled: Boolean) { context.dataStore.edit { it[PARSE_INLINE_DOLLAR_MATH] = enabled } }
+    suspend fun saveAutoWrapCodeBlocks(enabled: Boolean) { context.dataStore.edit { it[AUTO_WRAP_CODE_BLOCKS] = enabled } }
+    suspend fun saveHapticsEnabled(enabled: Boolean) { context.dataStore.edit { it[HAPTICS_ENABLED] = enabled } }
+    suspend fun saveDetailedTokenUsage(enabled: Boolean) { context.dataStore.edit { it[DETAILED_TOKEN_USAGE] = enabled } }
+    suspend fun saveToolCallDisplayMode(mode: String) { context.dataStore.edit { it[TOOL_CALL_DISPLAY_MODE] = ToolCallDisplayModes.normalize(mode) } }
     suspend fun saveThinkingSegmentDisplayMode(mode: String) {
         context.dataStore.edit {
             it[THINKING_SEGMENT_DISPLAY_MODE] = ThinkingSegmentDisplayModes.normalize(mode)
         }
     }
-    suspend fun saveAutoExpandActiveGroup(enabled: Boolean) {
-        context.dataStore.edit { it[AUTO_EXPAND_ACTIVE_GROUP] = enabled }
-    }
-    suspend fun saveFontPreference(value: String) {
-        context.dataStore.edit { it[FONT_PREFERENCE] = value }
-    }
-    suspend fun saveCustomFontPath(value: String) {
-        context.dataStore.edit { it[CUSTOM_FONT_PATH] = value }
-    }
-    suspend fun saveCustomFontName(value: String) {
-        context.dataStore.edit { it[CUSTOM_FONT_NAME] = value }
-    }
-    suspend fun saveSchemeStyle(style: String) {
-        context.dataStore.edit { it[SCHEME_STYLE] = style }
-    }
-    suspend fun saveFirstLaunchTime(time: Long) {
-        context.dataStore.edit { it[FIRST_LAUNCH_TIME] = time }
-    }
-    suspend fun saveOnboardingCompleted(completed: Boolean) {
-        context.dataStore.edit { it[ONBOARDING_COMPLETED] = completed }
-    }
-    suspend fun saveRatingPromptSubmitted(submitted: Boolean) {
-        context.dataStore.edit { it[RATING_PROMPT_SUBMITTED] = submitted }
-    }
-    suspend fun saveRatingPromptDismissed(dismissed: Boolean) {
-        context.dataStore.edit { it[RATING_PROMPT_DISMISSED] = dismissed }
-    }
-    suspend fun incrementMessagesSent() {
-        context.dataStore.edit { it[TOTAL_MESSAGES_SENT] = (it[TOTAL_MESSAGES_SENT] ?: 0) + 1 }
-    }
+    suspend fun saveAutoExpandActiveGroup(enabled: Boolean) { context.dataStore.edit { it[AUTO_EXPAND_ACTIVE_GROUP] = enabled } }
+    suspend fun saveFontPreference(value: String) { context.dataStore.edit { it[FONT_PREFERENCE] = value } }
+    suspend fun saveCustomFontPath(value: String) { context.dataStore.edit { it[CUSTOM_FONT_PATH] = value } }
+    suspend fun saveCustomFontName(value: String) { context.dataStore.edit { it[CUSTOM_FONT_NAME] = value } }
+    suspend fun saveSchemeStyle(style: String) { context.dataStore.edit { it[SCHEME_STYLE] = style } }
+    suspend fun saveFirstLaunchTime(time: Long) { context.dataStore.edit { it[FIRST_LAUNCH_TIME] = time } }
+    suspend fun saveOnboardingCompleted(completed: Boolean) { context.dataStore.edit { it[ONBOARDING_COMPLETED] = completed } }
+    suspend fun saveRatingPromptSubmitted(submitted: Boolean) { context.dataStore.edit { it[RATING_PROMPT_SUBMITTED] = submitted } }
+    suspend fun saveRatingPromptDismissed(dismissed: Boolean) { context.dataStore.edit { it[RATING_PROMPT_DISMISSED] = dismissed } }
+    suspend fun incrementMessagesSent() { context.dataStore.edit { it[TOTAL_MESSAGES_SENT] = (it[TOTAL_MESSAGES_SENT] ?: 0) + 1 } }
 
     // ── Auto Backup ───────────────────────────────────────────
     suspend fun saveAutoBackupEnabled(enabled: Boolean) = backupPreferenceStore.saveAutoBackupEnabled(enabled)

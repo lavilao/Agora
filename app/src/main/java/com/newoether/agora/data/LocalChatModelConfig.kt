@@ -10,6 +10,8 @@ data class LocalChatModelConfig(
     val alias: String,
     val localFilePath: String = "",
     val mmprojPath: String = "",
+    /** Small draft GGUF for speculative decoding; must match the model's vocabulary. */
+    val draftModelPath: String = "",
     val nCtx: Int = 2048,
     val temperature: Float = 0.7f,
     val topP: Float = 0.9f,

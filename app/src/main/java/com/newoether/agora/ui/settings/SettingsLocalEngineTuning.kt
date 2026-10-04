@@ -7,9 +7,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Cache
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.DropdownMenu
@@ -29,8 +34,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
 import com.newoether.agora.data.LocalEngineTuning
+import com.newoether.agora.data.LOCAL_BATCH_SIZES
+import com.newoether.agora.data.LOCAL_DRAFT_AMOUNTS
 import com.newoether.agora.data.LOCAL_FLASH_ATTENTION_MODES
 import com.newoether.agora.data.LOCAL_KV_CACHE_TYPES
+import com.newoether.agora.data.LOCAL_NGRAM_MATCHES
+import com.newoether.agora.data.LOCAL_SMART_CACHE_SLOTS
+import com.newoether.agora.data.LOCAL_SPECULATIVE_TYPES
 import com.newoether.agora.data.LOCAL_THREAD_COUNTS
 import com.newoether.agora.data.repository.SettingsRepository
 
@@ -55,6 +65,17 @@ internal fun LocalEngineTuningGroup(
             onSelectCacheTypeV = settings::setLocalCacheTypeV,
             onToggleSwaFull = settings::setLocalSwaFull,
             onSelectThreads = settings::setLocalThreads,
+            onSelectSpeculativeType = settings::setLocalSpeculativeType,
+            onSelectDraftAmount = settings::setLocalSpecDraftAmount,
+            onSelectNgramMatch = settings::setLocalNgramMatch,
+            onToggleSmartCache = settings::setLocalSmartCache,
+            onSelectSmartCacheSlots = settings::setLocalSmartCacheSlots,
+            onToggleSmartContext = settings::setLocalSmartContext,
+            onToggleContextShift = settings::setLocalContextShift,
+            onToggleFastForward = settings::setLocalFastForward,
+            onToggleDirectIo = settings::setLocalDirectIo,
+            onSelectNBatch = settings::setLocalNBatch,
+            onSelectNUbatch = settings::setLocalNUbatch,
         ),
     )
 }
@@ -72,7 +93,133 @@ internal fun localEngineTuningItems(
     onSelectCacheTypeV: (String) -> Unit,
     onToggleSwaFull: (Boolean) -> Unit,
     onSelectThreads: (Int) -> Unit,
+    onSelectSpeculativeType: (String) -> Unit,
+    onSelectDraftAmount: (Int) -> Unit,
+    onSelectNgramMatch: (Int) -> Unit,
+    onToggleSmartCache: (Boolean) -> Unit,
+    onSelectSmartCacheSlots: (Int) -> Unit,
+    onToggleSmartContext: (Boolean) -> Unit,
+    onToggleContextShift: (Boolean) -> Unit,
+    onToggleFastForward: (Boolean) -> Unit,
+    onToggleDirectIo: (Boolean) -> Unit,
+    onSelectNBatch: (Int) -> Unit,
+    onSelectNUbatch: (Int) -> Unit,
 ): List<@Composable () -> Unit> = listOf(
+    {
+        EngineTuningChoiceItem(
+            title = stringResource(R.string.local_speculative_title),
+            description = stringResource(R.string.local_speculative_desc),
+            icon = { Icon(Icons.Default.RocketLaunch, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            entries = LOCAL_SPECULATIVE_TYPES,
+            labelOf = ::speculativeTypeLabel,
+            selected = tuning.speculativeType,
+            onSelect = onSelectSpeculativeType,
+        )
+    },
+    {
+        EngineTuningChoiceItem(
+            title = stringResource(R.string.local_draft_amount_title),
+            description = stringResource(R.string.local_draft_amount_desc),
+            icon = { Icon(Icons.Default.RocketLaunch, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            entries = LOCAL_DRAFT_AMOUNTS,
+            labelOf = { it.toString() },
+            selected = tuning.specDraftAmount,
+            onSelect = onSelectDraftAmount,
+        )
+    },
+    {
+        EngineTuningChoiceItem(
+            title = stringResource(R.string.local_ngram_match_title),
+            description = stringResource(R.string.local_ngram_match_desc),
+            icon = { Icon(Icons.Default.RocketLaunch, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            entries = LOCAL_NGRAM_MATCHES,
+            labelOf = { it.toString() },
+            selected = tuning.ngramMatch,
+            onSelect = onSelectNgramMatch,
+        )
+    },
+    {
+        EngineTuningToggleItem(
+            title = stringResource(R.string.local_smart_cache_title),
+            description = stringResource(R.string.local_smart_cache_desc),
+            icon = { Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            checked = tuning.smartCache,
+            onCheckedChange = onToggleSmartCache,
+        )
+    },
+    {
+        EngineTuningChoiceItem(
+            title = stringResource(R.string.local_smart_cache_slots_title),
+            description = stringResource(R.string.local_smart_cache_slots_desc),
+            icon = { Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            entries = LOCAL_SMART_CACHE_SLOTS,
+            labelOf = { it.toString() },
+            selected = tuning.smartCacheSlots,
+            onSelect = onSelectSmartCacheSlots,
+        )
+    },
+    {
+        EngineTuningToggleItem(
+            title = stringResource(R.string.local_smart_context_title),
+            description = stringResource(R.string.local_smart_context_desc),
+            icon = { Icon(Icons.Default.Compress, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            checked = tuning.smartContext,
+            onCheckedChange = onToggleSmartContext,
+        )
+    },
+    {
+        EngineTuningToggleItem(
+            title = stringResource(R.string.local_context_shift_title),
+            description = stringResource(R.string.local_context_shift_desc),
+            icon = { Icon(Icons.Default.Layers, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            checked = tuning.contextShift,
+            onCheckedChange = onToggleContextShift,
+        )
+    },
+    {
+        EngineTuningToggleItem(
+            title = stringResource(R.string.local_fast_forward_title),
+            description = stringResource(R.string.local_fast_forward_desc),
+            icon = { Icon(Icons.Default.FastForward, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            checked = tuning.fastForward,
+            onCheckedChange = onToggleFastForward,
+        )
+    },
+    {
+        EngineTuningToggleItem(
+            title = stringResource(R.string.local_direct_io_title),
+            description = stringResource(R.string.local_direct_io_desc),
+            icon = { Icon(Icons.Default.Storage, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            checked = tuning.directIo,
+            onCheckedChange = onToggleDirectIo,
+        )
+    },
+    {
+        EngineTuningChoiceItem(
+            title = stringResource(R.string.local_batch_size_title),
+            description = stringResource(R.string.local_batch_size_desc),
+            icon = { Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            entries = LOCAL_BATCH_SIZES,
+            labelOf = { size ->
+                if (size == 0) stringResource(R.string.local_runtime_auto) else size.toString()
+            },
+            selected = tuning.nBatch,
+            onSelect = onSelectNBatch,
+        )
+    },
+    {
+        EngineTuningChoiceItem(
+            title = stringResource(R.string.local_ubatch_size_title),
+            description = stringResource(R.string.local_ubatch_size_desc),
+            icon = { Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            entries = LOCAL_BATCH_SIZES,
+            labelOf = { size ->
+                if (size == 0) stringResource(R.string.local_runtime_auto) else size.toString()
+            },
+            selected = tuning.nUbatch,
+            onSelect = onSelectNUbatch,
+        )
+    },
     {
         EngineTuningChoiceItem(
             title = stringResource(R.string.local_flash_attention_title),
@@ -128,7 +275,7 @@ internal fun localEngineTuningItems(
         EngineTuningChoiceItem(
             title = stringResource(R.string.local_threads_title),
             description = stringResource(R.string.local_threads_desc),
-            icon = { Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            icon = { Icon(Icons.Default.Cache, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
             entries = LOCAL_THREAD_COUNTS,
             labelOf = { count ->
                 if (count == 0) stringResource(R.string.local_runtime_auto) else count.toString()
@@ -144,6 +291,16 @@ private fun flashAttentionLabel(mode: String): String = when (mode) {
     "on" -> stringResource(R.string.local_engine_on)
     "off" -> stringResource(R.string.local_engine_off)
     else -> stringResource(R.string.local_runtime_auto)
+}
+
+@Composable
+private fun speculativeTypeLabel(type: String): String = when (type) {
+    "ngram_simple" -> stringResource(R.string.local_spec_type_ngram_simple)
+    "ngram_map_k" -> stringResource(R.string.local_spec_type_ngram_map_k)
+    "ngram_map_k4v" -> stringResource(R.string.local_spec_type_ngram_map_k4v)
+    "ngram_mod" -> stringResource(R.string.local_spec_type_ngram_mod)
+    "draft" -> stringResource(R.string.local_spec_type_draft)
+    else -> stringResource(R.string.local_engine_off)
 }
 
 @Composable

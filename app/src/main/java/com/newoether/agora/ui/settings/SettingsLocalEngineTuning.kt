@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Cache
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.FastForward
@@ -15,6 +14,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.DropdownMenu
@@ -39,7 +39,7 @@ import com.newoether.agora.data.LOCAL_DRAFT_AMOUNTS
 import com.newoether.agora.data.LOCAL_FLASH_ATTENTION_MODES
 import com.newoether.agora.data.LOCAL_KV_CACHE_TYPES
 import com.newoether.agora.data.LOCAL_NGRAM_MATCHES
-import com.newoether.agora.data.LOCAL_SMART_CACHE_SLOTS
+import com.newoether.agora.data.LOCAL_SMART_CACHE_SLOT_COUNTS
 import com.newoether.agora.data.LOCAL_SPECULATIVE_TYPES
 import com.newoether.agora.data.LOCAL_THREAD_COUNTS
 import com.newoether.agora.data.repository.SettingsRepository
@@ -152,7 +152,7 @@ internal fun localEngineTuningItems(
             title = stringResource(R.string.local_smart_cache_slots_title),
             description = stringResource(R.string.local_smart_cache_slots_desc),
             icon = { Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
-            entries = LOCAL_SMART_CACHE_SLOTS,
+            entries = LOCAL_SMART_CACHE_SLOT_COUNTS,
             labelOf = { it.toString() },
             selected = tuning.smartCacheSlots,
             onSelect = onSelectSmartCacheSlots,
@@ -275,7 +275,7 @@ internal fun localEngineTuningItems(
         EngineTuningChoiceItem(
             title = stringResource(R.string.local_threads_title),
             description = stringResource(R.string.local_threads_desc),
-            icon = { Icon(Icons.Default.Cache, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+            icon = { Icon(Icons.Default.Speed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
             entries = LOCAL_THREAD_COUNTS,
             labelOf = { count ->
                 if (count == 0) stringResource(R.string.local_runtime_auto) else count.toString()

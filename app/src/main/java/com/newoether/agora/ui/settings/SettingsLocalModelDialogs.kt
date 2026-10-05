@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -180,7 +181,7 @@ private fun AddLocalModelDialog(
     onDraftConsumed: () -> Unit,
     launchMmprojPicker: () -> Unit,
     launchDraftPicker: () -> Unit,
-    deleteFilesAsync: (vararg String?) -> Unit,
+    deleteFilesAsync: (Array<out String?>) -> Unit,
     onDismissed: () -> Unit,
 ) {
     var modelId by remember { mutableStateOf("") }; var modelAlias by remember { mutableStateOf("") }
@@ -190,14 +191,14 @@ private fun AddLocalModelDialog(
     val idRegex = remember { Regex("^[a-z0-9._-]+\$") }
     LaunchedEffect(mmprojPickedUri) {
         mmprojPickedUri?.let { newPath ->
-            deleteFilesAsync(addMmprojPath)
+            deleteFilesAsync(arrayOf(addMmprojPath))
             addMmprojPath = newPath
             onMmprojConsumed()
         }
     }
     LaunchedEffect(draftPickedUri) {
         draftPickedUri?.let { newPath ->
-            deleteFilesAsync(addDraftPath)
+            deleteFilesAsync(arrayOf(addDraftPath))
             addDraftPath = newPath
             onDraftConsumed()
         }
@@ -206,7 +207,7 @@ private fun AddLocalModelDialog(
         modifier = Modifier.clearFocusOnTap(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         onDismissRequest = {
-            deleteFilesAsync(copiedFilePath, addMmprojPath, addDraftPath)
+            deleteFilesAsync(arrayOf(copiedFilePath, addMmprojPath, addDraftPath))
             onDismissed()
         },
         title = { Text(stringResource(R.string.add_local_chat_model), fontWeight = FontWeight.Bold) },
@@ -224,7 +225,7 @@ private fun AddLocalModelDialog(
                 onRemove = {
                     val removedPath = addMmprojPath
                     addMmprojPath = ""
-                    deleteFilesAsync(removedPath)
+                    deleteFilesAsync(arrayOf(removedPath))
                 },
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -235,7 +236,7 @@ private fun AddLocalModelDialog(
                 onRemove = {
                     val removedPath = addDraftPath
                     addDraftPath = ""
-                    deleteFilesAsync(removedPath)
+                    deleteFilesAsync(arrayOf(removedPath))
                 },
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -260,7 +261,7 @@ private fun AddLocalModelDialog(
             onDismissed()
         }) { Text(stringResource(R.string.add)) } },
         dismissButton = { TextButton(onClick = {
-            deleteFilesAsync(copiedFilePath, addMmprojPath, addDraftPath)
+            deleteFilesAsync(arrayOf(copiedFilePath, addMmprojPath, addDraftPath))
             onDismissed()
         }) { Text(stringResource(R.string.cancel)) } }
     )
@@ -276,7 +277,7 @@ private fun EditLocalModelDialog(
     onDraftConsumed: () -> Unit,
     launchMmprojPicker: () -> Unit,
     launchDraftPicker: () -> Unit,
-    deleteFilesAsync: (vararg String?) -> Unit,
+    deleteFilesAsync: (Array<out String?>) -> Unit,
     onDismissed: () -> Unit,
 ) {
     var editModelId by remember { mutableStateOf(model.modelId) }; var editAlias by remember { mutableStateOf(model.alias) }
@@ -286,14 +287,14 @@ private fun EditLocalModelDialog(
     val idRegex = remember { Regex("^[a-z0-9._-]+\$") }
     LaunchedEffect(mmprojPickedUri) {
         mmprojPickedUri?.let { newPath ->
-            if (editMmprojPath != model.mmprojPath) deleteFilesAsync(editMmprojPath)
+            if (editMmprojPath != model.mmprojPath) deleteFilesAsync(arrayOf(editMmprojPath))
             editMmprojPath = newPath
             onMmprojConsumed()
         }
     }
     LaunchedEffect(draftPickedUri) {
         draftPickedUri?.let { newPath ->
-            if (editDraftPath != model.draftModelPath) deleteFilesAsync(editDraftPath)
+            if (editDraftPath != model.draftModelPath) deleteFilesAsync(arrayOf(editDraftPath))
             editDraftPath = newPath
             onDraftConsumed()
         }
@@ -302,8 +303,8 @@ private fun EditLocalModelDialog(
         modifier = Modifier.clearFocusOnTap(),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         onDismissRequest = {
-            if (editMmprojPath != model.mmprojPath) deleteFilesAsync(editMmprojPath)
-            if (editDraftPath != model.draftModelPath) deleteFilesAsync(editDraftPath)
+            if (editMmprojPath != model.mmprojPath) deleteFilesAsync(arrayOf(editMmprojPath))
+            if (editDraftPath != model.draftModelPath) deleteFilesAsync(arrayOf(editDraftPath))
             onDismissed()
         },
         title = { Text(stringResource(R.string.edit), fontWeight = FontWeight.Bold) },
@@ -321,7 +322,7 @@ private fun EditLocalModelDialog(
                 onRemove = {
                     val removedPath = editMmprojPath
                     editMmprojPath = ""
-                    if (removedPath != model.mmprojPath) deleteFilesAsync(removedPath)
+                    if (removedPath != model.mmprojPath) deleteFilesAsync(arrayOf(removedPath))
                 },
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -332,7 +333,7 @@ private fun EditLocalModelDialog(
                 onRemove = {
                     val removedPath = editDraftPath
                     editDraftPath = ""
-                    if (removedPath != model.draftModelPath) deleteFilesAsync(removedPath)
+                    if (removedPath != model.draftModelPath) deleteFilesAsync(arrayOf(removedPath))
                 },
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -357,8 +358,8 @@ private fun EditLocalModelDialog(
             onDismissed()
         }) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = {
-            if (editMmprojPath != model.mmprojPath) deleteFilesAsync(editMmprojPath)
-            if (editDraftPath != model.draftModelPath) deleteFilesAsync(editDraftPath)
+            if (editMmprojPath != model.mmprojPath) deleteFilesAsync(arrayOf(editMmprojPath))
+            if (editDraftPath != model.draftModelPath) deleteFilesAsync(arrayOf(editDraftPath))
             onDismissed()
         }) { Text(stringResource(R.string.cancel)) } }
     )

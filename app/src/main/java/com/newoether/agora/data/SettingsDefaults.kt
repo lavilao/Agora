@@ -39,7 +39,7 @@ internal const val DEFAULT_LOCAL_NGRAM_MATCH = 24
 
 /** Cache behavior (koboldcpp --smartcache / --smartcontext / --noshift / --nofastforward). */
 internal const val DEFAULT_LOCAL_SMART_CACHE = false
-internal val LOCAL_SMART_CACHE_SLOTS = listOf(1, 2, 3, 4)
+internal val LOCAL_SMART_CACHE_SLOT_COUNTS = listOf(1, 2, 3, 4)
 internal const val DEFAULT_LOCAL_SMART_CACHE_SLOTS = 1
 internal const val DEFAULT_LOCAL_SMART_CONTEXT = true
 internal const val DEFAULT_LOCAL_CONTEXT_SHIFT = true
@@ -71,7 +71,7 @@ internal fun normalizeLocalNgramMatch(value: Int?): Int =
     value?.takeIf { it in LOCAL_NGRAM_MATCHES } ?: DEFAULT_LOCAL_NGRAM_MATCH
 
 internal fun normalizeLocalSmartCacheSlots(value: Int?): Int =
-    value?.takeIf { it in LOCAL_SMART_CACHE_SLOTS } ?: DEFAULT_LOCAL_SMART_CACHE_SLOTS
+    value?.takeIf { it in LOCAL_SMART_CACHE_SLOT_COUNTS } ?: DEFAULT_LOCAL_SMART_CACHE_SLOTS
 
 internal fun normalizeLocalBatchSize(value: Int?): Int =
     value?.takeIf { it in LOCAL_BATCH_SIZES } ?: DEFAULT_LOCAL_BATCH_SIZE

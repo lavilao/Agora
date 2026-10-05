@@ -816,19 +816,19 @@
     <string name="local_runtime_vulkan_status_no_loader">Vulkan n\'est pas disponible sur ce système.</string>
     <string name="local_engine_tuning_title">Réglage du moteur</string>
     <string name="local_flash_attention_title">Flash Attention</string>
-    <string name="local_flash_attention_desc">Calcule l\'attention en une seule passe fusionnée, sans matérialiser la matrice complète des scores. Généralement plus rapide et plus économe ; indispensable pour un cache V quantifié. Auto l\'active quand le backend le prend en charge. S'applique au prochain chargement du modèle.</string>
+    <string name="local_flash_attention_desc">Calcule l\'attention en une seule passe fusionnée, sans matérialiser la matrice complète des scores. Généralement plus rapide et plus économe ; indispensable pour un cache V quantifié. Auto l\'active quand le backend le prend en charge. S\'applique au prochain chargement du modèle.</string>
     <string name="local_engine_on">Activé</string>
     <string name="local_engine_off">Désactivé</string>
     <string name="local_mmap_title">Mappage mémoire du fichier modèle</string>
-    <string name="local_mmap_desc">Lit le fichier du modèle via le cache de pages au lieu de le copier en RAM. Le désactiver échange des chargements plus lents et plus de mémoire contre des vitesses de génération plus stables. S'applique au prochain chargement du modèle.</string>
+    <string name="local_mmap_desc">Lit le fichier du modèle via le cache de pages au lieu de le copier en RAM. Le désactiver échange des chargements plus lents et plus de mémoire contre des vitesses de génération plus stables. S\'applique au prochain chargement du modèle.</string>
     <string name="local_kv_cache_k_title">Type de cache KV K</string>
     <string name="local_kv_cache_v_title">Type de cache KV V</string>
-    <string name="local_kv_cache_desc">Type d\'élément des clés d\'attention en cache. Les types quantifiés réduisent fortement la mémoire des longs contextes pour une petite perte de qualité. S'applique au prochain chargement du modèle.</string>
-    <string name="local_kv_cache_v_desc">Type d\'élément des valeurs d\'attention en cache. Les types quantifiés exigent Flash Attention ; sinon V reste en f16. S'applique au prochain chargement du modèle.</string>
+    <string name="local_kv_cache_desc">Type d\'élément des clés d\'attention en cache. Les types quantifiés réduisent fortement la mémoire des longs contextes pour une petite perte de qualité. S\'applique au prochain chargement du modèle.</string>
+    <string name="local_kv_cache_v_desc">Type d\'élément des valeurs d\'attention en cache. Les types quantifiés exigent Flash Attention ; sinon V reste en f16. S\'applique au prochain chargement du modèle.</string>
     <string name="local_swa_full_title">Cache SWA pleine taille</string>
-    <string name="local_swa_full_desc">Les modèles à fenêtre glissante rognent leur cache sur la fenêtre d\'attention pour économiser de la mémoire, ce qui empêche la réutilisation des tours précédents. Activez-le pour les longues conversations. S'applique au prochain chargement du modèle.</string>
+    <string name="local_swa_full_desc">Les modèles à fenêtre glissante rognent leur cache sur la fenêtre d\'attention pour économiser de la mémoire, ce qui empêche la réutilisation des tours précédents. Activez-le pour les longues conversations. S\'applique au prochain chargement du modèle.</string>
     <string name="local_threads_title">Threads CPU</string>
-    <string name="local_threads_desc">Threads utilisés par le moteur pour le préremplissage et la génération. Moins de threads peut aider quand les cœurs sont ralentis ensemble. S'applique au prochain chargement du modèle.</string>
+    <string name="local_threads_desc">Threads utilisés par le moteur pour le préremplissage et la génération. Moins de threads peut aider quand les cœurs sont ralentis ensemble. S\'applique au prochain chargement du modèle.</string>
     <!-- DeepSeek Chat Import -->
     <string name="deepseek_import_title">Importer depuis DeepSeek</string>
     <string name="deepseek_import_subtitle">Importe des conversations depuis un fichier d’export DeepSeek .json.</string>

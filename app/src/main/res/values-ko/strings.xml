@@ -816,7 +816,7 @@
     <string name="local_runtime_vulkan_status_no_loader">이 시스템에서는 Vulkan을 사용할 수 없습니다.</string>
     <string name="local_engine_tuning_title">엔진 튜닝</string>
     <string name="local_flash_attention_title">Flash Attention</string>
-    <string name="local_flash_attention_desc">전체 스코어 행렬을 만들지 않고 하나의 융합 패스로 어텐션을 계산합니다. 대체로 더 빠르고 메모리도 적게 쓰며, 양자화된 V 캐시에 필수입니다. '자동'은 백엔드가 지원하면 활성화됩니다. 다음 모델 로드부터 적용됩니다.</string>
+    <string name="local_flash_attention_desc">전체 스코어 행렬을 만들지 않고 하나의 융합 패스로 어텐션을 계산합니다. 대체로 더 빠르고 메모리도 적게 쓰며, 양자화된 V 캐시에 필수입니다. \'자동\'은 백엔드가 지원하면 활성화됩니다. 다음 모델 로드부터 적용됩니다.</string>
     <string name="local_engine_on">켜기</string>
     <string name="local_engine_off">끄기</string>
     <string name="local_mmap_title">모델 파일 메모리 매핑</string>

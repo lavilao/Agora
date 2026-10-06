@@ -304,7 +304,7 @@
     <string name="sandbox_install_failed">Cài đặt thất bại</string>
     <string name="sandbox_installed_label">Đã cài đặt</string>
     <string name="sandbox_failed_label">Thất bại</string>
-    <string name="sandbox_dashboard_summary">Đã cài đặt %d gói · aarch64</string>
+    <string name="sandbox_dashboard_summary">Đã cài đặt %1$d gói · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d MB / 2 GB</string>
     <string name="sandbox_disk_usage_gb">~%.1f GB / 2 GB</string>
     <string name="sandbox_remove_pkg_title">Xóa %s?</string>

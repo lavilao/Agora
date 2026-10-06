@@ -312,7 +312,7 @@
     <string name="sandbox_install_failed">Installation fehlgeschlagen</string>
     <string name="sandbox_installed_label">Installiert</string>
     <string name="sandbox_failed_label">Fehlgeschlagen</string>
-    <string name="sandbox_dashboard_summary">%d Pakete installiert · aarch64</string>
+    <string name="sandbox_dashboard_summary">%1$d Pakete installiert · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d MB / 2 GB</string>
     <string name="sandbox_disk_usage_gb">~%.1f GB / 2 GB</string>
     <string name="sandbox_remove_pkg_title">%s entfernen?</string>

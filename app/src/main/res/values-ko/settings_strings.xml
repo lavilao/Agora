@@ -312,7 +312,7 @@
     <string name="sandbox_install_failed">설치 실패</string>
     <string name="sandbox_installed_label">설치됨</string>
     <string name="sandbox_failed_label">실패</string>
-    <string name="sandbox_dashboard_summary">%d개의 패키지 설치됨 · aarch64</string>
+    <string name="sandbox_dashboard_summary">%1$d개의 패키지 설치됨 · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d MB / 2 GB</string>
     <string name="sandbox_disk_usage_gb">~%.1f GB / 2 GB</string>
     <string name="sandbox_remove_pkg_title">%s을(를) 제거할까요?</string>

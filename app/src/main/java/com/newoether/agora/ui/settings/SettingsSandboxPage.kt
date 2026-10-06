@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.newoether.agora.R
+import com.newoether.agora.sandbox.AlpineArchitecture
 import com.newoether.agora.sandbox.openSandboxRoot
 import com.newoether.agora.sandbox.SandboxManager
 import com.newoether.agora.sandbox.SandboxSharedStorageAccess
@@ -267,7 +268,7 @@ fun SettingsSandboxPage(
                                         }
                                         Spacer(Modifier.height(2.dp))
                                         Text(
-                                            stringResource(R.string.sandbox_dashboard_summary, pkgCount),
+                                            stringResource(R.string.sandbox_dashboard_summary, pkgCount, AlpineArchitecture.alpineArch),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

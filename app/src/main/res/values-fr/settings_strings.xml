@@ -312,7 +312,7 @@
     <string name="sandbox_install_failed">Échec de l\'installation</string>
     <string name="sandbox_installed_label">Installé</string>
     <string name="sandbox_failed_label">Échec</string>
-    <string name="sandbox_dashboard_summary">%d paquets installés · aarch64</string>
+    <string name="sandbox_dashboard_summary">%1$d paquets installés · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d Mo / 2 Go</string>
     <string name="sandbox_disk_usage_gb">~%.1f Go / 2 Go</string>
     <string name="sandbox_remove_pkg_title">Supprimer %s ?</string>

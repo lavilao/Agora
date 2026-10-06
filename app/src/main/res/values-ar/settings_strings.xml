@@ -312,7 +312,7 @@
     <string name="sandbox_install_failed">فشل التثبيت</string>
     <string name="sandbox_installed_label">مثبت</string>
     <string name="sandbox_failed_label">فشل</string>
-    <string name="sandbox_dashboard_summary">%d حزمة مثبتة · aarch64</string>
+    <string name="sandbox_dashboard_summary">%1$d حزمة مثبتة · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d ميجابايت / 2 جيجابايت</string>
     <string name="sandbox_disk_usage_gb">~%.1f جيجابايت / 2 جيجابايت</string>
     <string name="sandbox_remove_pkg_title">إزالة %s؟</string>

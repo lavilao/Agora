@@ -312,7 +312,7 @@
     <string name="sandbox_install_failed">Не удалось установить</string>
     <string name="sandbox_installed_label">Установлено</string>
     <string name="sandbox_failed_label">Ошибка</string>
-    <string name="sandbox_dashboard_summary">Установлено пакетов: %d · aarch64</string>
+    <string name="sandbox_dashboard_summary">Установлено пакетов: %1$d · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d МБ / 2 ГБ</string>
     <string name="sandbox_disk_usage_gb">~%.1f ГБ / 2 ГБ</string>
     <string name="sandbox_remove_pkg_title">Удалить %s?</string>

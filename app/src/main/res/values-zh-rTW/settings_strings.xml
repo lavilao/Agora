@@ -298,7 +298,7 @@
     <string name="sandbox_install_failed">安裝失敗</string>
     <string name="sandbox_installed_label">已安裝</string>
     <string name="sandbox_failed_label">失敗</string>
-    <string name="sandbox_dashboard_summary">已安裝 %d 個套件 · aarch64</string>
+    <string name="sandbox_dashboard_summary">已安裝 %1$d 個套件 · %2$s</string>
     <string name="sandbox_disk_usage_mb">~%d MB / 2 GB</string>
     <string name="sandbox_disk_usage_gb">~%.1f GB / 2 GB</string>
     <string name="sandbox_remove_pkg_title">移除 %s？</string>

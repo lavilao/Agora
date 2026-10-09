@@ -127,4 +127,10 @@ internal object CactusModelCatalog {
     /** Runtime version as a comparable triple for tag resolution. */
     val runtimeVersion: Triple<Int, Int, Int> =
         parseVersionTag(CactusEngine.UPSTREAM_VERSION) ?: Triple(2, 2, 2)
+
+    /** True when [tag] sorts at or below [other] in semantic version order. */
+    fun isAtMost(tag: Triple<Int, Int, Int>, other: Triple<Int, Int, Int>): Boolean =
+        (tag.first != other.first && tag.first < other.first) ||
+            (tag.first == other.first && tag.second != other.second && tag.second < other.second) ||
+            (tag.first == other.first && tag.second == other.second && tag.third <= other.third)
 }

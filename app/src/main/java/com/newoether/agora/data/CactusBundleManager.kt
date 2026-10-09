@@ -89,12 +89,10 @@ internal class CactusBundleManager(private val context: Context) {
 
     private suspend fun resolveRevision(entry: CactusModelCatalog.Entry): String {
         if (entry.tracksMain) return "main"
-        val runtime = CactusModelCatalog.runtimeVersion.toList()
         val tags = fetchVersionTags(entry.repoId)
         val eligible = tags
             .filter { (_, version) ->
-                // Lexicographic list comparison == semantic version order.
-                version.toList() <= runtime
+                CactusModelCatalog.isAtMost(version, CactusModelCatalog.runtimeVersion)
             }
             .sortedWith(
                 compareBy(

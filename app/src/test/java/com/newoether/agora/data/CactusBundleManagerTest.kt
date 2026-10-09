@@ -109,7 +109,19 @@ class CactusModelCatalogTest {
     fun `runtime version never trails catalog pins`() {
         val gemma = CactusModelCatalog.entryForSlug("gemma-4-e2b-it")!!
         val pinned = CactusModelCatalog.parseVersionTag(gemma.pinnedRevision)!!
-        assertTrue(pinned <= CactusModelCatalog.runtimeVersion)
+        assertTrue(CactusModelCatalog.isAtMost(pinned, CactusModelCatalog.runtimeVersion))
+        assertTrue(
+            CactusModelCatalog.isAtMost(
+                CactusModelCatalog.parseVersionTag("v2.0.1")!!,
+                CactusModelCatalog.parseVersionTag("v2.2.2")!!,
+            ),
+        )
+        assertTrue(
+            CactusModelCatalog.isAtMost(
+                CactusModelCatalog.parseVersionTag("v1.14")!!,
+                CactusModelCatalog.parseVersionTag("v1.9")!!,
+            ).not(),
+        )
     }
 
     @Test

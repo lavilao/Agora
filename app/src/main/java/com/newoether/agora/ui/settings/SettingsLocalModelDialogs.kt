@@ -313,6 +313,7 @@ private fun EditLocalModelDialog(
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(value = editAlias, onValueChange = { editAlias = it }, label = { Text(stringResource(R.string.model_alias_label)) }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(8.dp))
+            if (!model.isCactus) {
             OutlinedTextField(value = editNCtx, onValueChange = { editNCtx = it }, label = { Text(stringResource(R.string.local_ctx_size)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(8.dp))
             ModelFilePickerRow(
@@ -337,6 +338,7 @@ private fun EditLocalModelDialog(
                 },
             )
             Spacer(modifier = Modifier.height(8.dp))
+            }
             OutlinedTextField(value = editTemp, onValueChange = { editTemp = it }, label = { Text(stringResource(R.string.local_temperature)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(value = editTopP, onValueChange = { editTopP = it }, label = { Text(stringResource(R.string.local_top_p)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
@@ -349,12 +351,12 @@ private fun EditLocalModelDialog(
             if (id.isBlank()) { editIdError = "ID is required"; return@TextButton }
             if (!idRegex.matches(id)) { editIdError = "Only a-z, 0-9, . _ - allowed"; return@TextButton }
             if (viewModel.modelManager.isLocalModelIdTaken(id, excludeId = model.id)) { editIdError = "Already in use"; return@TextButton }
-            val n = editNCtx.toIntOrNull()?.takeIf { it > 0 } ?: run { editFormError = "Context size must be positive"; return@TextButton }
+            val n = if (model.isCactus) model.nCtx else editNCtx.toIntOrNull()?.takeIf { it > 0 } ?: run { editFormError = "Context size must be positive"; return@TextButton }
             val t = editTemp.toFloatOrNull()?.takeIf { it in 0f..2f } ?: run { editFormError = "Temperature must be 0–2"; return@TextButton }
             val p = editTopP.toFloatOrNull()?.takeIf { it in 0f..1f } ?: run { editFormError = "Top P must be 0–1"; return@TextButton }
             val m = editMaxTokens.toIntOrNull()?.takeIf { it > 0 } ?: run { editFormError = "Max tokens must be positive"; return@TextButton }
             if (m > n) { editFormError = "Max tokens must not exceed context size"; return@TextButton }
-            viewModel.modelManager.updateLocalChatModel(model.id, id, editAlias.ifBlank { id }, n, t, p, m, mmprojPath = editMmprojPath.trim(), draftModelPath = editDraftPath.trim())
+            viewModel.modelManager.updateLocalChatModel(model.id, id, editAlias.ifBlank { id }, n, t, p, m, mmprojPath = if (model.isCactus) model.mmprojPath else editMmprojPath.trim(), draftModelPath = if (model.isCactus) model.draftModelPath else editDraftPath.trim())
             onDismissed()
         }) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = {

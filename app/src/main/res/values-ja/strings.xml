@@ -300,6 +300,17 @@
     <string name="provider_keys_summary">%1$d 個の API キー</string>
     <string name="provider_connection">接続</string>
     <string name="import_model_chat">GGUF モデルをインポート</string>
+    <string name="cactus_add_model_title">Cactusモデルを追加</string>
+    <string name="cactus_engine_badge">Cactus</string>
+    <string name="cactus_requires_64bit">CactusエンジンにはAgoraの64ビット（arm64-v8a）ビルドが必要です。この端末は32ビットビルドで動作しているため、Cactusモデルはここでは実行できません。llama.cppモデルはこれまで通り使用できます。</string>
+    <string name="cactus_catalog_gemma_desc">画像を認識し思考に対応したマルチモーダル指示モデル。Cactusファミリーで最高の品質。</string>
+    <string name="cactus_catalog_needle_desc">ツール呼び出しのために設計された2,600万パラメータのスペシャリスト。小さくて高速ですが、自由な会話には向いていません。</string>
+    <string name="cactus_download_variant">%1$sをダウンロード · %2$s</string>
+    <string name="cactus_installed">インストール済み</string>
+    <string name="cactus_import_zip">.zipをインポート</string>
+    <string name="cactus_import_folder">フォルダーをインポート</string>
+    <string name="cactus_transfer_failed">転送に失敗しました: %1$s</string>
+    <string name="cactus_bundle_ready">%1$sの準備ができました。設定して完了します。</string>
     <string name="add_local_chat_model">ローカルモデルを追加</string>
     <string name="local_ctx_size">コンテキストサイズ</string>
     <string name="local_temperature">温度</string>

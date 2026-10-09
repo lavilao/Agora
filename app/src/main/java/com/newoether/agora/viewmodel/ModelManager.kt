@@ -42,7 +42,11 @@ class ModelManager(
         scope.launch(Dispatchers.IO) {
             val model = settings.localChatModels.value.find { it.id == uuid }
             if (model != null) {
-                if (model.localFilePath.isNotBlank()) java.io.File(model.localFilePath).delete()
+                if (model.localFilePath.isNotBlank()) {
+                    val target = java.io.File(model.localFilePath)
+                    // Cactus bundles are directories; GGUF models are single files.
+                    if (target.isDirectory) target.deleteRecursively() else target.delete()
+                }
                 if (model.mmprojPath.isNotBlank()) java.io.File(model.mmprojPath).delete()
                 if (model.draftModelPath.isNotBlank()) java.io.File(model.draftModelPath).delete()
             }

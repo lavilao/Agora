@@ -102,6 +102,7 @@ fun SettingsProviderDetailPage(
     var showEditModelDialog by remember { mutableStateOf<LocalChatModelConfig?>(null) }
     var showDeleteModelConfirm by remember { mutableStateOf<LocalChatModelConfig?>(null) }
     var showGgufError by remember { mutableStateOf(false) }
+    var showCactusCatalog by remember { mutableStateOf(false) }
     var showRenameProvider by remember { mutableStateOf(false) }
     var showDeleteProvider by remember { mutableStateOf(false) }
     var providerMenuExpanded by remember { mutableStateOf(false) }
@@ -342,6 +343,19 @@ fun SettingsProviderDetailPage(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.padding(top = 1.dp)
                                         ) {
+                                            if (model.isCactus) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(5.dp),
+                                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                                ) {
+                                                    Text(
+                                                        stringResource(R.string.cactus_engine_badge),
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                }
+                                            }
                                             if (model.mmprojPath.isNotBlank()) {
                                                 Surface(
                                                     shape = RoundedCornerShape(5.dp),
@@ -405,6 +419,31 @@ fun SettingsProviderDetailPage(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(stringResource(R.string.import_model_chat), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                                     }
+                                }
+                            }
+                        }
+                        add {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 56.dp)
+                                    .clickable { showCactusCatalog = true }
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        stringResource(R.string.cactus_add_model_title),
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
                                 }
                             }
                         }
@@ -580,6 +619,13 @@ fun SettingsProviderDetailPage(
         editModel = showEditModelDialog,
         onAddDismissed = { showAddModelDialog = false; copiedFilePath = null },
         onEditDismissed = { showEditModelDialog = null },
+    )
+
+    // Cactus engine catalog: download prebuilt bundles or import local ones
+    CactusModelDialogs(
+        viewModel = viewModel,
+        showCactusCatalog = showCactusCatalog,
+        onDismissed = { showCactusCatalog = false },
     )
 
     // Delete model confirm

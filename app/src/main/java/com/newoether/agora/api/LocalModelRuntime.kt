@@ -26,6 +26,11 @@ internal sealed interface LocalModelIdentity {
     data class Embedding(
         override val canonicalPath: String,
     ) : LocalModelIdentity
+
+    /** Cactus engine resident: a .cactus bundle directory, no llama.cpp options. */
+    data class Cactus(
+        override val canonicalPath: String,
+    ) : LocalModelIdentity
 }
 
 /** Fair process-wide admission gate for every embedded llama.cpp operation. */
@@ -90,6 +95,11 @@ internal object LocalModelRuntime {
         data class Embedding(
             override val identity: LocalModelIdentity.Embedding,
         ) : Resident
+
+        data class Cactus(
+            override val identity: LocalModelIdentity.Cactus,
+            val engine: CactusChatEngine,
+        ) : Resident
     }
 
     private val lifecycleLock = Any()
@@ -112,6 +122,9 @@ internal object LocalModelRuntime {
 
     @Volatile
     private var activeChatEngine: LlamaChatEngine? = null
+
+    @Volatile
+    private var activeCactusEngine: CactusChatEngine? = null
 
     internal fun initialize(nativeLibraryDir: String) {
         require(nativeLibraryDir.isNotBlank()) { "Native library directory must not be blank" }
@@ -171,6 +184,42 @@ internal object LocalModelRuntime {
         }
     }
 
+    /**
+     * Cactus counterpart of [runChat] over the same admission gate: one resident
+     * engine for the whole process, Chat, Embedding or Cactus. The availability
+     * probe reuses the canonical native library directory captured at startup,
+     * so a 32-bit build without libcactus .so fails fast without touching JNI.
+     */
+    suspend fun runCactusChat(
+        bundlePath: String,
+        block: suspend (CactusChatEngine) -> Unit,
+    ): Boolean = tasks.run {
+        val nativeDirectory = nativeBackendDirectory ?: return@run false
+        if (!CactusEngine.isAvailable(nativeDirectory)) return@run false
+        val identity = LocalModelIdentity.Cactus(canonicalize(bundlePath))
+        val current = resident
+        val engine = if (current is Resident.Cactus && current.identity == identity) {
+            current.engine
+        } else {
+            unloadResident()
+            val loaded = CactusChatEngine(identity.canonicalPath)
+            if (!loaded.load()) {
+                loaded.close()
+                return@run false
+            }
+            resident = Resident.Cactus(identity, loaded)
+            loaded
+        }
+
+        activeCactusEngine = engine
+        try {
+            block(engine)
+            true
+        } finally {
+            activeCactusEngine = null
+        }
+    }
+
     suspend fun <T> runEmbedding(
         modelPath: String,
         block: () -> T,
@@ -187,6 +236,7 @@ internal object LocalModelRuntime {
 
     fun cancelActiveChat() {
         activeChatEngine?.cancel()
+        activeCactusEngine?.cancel()
     }
 
     /**
@@ -260,6 +310,10 @@ internal object LocalModelRuntime {
             is Resident.Embedding -> {
                 LlamaEngine.unloadResident()
                 "Embedding"
+            }
+            is Resident.Cactus -> {
+                current.engine.close()
+                "Cactus"
             }
         }
         resident = null

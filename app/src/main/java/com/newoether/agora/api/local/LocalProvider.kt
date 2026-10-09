@@ -72,6 +72,13 @@ class LocalProvider(
             return@flow
         }
 
+        // Cactus models are prebuilt .cactus bundle directories run by the
+        // alternative engine; they never touch the llama.cpp pipeline below.
+        if (modelConfig.isCactus) {
+            cactusGeneration(modelConfig, config, messages)
+            return@flow
+        }
+
         val backendPreference = LlamaBackendPreference.fromNative(
             settings.localRuntimePreference.first()
         )
@@ -323,6 +330,166 @@ class LocalProvider(
             )))
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Cactus engine pipeline. Mirrors the llama.cpp admission discipline: the
+     * whole request runs inside the shared process runtime task, images are
+     * passed to the bundle's own vision tower, and the shared stream
+     * normalization layer recovers thinking delimiters from streamed text.
+     * Tool calls settle only in the final response JSON, so with tools active
+     * the engine emits the partitioned payload once instead of raw tokens.
+     */
+    private suspend fun kotlinx.coroutines.flow.FlowCollector<StreamEvent>.cactusGeneration(
+        modelConfig: com.newoether.agora.data.LocalChatModelConfig,
+        config: ProviderConfig,
+        messages: List<ChatMessage>,
+    ) {
+        val imagePaths = mutableListOf<String>()
+        val localContextWindow = minOf(config.maxContextWindow, modelConfig.nCtx).coerceAtLeast(1)
+        val resolvedRequest = config.copy(maxContextWindow = localContextWindow).resolveRequest(messages)
+        val turns = CactusPromptBuilder.buildTurns(
+            resolvedRequest.messages,
+            resolvedRequest.systemPrompt,
+            imagePaths,
+        )
+        val tools = config.tools.orEmpty()
+        val toolsJson = if (tools.isEmpty()) null else CactusPromptBuilder.buildToolsJson(tools)
+        if (imagePaths.isNotEmpty()) {
+            val imageCount = imagePaths.size
+            DebugLog.d(TAG, "Cactus prompt with $imageCount image(s)")
+        }
+
+        // A 32-bit build cannot run the Cactus kernels at all: fail with the
+        // same explanation the settings surface shows instead of a generic
+        // load error (models can reach a device through import or backup).
+        if (!CactusEngine.isAvailable(context.applicationInfo.nativeLibraryDir)) {
+            emit(StreamEvent.Error(GenerationError.LocalModel(
+                context.getString(R.string.cactus_requires_64bit)
+            )))
+            return
+        }
+
+        val executed = LocalModelRuntime.runCactusChat(modelConfig.localFilePath) { engine ->
+            var inputTokenCount = 0
+            var outputTokenCount = 0
+            var promptTokensPerSecond = 0.0
+            var runtimeName: String? = null
+            var terminalError: GenerationError? = null
+            try {
+                val options = CactusCompletionOptions(
+                    temperature = (config.temperature ?: modelConfig.temperature).toDouble(),
+                    topP = (config.topP ?: modelConfig.topP).toDouble(),
+                    maxTokens = config.maxTokens ?: modelConfig.maxTokens,
+                    enableThinking = config.thinkingEnabled,
+                )
+                val tokenFlow = engine.generate(turns, options, toolsJson)
+                val streamScope = HttpClient.boundStreamScope()
+                val nativeCancel = GenerationCancelHandle { engine.cancel() }
+                streamScope?.register(nativeCancel)
+                try {
+                    tokenFlow.collect { event ->
+                        if (!coroutineContext.isActive) {
+                            engine.cancel()
+                            return@collect
+                        }
+                        when (event) {
+                            is LlamaGenerationEvent.Text -> {
+                                if (event.value.isNotEmpty()) emit(StreamEvent.TextChunk(event.value))
+                            }
+                            is LlamaGenerationEvent.Thought -> {
+                                if (event.value.isNotEmpty()) emit(StreamEvent.ThoughtChunk(event.value))
+                            }
+                            is LlamaGenerationEvent.ToolCallUpdate -> Unit
+                            is LlamaGenerationEvent.ToolCallsCompleted -> {
+                                val calls = event.calls.map { call ->
+                                    val arguments = call.arguments.ifBlank { "{}" }
+                                    StreamEvent.ToolCallRequest(
+                                        id = call.id?.takeIf(String::isNotBlank)
+                                            ?: buildToolCallId(
+                                                "${call.name}:${call.index}",
+                                                arguments,
+                                            ),
+                                        name = call.name,
+                                        arguments = arguments,
+                                        streamKey = "local_tool_${call.index}",
+                                    )
+                                }
+                                if (calls.size == 1) {
+                                    emit(calls.single())
+                                } else if (calls.isNotEmpty()) {
+                                    emit(StreamEvent.ToolCallsRequest(calls))
+                                }
+                            }
+                            is LlamaGenerationEvent.Completed -> {
+                                inputTokenCount = event.inputTokenCount
+                                outputTokenCount = event.outputTokenCount
+                                promptTokensPerSecond = event.promptTokensPerSecond
+                                runtimeName = event.runtimeName
+                                terminalError = when (event.reason) {
+                                    LlamaGenerationStopReason.EOG -> null
+                                    LlamaGenerationStopReason.MAX_TOKENS ->
+                                        GenerationError.OutputTruncated(name, "max_tokens")
+                                    LlamaGenerationStopReason.CONTEXT_FULL -> GenerationError.LocalModel(
+                                        message = "Local context window was exhausted before generation completed.",
+                                        code = LOCAL_CONTEXT_CAPACITY_ERROR_CODE,
+                                    )
+                                    LlamaGenerationStopReason.CANCELLED -> GenerationError.Cancelled
+                                }
+                            }
+                            is LlamaGenerationEvent.Failed -> {
+                                inputTokenCount = event.inputTokenCount
+                                outputTokenCount = event.outputTokenCount
+                                promptTokensPerSecond = event.promptTokensPerSecond
+                                runtimeName = event.runtimeName
+                                terminalError = localGenerationFailure(
+                                    event = event,
+                                    displayMessage = "Generation failed: ${event.message}",
+                                )
+                            }
+                        }
+                    }
+                } finally {
+                    streamScope?.unregister(nativeCancel)
+                }
+                if (terminalError === GenerationError.Cancelled) {
+                    throw kotlinx.coroutines.CancellationException("Native generation cancelled")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                engine.cancel()
+                throw e
+            } catch (e: Exception) {
+                DebugLog.e(TAG, "Cactus generation failed", e)
+                emit(
+                    StreamEvent.Error(
+                        localGenerationFailure(
+                            rawMessage = e.message,
+                            displayMessage = "Generation failed: ${e.message ?: "unknown error"}",
+                        )
+                    )
+                )
+                return@runCactusChat
+            }
+
+            emit(
+                StreamEvent.UsageUpdate(
+                    TokenUsage(
+                        totalTokenCount = (inputTokenCount + outputTokenCount).coerceAtLeast(0),
+                        inputTokenCount = inputTokenCount.coerceAtLeast(0),
+                        outputTokenCount = outputTokenCount.coerceAtLeast(0),
+                        promptProcessingTokensPerSecond =
+                            promptTokensPerSecond.takeIf { it > 0.0 },
+                        runtimeName = runtimeName,
+                    )
+                )
+            )
+            terminalError?.let { emit(StreamEvent.Error(it)) }
+        }
+        if (!executed) {
+            emit(StreamEvent.Error(GenerationError.LocalModel(
+                "Failed to load model: ${modelConfig.alias}"
+            )))
+        }
+    }
 
     private fun formatGenerationError(
         error: Exception,

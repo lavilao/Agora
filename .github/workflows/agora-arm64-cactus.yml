@@ -1,0 +1,168 @@
+# ============================================================================
+#  Agora · Workflow arm64-v8a + Cactus
+#
+#  Build manual para dispositivos de 64 bits que incluye el motor alternativo
+#  Cactus (thirdparty/cactus, kernels ARMv8.2-A+FP16+DotProd+I8MM) junto al
+#  runtime de llama.cpp (ggml-cpu con variantes armv8.x). En este APK:
+#    - lib/arm64-v8a/libagora_cactus.so  → motor Cactus (bundles .cactus)
+#    - lib/arm64-v8a/libagora_llama.so  → motor llama.cpp (GGUF)
+#  Los modelos Cactus se descargan desde Ajustes → Proveedor local →
+#  "Añadir modelo Cactus".
+#
+#  El build por defecto del repo ya es arm64-v8a, así que el único parche que
+#  necesita este workflow es el flavor de debug (x86_64 → arm64-v8a) y el
+#  runtime de proot ya compila para arm64 sin parches.
+#
+#  Se dispara SOLO manualmente (workflow_dispatch): Actions → Run workflow.
+# ============================================================================
+name: Agora APK (arm64 + Cactus, build manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options: [debug, release]
+
+env:
+  JAVA_VERSION: '21'
+  NDK_VERSION: '28.2.13676358'
+  CMAKE_VERSION: '3.22.1'
+  TARGET_ABI: 'arm64-v8a'
+
+jobs:
+  build-arm64-cactus:
+    name: APK arm64-v8a · llama.cpp + Cactus (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo + submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Info de los pins de terceros
+        run: |
+          git -C thirdparty/llama.cpp log -1 --format='llama.cpp: %h %ci %s'
+          git -C thirdparty/cactus log -1 --format='cactus:      %h %ci %s'
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Android SDK + NDK r28c + CMake 3.22.1
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}"
+          log-accepted-licenses: true
+
+      - name: local.properties
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "cmake.dir=$ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}"
+          } > local.properties
+
+      - name: chmod +x gradlew
+        run: chmod +x ./gradlew
+
+      # ------------------------------------------------------------------
+      # Único parche de gradle: el flavor de debug compila x86_64 por defecto
+      # (emuladores); este build lo alinea con arm64-v8a. El defaultConfig ya
+      # es arm64-v8a, así que no se toca.
+      # ------------------------------------------------------------------
+      - name: Patch build.gradle.kts (debug ABI)
+        run: |
+          set -euo pipefail
+          sed -i 's/abiFilters += "x86_64"/abiFilters += "${{ env.TARGET_ABI }}"/' app/build.gradle.kts
+          grep -q 'abiFilters += listOf("arm64-v8a")' app/build.gradle.kts || { echo "defaultConfig sin arm64-v8a"; exit 1; }
+          grep -q 'abiFilters += "arm64-v8a"' app/build.gradle.kts || { echo "buildType debug no parcheado"; exit 1; }
+          echo "build.gradle.kts verificado (arm64-v8a)"
+
+      - name: Build proot (arm64-v8a, sin parches)
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          chmod +x build-proot.sh
+          bash build-proot.sh --force
+
+          for lib in libproot_exec.so libproot_loader.so libtalloc.so; do
+            [ -f "app/src/main/jniLibs/${{ env.TARGET_ABI }}/$lib" ] || { echo "ERROR: falta $lib"; exit 1; }
+          done
+          echo "Runtime de proot arm64 completo"
+
+      - name: Configurar gradle.properties
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.workers.max=4
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.suppressUnsupportedCompileSdk=36
+          EOF
+
+      - name: Build APK Release (arm64-v8a · llama.cpp + Cactus)
+        if: github.event.inputs.build_type == 'release'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidRelease --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/release/app-fdroid-release.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
+
+      - name: Build APK Debug (arm64-v8a · llama.cpp + Cactus)
+        if: github.event.inputs.build_type == 'debug'
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleFdroidDebug --no-daemon --build-cache
+          APK="app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk"
+          [ -f "$APK" ] || { echo "$APK no generado"; exit 1; }
+          echo "APK generado: $(du -h "$APK" | cut -f1)"
+
+      - name: Verificar librerías nativas dentro del APK
+        if: always()
+        run: |
+          set -euo pipefail
+          APKS=$(find app/build/outputs/apk -name '*.apk' -type f)
+          [ -n "$APKS" ] || { echo "No hay APKs"; exit 1; }
+          for apk in $APKS; do
+            echo "=== $(basename "$apk") ==="
+            # Motores: llama.cpp + Cactus, más el runtime compartido.
+            for lib in libagora_llama.so libggml-cpu.so \
+                       libmtmd.so libc++_shared.so \
+                       libagora_cactus.so \
+                       libproot_exec.so; do
+              unzip -l "$apk" | grep -q "lib/arm64-v8a/$lib" \
+                && echo "  OK: $lib" \
+                || { echo "  FALTA: $lib  →  la app crasheará al cargar"; exit 1; }
+            done
+            if unzip -l "$apk" | grep -q "lib/arm64-v8a/libggml-vulkan.so"; then
+              echo "  ERROR: libggml-vulkan.so presente (build CPU esperado)"; exit 1
+            fi
+            echo "  OK: sin libggml-vulkan.so (build CPU confirmado)"
+            echo "  OK: motor Cactus incluido (libagora_cactus.so)"
+          done
+          echo "APK verificado: arm64-v8a llama.cpp + Cactus completo"
+
+      - name: Subir APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-arm64-cactus
+          path: |
+            app/build/outputs/apk/fdroid/release/
+            app/build/outputs/apk/fdroid/debug/
+          if-no-files-found: error
+          retention-days: 30

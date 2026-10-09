@@ -4,3 +4,6 @@
 [submodule "thirdparty/proot"]
 	path = thirdparty/proot
 	url = https://github.com/termux/proot.git
+[submodule "thirdparty/cactus"]
+	path = thirdparty/cactus
+	url = https://github.com/cactus-compute/cactus

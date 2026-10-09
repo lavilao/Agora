@@ -303,6 +303,17 @@
     <string name="provider_keys_summary">%1$d khóa API</string>
     <string name="provider_connection">Kết nối</string>
     <string name="import_model_chat">Nhập mô hình GGUF</string>
+    <string name="cactus_add_model_title">Thêm mô hình Cactus</string>
+    <string name="cactus_engine_badge">Cactus</string>
+    <string name="cactus_requires_64bit">Bộ máy Cactus cần bản dựng 64-bit (arm64-v8a) của Agora. Thiết bị này chạy bản dựng 32-bit nên các mô hình Cactus không thể chạy ở đây — các mô hình llama.cpp vẫn hoạt động như bình thường.</string>
+    <string name="cactus_catalog_gemma_desc">Mô hình hướng dẫn đa phương thức, đọc được hình ảnh và hỗ trợ suy luận. Chất lượng tốt nhất trong dòng Cactus.</string>
+    <string name="cactus_catalog_needle_desc">Chuyên gia 26 triệu tham số được xây dựng để gọi công cụ. Nhỏ và nhanh, không dành cho trò chuyện tự do.</string>
+    <string name="cactus_download_variant">Tải %1$s · %2$s</string>
+    <string name="cactus_installed">Đã cài đặt</string>
+    <string name="cactus_import_zip">Nhập .zip</string>
+    <string name="cactus_import_folder">Nhập thư mục</string>
+    <string name="cactus_transfer_failed">Truyền thất bại: %1$s</string>
+    <string name="cactus_bundle_ready">%1$s đã sẵn sàng. Cấu hình để hoàn tất.</string>
     <string name="add_local_chat_model">Thêm mô hình cục bộ</string>
     <string name="local_ctx_size">Kích thước ngữ cảnh</string>
     <string name="local_temperature">Nhiệt độ (Temperature)</string>

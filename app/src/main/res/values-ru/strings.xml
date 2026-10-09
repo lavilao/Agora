@@ -300,6 +300,17 @@
     <string name="provider_keys_summary">API-ключей: %1$d</string>
     <string name="provider_connection">Подключение</string>
     <string name="import_model_chat">Импортировать модель GGUF</string>
+    <string name="cactus_add_model_title">Добавить модель Cactus</string>
+    <string name="cactus_engine_badge">Cactus</string>
+    <string name="cactus_requires_64bit">Движку Cactus нужна 64-битная (arm64-v8a) сборка Agora. Это устройство работает в 32-битной сборке, поэтому модели Cactus здесь запустить нельзя — модели llama.cpp продолжат работать как обычно.</string>
+    <string name="cactus_catalog_gemma_desc">Мультимодальная инструктивная модель: читает изображения и поддерживает рассуждение. Лучшее качество в семействе Cactus.</string>
+    <string name="cactus_catalog_needle_desc">Специалист на 26 млн параметров, созданный для вызова инструментов. Крошечный и быстрый, не для свободной беседы.</string>
+    <string name="cactus_download_variant">Скачать %1$s · %2$s</string>
+    <string name="cactus_installed">Установлено</string>
+    <string name="cactus_import_zip">Импортировать .zip</string>
+    <string name="cactus_import_folder">Импортировать папку</string>
+    <string name="cactus_transfer_failed">Ошибка передачи: %1$s</string>
+    <string name="cactus_bundle_ready">%1$s готов. Настройте его, чтобы завершить.</string>
     <string name="add_local_chat_model">Добавить локальную модель</string>
     <string name="local_ctx_size">Размер контекста</string>
     <string name="local_temperature">Температура</string>

@@ -337,6 +337,17 @@
     <string name="local_chat_models">本地聊天模型</string>
     <string name="local_chat_models_count">已导入 %1$d 个模型</string>
     <string name="import_model_chat">导入 GGUF 模型</string>
+    <string name="cactus_add_model_title">添加 Cactus 模型</string>
+    <string name="cactus_engine_badge">Cactus</string>
+    <string name="cactus_requires_64bit">Cactus 引擎需要 64 位（arm64-v8a）版本的 Agora。此设备运行的是 32 位版本，因此无法在此运行 Cactus 模型——llama.cpp 模型仍可正常使用。</string>
+    <string name="cactus_catalog_gemma_desc">多模态指令模型，可识读图片并支持思考。Cactus 系列中的最佳质量。</string>
+    <string name="cactus_catalog_needle_desc">专为工具调用打造的 2600 万参数专用模型。小巧快速，不适合开放聊天。</string>
+    <string name="cactus_download_variant">下载 %1$s · %2$s</string>
+    <string name="cactus_installed">已安装</string>
+    <string name="cactus_import_zip">导入 .zip</string>
+    <string name="cactus_import_folder">导入文件夹</string>
+    <string name="cactus_transfer_failed">传输失败：%1$s</string>
+    <string name="cactus_bundle_ready">%1$s 已就绪。配置后即可完成。</string>
     <string name="add_local_chat_model">添加本地模型</string>
     <string name="local_ctx_size">上下文大小</string>
     <string name="local_temperature">温度</string>

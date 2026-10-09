@@ -1,10 +1,18 @@
 # Local Models
 
-Agora can import GGUF language models for on-device llama.cpp inference.
+Agora can import GGUF language models for on-device llama.cpp inference, and can additionally run the [Cactus](https://github.com/cactus-compute/cactus) engine as an alternative for models published as prebuilt `.cactus` bundles.
 
 ## Import
 
 Open **Settings → Providers → Local** and import a GGUF file. Agora copies the model into app-managed storage; an optional multimodal projection file can be associated when supported. Imported models are enabled automatically and can be selected from **Settings → Models** or the chat model picker.
+
+## Cactus engine
+
+Cactus is a self-contained on-device engine with its own kernels and CQ (rotational, 1–4 bit) quantized weights — it does not use GGUF files. From **Settings → Providers → Local → Add Cactus Model** you can download ready-made bundles (for example Gemma 4 E2B in CQ4, or the tiny Needle tool-calling model) straight from the official Cactus weight hub, with checksum-verified downloads and background progress. Bundles you converted yourself on a computer (`cactus convert`) can be imported from a `.zip` archive or a folder.
+
+Cactus models appear with their own badge in the local model list and reuse the same chat experience: streaming, thinking output, tool calling, images (for multimodal bundles) and message statistics all work the same as with llama.cpp models. Cactus manages its own context window and always runs on its own CPU kernels, so the Auto/CPU/Vulkan runtime switch only applies to GGUF models.
+
+Cactus' kernels require a 64-bit (arm64-v8a) build of Agora. On 32-bit devices the entry explains this instead of offering unusable downloads, and every llama.cpp model keeps working as usual.
 
 ## Configure and use
 

@@ -101,6 +101,45 @@ target_link_options(agora_proot PRIVATE
     -Wl,--build-id=none -Wl,--hash-style=gnu -Wl,--icf=all
 )
 
+# ── Cactus alternative engine (arm64-v8a only) ───────────
+# Cactus runs ".cactus" bundle directories (config.txt + vocab.txt +
+# components/manifest.json + *.weights), not GGUF, and its NEON kernels are
+# written for ARMv8.2-A + FP16 + DotProd + I8MM. The engine is therefore only
+# packaged for arm64-v8a devices; 32-bit phones and emulators keep the llama.cpp
+# engine. On those ABIs a STATIC placeholder keeps the Gradle target list
+# resolvable while no .so enters the APK, so the Kotlin availability probe
+# (libagora_cactus.so presence) reports the engine as unavailable.
+set(CACTUS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../thirdparty/cactus" CACHE PATH "Cactus source directory")
+get_filename_component(CACTUS_DIR "${CACTUS_DIR}" REALPATH)
+if(ANDROID_ABI STREQUAL "arm64-v8a" AND EXISTS "${CACTUS_DIR}/cactus-engine/CMakeLists.txt")
+    # The module builds with -std=c++17 (gradle cppFlags) while Cactus targets
+    # set CXX_STANDARD 20. Compilers honor only the last -std flag, so the
+    # stale one is removed up front instead of relying on flag ordering; the
+    # NDK clang default (gnu++17) keeps the llama.cpp sources at C++17.
+    string(REPLACE "-std=c++17" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    add_subdirectory(${CACTUS_DIR}/cactus-engine ${CMAKE_CURRENT_BINARY_DIR}/cactus)
+    add_library(agora_cactus SHARED cactus_engine_jni.cpp)
+    set_target_properties(agora_cactus PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+    )
+    target_include_directories(agora_cactus PRIVATE
+        ${CACTUS_DIR}/cactus-engine
+    )
+    target_link_libraries(agora_cactus PRIVATE cactus_engine cactus_graph cactus_kernels)
+    target_link_options(agora_cactus PRIVATE
+        -Wl,-z,max-page-size=16384
+        -Wl,--build-id=none -Wl,--hash-style=gnu -Wl,--icf=all -Wl,--threads=1
+    )
+    if(LLVM_OBJCOPY)
+        add_custom_command(TARGET agora_cactus POST_BUILD
+            COMMAND ${LLVM_OBJCOPY} --remove-section .comment $<TARGET_FILE:agora_cactus>
+        )
+    endif()
+else()
+    add_library(agora_cactus STATIC cactus_engine_stub.cpp)
+endif()
+
 # ── Reproducible: strip .comment ─────────────────────────
 if(DEFINED ENV{SOURCE_DATE_EPOCH})
     add_definitions(-DSOURCE_DATE_EPOCH=$ENV{SOURCE_DATE_EPOCH})

@@ -430,7 +430,19 @@ The native layer exposes:
 
 - on-device chat generation;
 - local embeddings;
-- the F-Droid PRoot bridge.
+- the F-Droid PRoot bridge;
+- the Cactus alternative engine for `.cactus` bundle models.
+
+The Cactus engine (`thirdparty/cactus`, pinned submodule) is a self-contained inference
+runtime with its own NEON kernels and CQ (rotational, 1–4 bit) quantized weights —
+it does not consume GGUF. Its kernels require ARMv8.2-A + FP16 + DotProd + I8MM,
+so `libagora_cactus.so` is only produced for arm64-v8a; every other ABI compiles a
+static placeholder so the Gradle target list stays resolvable while the Kotlin
+availability probe (`libagora_cactus.so` presence) reports the engine as absent.
+The JNI boundary hard-disables Cactus' cloud handoff and Supabase telemetry through
+process environment flags at library load, so the engine runs fully on device.
+Cactus models share the single resident-model admission gate with llama.cpp
+(`LocalModelRuntime`), and per-request options always restate the no-cloud flags.
 
 The F-Droid sandbox runs commands with concurrent output collection and an actual
 wall-clock timeout. The shared glob matcher is implemented without API-26-only

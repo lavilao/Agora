@@ -40,7 +40,7 @@ android {
             cmake {
                 cppFlags += "-std=c++17"
                 arguments += listOf("-DANDROID_STL=c++_shared")
-                targets += listOf("agora_llama", "agora_proot")
+                targets += listOf("agora_llama", "agora_proot", "agora_cactus")
             }
         }
     }
@@ -162,6 +162,7 @@ afterEvaluate {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.documentfile)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

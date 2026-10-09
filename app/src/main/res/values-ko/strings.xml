@@ -300,6 +300,17 @@
     <string name="provider_keys_summary">%1$d개의 API 키</string>
     <string name="provider_connection">연결</string>
     <string name="import_model_chat">GGUF 모델 가져오기</string>
+    <string name="cactus_add_model_title">Cactus 모델 추가</string>
+    <string name="cactus_engine_badge">Cactus</string>
+    <string name="cactus_requires_64bit">Cactus 엔진은 64비트(arm64-v8a) Agora 빌드가 필요합니다. 이 기기는 32비트 빌드로 실행 중이므로 Cactus 모델을 실행할 수 없습니다. llama.cpp 모델은 평소처럼 계속 사용할 수 있습니다.</string>
+    <string name="cactus_catalog_gemma_desc">이미지를 읽고 사고를 지원하는 멀티모달 지시 모델입니다. Cactus 계열 중 최고 품질.</string>
+    <string name="cactus_catalog_needle_desc">도구 호출을 위해 만들어진 2,600만 파라미터 전문 모델입니다. 크기가 작고 빠르지만 자유로운 대화용은 아닙니다.</string>
+    <string name="cactus_download_variant">%1$s 다운로드 · %2$s</string>
+    <string name="cactus_installed">설치됨</string>
+    <string name="cactus_import_zip">.zip 가져오기</string>
+    <string name="cactus_import_folder">폴더 가져오기</string>
+    <string name="cactus_transfer_failed">전송 실패: %1$s</string>
+    <string name="cactus_bundle_ready">%1$s이(가) 준비되었습니다. 설정을 마치면 완료됩니다.</string>
     <string name="add_local_chat_model">로컬 모델 추가</string>
     <string name="local_ctx_size">컨텍스트 크기</string>
     <string name="local_temperature">온도</string>

@@ -302,7 +302,7 @@
     <string name="import_model_chat">GGUF-Modell importieren</string>
     <string name="cactus_add_model_title">Cactus-Modell hinzufügen</string>
     <string name="cactus_engine_badge">Cactus</string>
-    <string name="cactus_requires_64bit">Die Cactus-Engine braucht einen 64-Bit-Build (arm64-v8a) von Agora. Dieses Gerät nutzt einen 32-Bit-Build, daher können Cactus-Modelle hier nicht laufen — llama.cpp-Modelle funktionieren wie gewohnt weiter.</string>
+    <string name="cactus_requires_64bit">Die Cactus-Engine ist für dieses Gerät nicht paketiert (Emulator-Builds liefern keine). 32-Bit-Telefone führen Needle 3 aus; die vollständigen Cactus-Modelle benötigen einen 64-Bit-Build (arm64-v8a). llama.cpp-Modelle funktionieren wie gewohnt.</string>
     <string name="cactus_catalog_gemma_desc">Multimodales Instruktionsmodell, das Bilder liest und Denken unterstützt. Beste Qualität der Cactus-Familie.</string>
     <string name="cactus_catalog_needle_desc">Ein 26-Millionen-Parameter-Spezialist für Funktionsaufrufe. Winzig und schnell, nicht für offene Unterhaltungen gedacht.</string>
     <string name="cactus_download_variant">%1$s herunterladen · %2$s</string>
@@ -311,6 +311,11 @@
     <string name="cactus_import_folder">Ordner importieren</string>
     <string name="cactus_transfer_failed">Übertragung fehlgeschlagen: %1$s</string>
     <string name="cactus_bundle_ready">%1$s ist bereit. Zum Abschließen konfigurieren.</string>
+    <string name="cactus_catalog_needle3_desc">Ein 35-MB-Modell für Funktionsaufrufe, das auf 32-Bit-Telefonen läuft. Es wählt das richtige Werkzeug und füllt jedes Argument, komplett offline. Nicht für offene Gespräche gedacht.</string>
+    <string name="cactus_needle_no_tools">Needle 3 ist ein Modell für Funktionsaufrufe: Es handelt, wenn diese Konversation Werkzeuge oder Skills aktiviert hat. Für offene Gespräche wähle ein llama.cpp-Modell.</string>
+    <string name="cactus_needle_no_match">Kein aktives Werkzeug passte zu dieser Anfrage, oder das Modell war nicht sicher genug zum Handeln. Aktiviere mehr Werkzeuge oder formuliere um.</string>
+    <string name="cactus_needle_32bit_note">32-Bit-Engine: Needle 3 läuft aus einer einzelnen .cact-Datei. Die vollständigen Cactus-Modelle (Gemma 4 E2B) benötigen einen 64-Bit-Build.</string>
+    <string name="cactus_import_act">.cact importieren</string>
     <string name="add_local_chat_model">Lokales Modell hinzufügen</string>
     <string name="local_ctx_size">Kontextgröße</string>
     <string name="local_temperature">Temperatur</string>

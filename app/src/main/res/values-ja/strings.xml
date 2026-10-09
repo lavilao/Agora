@@ -302,7 +302,7 @@
     <string name="import_model_chat">GGUF モデルをインポート</string>
     <string name="cactus_add_model_title">Cactusモデルを追加</string>
     <string name="cactus_engine_badge">Cactus</string>
-    <string name="cactus_requires_64bit">CactusエンジンにはAgoraの64ビット（arm64-v8a）ビルドが必要です。この端末は32ビットビルドで動作しているため、Cactusモデルはここでは実行できません。llama.cppモデルはこれまで通り使用できます。</string>
+    <string name="cactus_requires_64bit">この端末向けに Cactus エンジンはパッケージされていません（エミュレータービルドには含まれません）。32ビットのスマートフォンでは Needle 3 が動作し、完全な Cactus モデルには64ビット（arm64-v8a）ビルドが必要です。llama.cpp モデルは通常どおり動作します。</string>
     <string name="cactus_catalog_gemma_desc">画像を認識し思考に対応したマルチモーダル指示モデル。Cactusファミリーで最高の品質。</string>
     <string name="cactus_catalog_needle_desc">ツール呼び出しのために設計された2,600万パラメータのスペシャリスト。小さくて高速ですが、自由な会話には向いていません。</string>
     <string name="cactus_download_variant">%1$sをダウンロード · %2$s</string>
@@ -311,6 +311,11 @@
     <string name="cactus_import_folder">フォルダーをインポート</string>
     <string name="cactus_transfer_failed">転送に失敗しました: %1$s</string>
     <string name="cactus_bundle_ready">%1$sの準備ができました。設定して完了します。</string>
+    <string name="cactus_catalog_needle3_desc">32ビットのスマートフォンで動作する35MBのツール呼び出しモデル。正しいツールを選び、すべての引数を埋めます。完全オフライン。自由な会話には向きません。</string>
+    <string name="cactus_needle_no_tools">Needle 3 はツール呼び出しモデルです。この会話でツールやスキルが有効なときに動作します。自由な会話には llama.cpp モデルを選んでください。</string>
+    <string name="cactus_needle_no_match">このリクエストに一致するツールがないか、モデルが確信を持てず実行しませんでした。ツールを追加するか言い換えてください。</string>
+    <string name="cactus_needle_32bit_note">32ビットエンジン: Needle 3 は単一の .cact ファイルから動作します。完全な Cactus モデル（Gemma 4 E2B）には64ビットビルドが必要です。</string>
+    <string name="cactus_import_act">.cact をインポート</string>
     <string name="add_local_chat_model">ローカルモデルを追加</string>
     <string name="local_ctx_size">コンテキストサイズ</string>
     <string name="local_temperature">温度</string>

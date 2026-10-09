@@ -302,7 +302,7 @@
     <string name="import_model_chat">استيراد نموذج GGUF</string>
     <string name="cactus_add_model_title">إضافة نموذج Cactus</string>
     <string name="cactus_engine_badge">Cactus</string>
-    <string name="cactus_requires_64bit">يتطلب محرك Cactus إصدار 64 بت (arm64-v8a) من Agora. هذا الجهاز يعمل بإصدار 32 بت، لذا لا يمكن تشغيل نماذج Cactus هنا — بينما تستمر نماذج llama.cpp في العمل كالمعتاد.</string>
+    <string name="cactus_requires_64bit">محرك Cactus غير مضمّن لهذا الجهاز (بنيات المحاكي لا تتضمنه). هواتف 32 بت تشغّل Needle 3؛ نماذج Cactus الكاملة تتطلب بناء 64 بت (arm64-v8a). نماذج llama.cpp تعمل كالمعتاد.</string>
     <string name="cactus_catalog_gemma_desc">نموذج تعليمات متعدد الوسائط يقرأ الصور ويدعم التفكير. أفضل جودة في عائلة Cactus.</string>
     <string name="cactus_catalog_needle_desc">نموذج صغير متخصص بحجم 26 مليون معامل مصمم لاستدعاء الأدوات. سريع وصغير الحجم وليس مخصصًا للمحادثة المفتوحة.</string>
     <string name="cactus_download_variant">تنزيل %1$s · %2$s</string>
@@ -311,6 +311,11 @@
     <string name="cactus_import_folder">استيراد مجلد</string>
     <string name="cactus_transfer_failed">فشل النقل: %1$s</string>
     <string name="cactus_bundle_ready">%1$s جاهز. اضبط إعداداته للإنهاء.</string>
+    <string name="cactus_catalog_needle3_desc">نموذج استدعاء أدوات بحجم 35 ميغابايت يعمل على هواتف 32 بت. يختار الأداة الصحيحة ويملأ كل الوسائط، دون اتصال بالكامل. ليس مصممًا للمحادثة المفتوحة.</string>
+    <string name="cactus_needle_no_tools">Needle 3 نموذج استدعاء أدوات: يعمل عندما تكون الأدوات أو المهارات مفعّلة في هذه المحادثة. للمحادثة المفتوحة اختر نموذج llama.cpp.</string>
+    <string name="cactus_needle_no_match">لا توجد أداة مفعّلة تطابق هذا الطلب، أو لم يكن النموذج واثقًا بما يكفي للتنفيذ. فعّل أدوات أكثر أو أعد الصياغة.</string>
+    <string name="cactus_needle_32bit_note">محرك 32 بت: يعمل Needle 3 من ملف .cact واحد. نماذج Cactus الكاملة (Gemma 4 E2B) تتطلب بناء 64 بت.</string>
+    <string name="cactus_import_act">استيراد .cact</string>
     <string name="add_local_chat_model">إضافة نموذج محلي</string>
     <string name="local_ctx_size">حجم السياق</string>
     <string name="local_temperature">درجة الحرارة</string>

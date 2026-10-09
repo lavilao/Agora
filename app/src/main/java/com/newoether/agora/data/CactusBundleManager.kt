@@ -35,7 +35,7 @@ internal class CactusBundleManager(private val context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    /** Root directory holding every installed cactus bundle. */
+    /** Root directory holding every installed cactus model. */
     fun bundlesRoot(): File = File(context.filesDir, "cactus")
 
     /** Directory names under the root that look like installed bundles. */
@@ -48,6 +48,24 @@ internal class CactusBundleManager(private val context: Context) {
             .mapNotNull { it.name }
             .toSet()
     }
+
+    /** ".cact" files under the root that look like installed needle models. */
+    fun installedActFilenames(): Set<String> {
+        val root = bundlesRoot()
+        if (!root.isDirectory) return emptySet()
+        return root.listFiles()
+            .orEmpty()
+            .filter { it.isFile && it.name.endsWith(".cact") && it.length() > 0 }
+            .mapNotNull { it.name }
+            .toSet()
+    }
+
+    /** Target file for one ".cact" catalog variant. */
+    fun actFile(entry: CactusModelCatalog.Entry, variant: CactusModelCatalog.Variant): File =
+        File(bundlesRoot(), variant.filename)
+
+    fun isActInstalled(entry: CactusModelCatalog.Entry, variant: CactusModelCatalog.Variant): Boolean =
+        actFile(entry, variant).isFile
 
     fun isInstalled(entry: CactusModelCatalog.Entry, variant: CactusModelCatalog.Variant): Boolean =
         installedBundleDirNames().contains(CactusModelCatalog.bundleDirName(entry, variant))
@@ -225,6 +243,90 @@ internal class CactusBundleManager(private val context: Context) {
         }
     }
 
+    /**
+     * Downloads one ".cact" model file for the prebuilt Needle runtime:
+     * resolve the pinned revision metadata, stream the file while hashing
+     * it into a staging name and promote it atomically. The engine itself
+     * validates the container when the model is loaded.
+     */
+    suspend fun downloadAct(
+        entry: CactusModelCatalog.Entry,
+        variant: CactusModelCatalog.Variant,
+        onProgress: suspend (bytes: Long, total: Long?) -> Unit,
+    ): File = withContext(Dispatchers.IO) {
+        val resolved = resolveVariant(entry, variant)
+        val target = actFile(entry, variant)
+        if (target.isFile && target.length() == resolved.sizeBytes) {
+            return@withContext target
+        }
+        bundlesRoot().mkdirs()
+        val staging = File(bundlesRoot(), ".staging-${System.nanoTime()}")
+        staging.mkdirs()
+        try {
+            val destination = File(staging, variant.filename)
+            val url = "https://huggingface.co/${entry.repoId}/resolve/" +
+                "${resolved.revision.encodePath()}/${variant.filename.encodePath()}"
+            downloadFile(url, destination, resolved.sizeBytes, resolved.sha256, onProgress)
+            if (target.exists()) target.delete()
+            if (!destination.renameTo(target)) {
+                destination.copyTo(target, overwrite = true)
+                destination.delete()
+            }
+            target
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    /**
+     * Imports a ".cact" model file picked through SAF, copying it into app
+     * storage under a non-conflicting name. Size sanity only: the engine
+     * rejects malformed containers at load time with its own diagnostics.
+     */
+    suspend fun importActFile(
+        uri: Uri,
+        onProgress: suspend (bytes: Long, total: Long?) -> Unit,
+    ): File = withContext(Dispatchers.IO) {
+        bundlesRoot().mkdirs()
+        val staging = File(bundlesRoot(), ".staging-${System.nanoTime()}")
+        staging.mkdirs()
+        try {
+            val destination = File(staging, "import.cact")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                destination.outputStream().use { output ->
+                    val buffer = ByteArray(256 * 1024)
+                    var copied = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        copied += read
+                        currentCoroutineContext().ensureActive()
+                        onProgress(copied, null)
+                    }
+                }
+            } ?: throw IOException("Unable to open the selected file")
+            if (destination.length() < 1 shl 20 ||
+                destination.length() > 512L shl 20
+            ) {
+                throw IOException("Not a usable .cact model (size ${destination.length()})")
+            }
+            var name = "needle3.cact"
+            var index = 2
+            while (File(bundlesRoot(), name).exists()) {
+                name = "needle3-${index++}.cact"
+            }
+            val target = File(bundlesRoot(), name)
+            if (!destination.renameTo(target)) {
+                destination.copyTo(target, overwrite = true)
+                destination.delete()
+            }
+            target
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
     /** Extracts an archive picked through SAF into a fresh bundle directory. */
     suspend fun importZip(
         uri: Uri,
@@ -391,12 +493,15 @@ internal class CactusBundleManager(private val context: Context) {
         validateBundle(dir)?.let { throw IOException(it) }
     }
 
-    /** Recursively deletes a bundle directory from app storage. */
+    /** Recursively deletes a bundle directory or a ".cact" model file from app storage. */
     fun deleteBundle(path: String) {
-        val dir = File(path)
+        val target = File(path)
         val root = bundlesRoot()
-        if (dir.isDirectory && dir.canonicalFile.toPath().startsWith(root.canonicalFile.toPath())) {
-            dir.deleteRecursively()
+        if (!target.canonicalFile.toPath().startsWith(root.canonicalFile.toPath())) return
+        if (target.isDirectory) {
+            target.deleteRecursively()
+        } else if (target.isFile) {
+            target.delete()
         }
     }
 

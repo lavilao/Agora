@@ -25,10 +25,12 @@ import kotlinx.serialization.json.put
  * own kernels and CQ quantized weights. It loads prebuilt ".cactus" bundle
  * directories (config.txt, vocab.txt, components/manifest.json, *.weights)
  * instead of GGUF files, and its NEON kernels require ARMv8.2-A + FP16 +
- * DotProd + I8MM. The engine is therefore only packaged for arm64-v8a: on
- * 32-bit devices [isAvailable] reports false and the settings surface explains
- * that a 64-bit build is required, mirroring how greyed-out Vulkan options are
- * presented.
+ * DotProd + I8MM: the full runtime is therefore only packaged for arm64-v8a.
+ * 32-bit phones get the prebuilt Needle 3 engine Cactus publishes for
+ * armeabi-v7a, which runs single ".cact" models through the same [CactusChatEngine]
+ * surface. On ABIs without any packaged engine [isAvailable] reports false and
+ * the settings surface explains the requirement, mirroring how greyed-out
+ * Vulkan options are presented.
  */
 object CactusEngine {
     private const val TAG = "CactusEngine"
@@ -42,8 +44,17 @@ object CactusEngine {
     /** Vendored upstream release; weight bundles must use tags <= this version. */
     const val UPSTREAM_VERSION = "v2.2.2"
 
+    /** Backend id: full engine built from the vendored source (arm64). */
+    const val BACKEND_CACTUS = "cactus"
+
+    /** Backend id: prebuilt Needle 3 runtime for 32-bit phones (.cact models). */
+    const val BACKEND_NEEDLE = "needle"
+
     @Volatile
     private var availability: Boolean? = null
+
+    @Volatile
+    private var backend: String? = null
 
     init {
         // The library load is deferred to the availability probe so a 32-bit
@@ -63,6 +74,7 @@ object CactusEngine {
     ): Int
     private external fun nativeGetLastError(): String
     private external fun nativeSetLogLevel(level: Int)
+    private external fun nativeEngineBackend(): String
 
     // Internal indirection so CactusChatEngine can share the loaded boundary.
     internal fun nativeInitPublic(bundlePath: String): Long = nativeInit(bundlePath)
@@ -95,10 +107,27 @@ object CactusEngine {
         }
     }
 
+    /**
+     * Which engine flavour this build ships: [BACKEND_CACTUS] (full runtime,
+     * bundle directories, arm64), [BACKEND_NEEDLE] (prebuilt Needle 3 runtime,
+     * single .cact models, armv7) or null when no engine is packaged. Only
+     * meaningful after [isAvailable] returned true on the same process.
+     */
+    fun backendKind(): String? = backend
+
+    /** True when this build runs the prebuilt Needle 3 runtime. */
+    internal fun isNeedleBackend(): Boolean = backend == BACKEND_NEEDLE
+
     private fun probeAvailability(nativeLibraryDir: String): Boolean {
         if (!File(nativeLibraryDir, "libagora_cactus.so").isFile) return false
         return try {
             System.loadLibrary("agora_cactus")
+            backend = try {
+                nativeEngineBackend()
+            } catch (_: UnsatisfiedLinkError) {
+                // An older library without the probe is the full engine.
+                BACKEND_CACTUS
+            }
             true
         } catch (_: UnsatisfiedLinkError) {
             false
@@ -168,6 +197,12 @@ internal data class CactusCompletionResult(
     val response: String,
     val thinking: String,
     val functionCalls: List<CactusFunctionCall>,
+    /** Needle only: calls the engine withheld for low confidence. */
+    val suppressedCalls: List<CactusFunctionCall>,
+    /** Needle only: calibrated confidence of the emitted decision. */
+    val confidence: Double,
+    /** True when this is a settled continuation (after tool results), not a decision. */
+    val isContinuation: Boolean,
     val timeToFirstTokenMs: Double,
     val totalTimeMs: Double,
     val prefillTps: Double,
@@ -194,17 +229,37 @@ internal data class CactusCompletionResult(
                 }
                 CactusFunctionCall(name = name, argumentsJson = arguments)
             }.orEmpty()
+            val suppressedCalls = root["suppressed_calls"]?.jsonArray?.mapNotNull { element ->
+                val call = element.jsonObject
+                val name = call["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                val arguments = when (val args = call["arguments"]) {
+                    null -> "{}"
+                    is kotlinx.serialization.json.JsonObject -> args.toString()
+                    else -> args.jsonPrimitive.content.ifBlank { "{}" }
+                }
+                CactusFunctionCall(name = name, argumentsJson = arguments)
+            }.orEmpty()
             return CactusCompletionResult(
                 success = root["success"]?.jsonPrimitive?.content == "true",
                 error = root["error"]?.jsonPrimitive?.content?.takeIf { it != "null" && it.isNotBlank() },
+                // The Needle runtime names its fields "reasoning" and
+                // "peak_ram_mb"; the full engine uses "thinking" and
+                // "ram_usage_mb".
                 response = root["response"]?.jsonPrimitive?.content.orEmpty(),
-                thinking = root["thinking"]?.jsonPrimitive?.content.orEmpty(),
+                thinking = (
+                    root["thinking"]?.jsonPrimitive?.content
+                        ?: root["reasoning"]?.jsonPrimitive?.content
+                    ).orEmpty(),
                 functionCalls = functionCalls,
+                suppressedCalls = suppressedCalls,
+                confidence = root.doubleOf("confidence"),
+                isContinuation = root["continuation"]?.jsonPrimitive?.content == "true",
                 timeToFirstTokenMs = root.doubleOf("time_to_first_token_ms"),
                 totalTimeMs = root.doubleOf("total_time_ms"),
                 prefillTps = root.doubleOf("prefill_tps"),
                 decodeTps = root.doubleOf("decode_tps"),
-                ramUsageMb = root.doubleOf("ram_usage_mb"),
+                ramUsageMb = root.doubleOf("ram_usage_mb")
+                    .takeIf { it > 0.0 } ?: root.doubleOf("peak_ram_mb"),
                 prefillTokens = root.intOf("prefill_tokens"),
                 decodeTokens = root.intOf("decode_tokens"),
                 totalTokens = root.intOf("total_tokens"),
@@ -217,6 +272,9 @@ internal data class CactusCompletionResult(
             response = "",
             thinking = "",
             functionCalls = emptyList(),
+            suppressedCalls = emptyList(),
+            confidence = 0.0,
+            isContinuation = false,
             timeToFirstTokenMs = 0.0,
             totalTimeMs = 0.0,
             prefillTps = 0.0,
@@ -274,13 +332,50 @@ internal object CactusJson {
             })
         }
     }.toString()
+
+    /**
+     * Converts the OpenAI-shaped tool list the chat pipeline builds (each entry
+     * {"type":"function","function":{...}}) into the flat schema the Needle
+     * runtime declares (each entry {name, description, parameters}). Anything
+     * already flat — or unparseable — is returned unchanged so a future
+     * producer stays loadable.
+     */
+    fun toolsToNeedleFlat(toolsJson: String): String = try {
+        val array = json.parseToJsonElement(toolsJson).jsonArray
+        buildJsonArray {
+            array.forEach { element ->
+                val entry = element.jsonObject
+                val wrapped = entry["function"]?.jsonObject
+                val wrappedName = wrapped?.get("name")?.jsonPrimitive?.content
+                if (wrapped != null && wrappedName != null &&
+                    entry["type"]?.jsonPrimitive?.content == "function"
+                ) {
+                    add(buildJsonObject {
+                        put("name", wrappedName)
+                        put(
+                            "description",
+                            wrapped["description"]?.jsonPrimitive?.content.orEmpty(),
+                        )
+                        put("parameters", wrapped["parameters"] ?: buildJsonObject { })
+                    })
+                } else {
+                    add(entry)
+                }
+            }
+        }.toString()
+    } catch (e: Exception) {
+        toolsJson
+    }
 }
 
 /**
- * Resident chat model for one ".cactus" bundle directory. Mirrors the
- * lifecycle discipline of [LlamaChatEngine]: a handle is created by [load],
- * released exactly once in [close], and [cancel] is safe to call from any
- * thread while a completion is running.
+ * Resident chat model for one Cactus model. Mirrors the lifecycle discipline
+ * of [LlamaChatEngine]: a handle is created by [load], released exactly once
+ * in [close], and [cancel] is safe to call from any thread while a completion
+ * is running.
+ *
+ * [bundlePath] is a ".cactus" bundle directory on the full engine (arm64) or
+ * a single ".cact" model file on the prebuilt Needle runtime (armv7).
  */
 internal class CactusChatEngine(
     val bundlePath: String,
@@ -289,14 +384,32 @@ internal class CactusChatEngine(
     @Volatile
     private var nativeHandle: Long = 0L
 
+    /** Needle session: user turns already accumulated inside the runtime. */
+    private var fedUserTurns: List<String> = emptyList()
+
+    private val needleBackend: Boolean
+        get() = CactusEngine.isNeedleBackend()
+
     fun isLoaded(): Boolean = nativeHandle != 0L
 
     fun load(): Boolean {
         check(nativeHandle == 0L) { "Cactus model already resident" }
-        val bundle = File(bundlePath)
-        if (!bundle.isDirectory || !File(bundle, "config.txt").isFile) {
-            DebugLog.e(TAG, "Cactus bundle directory is missing config.txt: $bundlePath")
-            return false
+        val target = File(bundlePath)
+        when {
+            target.isDirectory -> {
+                // Full engine: a bundle directory is identified by config.txt.
+                if (!File(target, "config.txt").isFile) {
+                    DebugLog.e(TAG, "Cactus bundle directory is missing config.txt: $bundlePath")
+                    return false
+                }
+            }
+            target.isFile -> {
+                // Needle runtime: a single .cact model file.
+            }
+            else -> {
+                DebugLog.e(TAG, "Cactus model path does not exist: $bundlePath")
+                return false
+            }
         }
         nativeHandle = CactusEngineBridge.init(bundlePath)
         if (nativeHandle == 0L) {
@@ -338,20 +451,93 @@ internal class CactusChatEngine(
         if (handle == 0L) {
             return CactusCompletionResult.parse("{\"success\":false,\"error\":\"model not loaded\"}")
         }
+        if (needleBackend) {
+            return completeNeedle(turns, options, toolsJson)
+        }
         val messagesJson = CactusJson.turnsToJson(turns)
         val buffer = ByteArray(1024 * 1024)
         val written = CactusEngineBridge.complete(
             handle, messagesJson, options.toJson(), toolsJson, onToken, buffer,
         )
         if (written < 0) {
-            val message = CactusEngine.lastError().ifBlank { "Cactus completion failed" }
-            return CactusCompletionResult.parse(
-                "{\"success\":false,\"error\":${kotlinx.serialization.json.JsonPrimitive(message)}" +
-                    ",\"response\":\"\",\"prefill_tokens\":0,\"decode_tokens\":0}",
-            )
+            return completionFailure(CactusEngine.lastError())
         }
         val raw = buffer.decodeToString(0, written.toInt())
         return CactusCompletionResult.parse(raw)
+    }
+
+    /**
+     * Needle runtime completion. The runtime keeps its own accumulating
+     * conversation and answers one user turn per call, so this layer tracks
+     * which user turns were already fed ([fedUserTurns]) and only sends the
+     * delta: a matching prefix extends the conversation, anything else
+     * (branch, regenerate, another conversation) replays from scratch.
+     * Assistant and tool turns are never fed: the runtime already owns the
+     * calls it generated, and feeding tool results pollutes its router.
+     */
+    private fun completeNeedle(
+        turns: List<CactusChatTurn>,
+        options: CactusCompletionOptions,
+        toolsJson: String?,
+    ): CactusCompletionResult {
+        val handle = nativeHandle
+        // Agora's system prompt can carry injected context far beyond what an
+        // 8192-token router model digests; keep a bounded tail of facts.
+        val system = turns.firstOrNull { it.role == "system" }?.content.orEmpty()
+            .take(NEEDLE_MAX_SYSTEM_CHARS)
+        val userTexts = turns.filter { it.role == "user" }.map { it.content }
+
+        var feed: List<String> = userTexts
+        var reset = true
+        val extendsFed = fedUserTurns.size <= userTexts.size &&
+            fedUserTurns.indices.all { fedUserTurns[it] == userTexts[it] }
+        if (extendsFed) {
+            feed = userTexts.drop(fedUserTurns.size)
+            reset = false
+        }
+        if (feed.isEmpty()) {
+            if (turns.lastOrNull()?.role == "tool") {
+                // Continuation after tool results: nothing new to route; the
+                // settled no-op envelope closes the generation cleanly.
+                return CactusCompletionResult.parse(
+                    "{\"success\":true,\"error\":null,\"response\":\"\"," +
+                        "\"function_calls\":[],\"suppressed_calls\":[]," +
+                        "\"continuation\":true}",
+                )
+            }
+            // Regeneration of the previous turn: replay the conversation.
+            feed = userTexts
+            reset = true
+        }
+
+        val envelope = buildJsonObject {
+            put("system", system)
+            put("feed", buildJsonArray { feed.forEach { add(JsonPrimitive(it)) } })
+            put("reset", reset)
+            // The C API is synchronous with no cancellation hook; bound the
+            // worst case so a runaway generation cannot wedge the resident
+            // engine for minutes.
+            put("max_new_tokens", options.maxTokens.coerceIn(64, NEEDLE_MAX_NEW_TOKENS))
+        }.toString()
+        val toolsFlat = toolsJson?.let { CactusJson.toolsToNeedleFlat(it) } ?: "[]"
+        val buffer = ByteArray(1024 * 1024)
+        val written = CactusEngineBridge.complete(
+            handle, envelope, "{}", toolsFlat, null, buffer,
+        )
+        if (written < 0) {
+            return completionFailure(CactusEngine.lastError())
+        }
+        fedUserTurns = userTexts
+        return CactusCompletionResult.parse(buffer.decodeToString(0, written.toInt()))
+    }
+
+    private fun completionFailure(message: String): CactusCompletionResult {
+        val detail = message.ifBlank { "Cactus completion failed" }
+        return CactusCompletionResult.parse(
+            "{\"success\":false,\"error\":" +
+                kotlinx.serialization.json.JsonPrimitive(detail).toString() +
+                ",\"response\":\"\",\"prefill_tokens\":0,\"decode_tokens\":0}",
+        )
     }
 
     /**
@@ -361,18 +547,25 @@ internal class CactusChatEngine(
      * suppressed — the engine's structured function calls only settle in the
      * final JSON, and streaming the intermediate tool syntax as chat text
      * would leak protocol noise into the conversation.
+     *
+     * The Needle runtime has no token callback, so it always answers in
+     * buffered mode. When it routes nothing (no tool matched, or the call was
+     * withheld for low confidence) [emptyResponseText] — provided by the
+     * caller, which owns localization — becomes the visible answer instead
+     * of an empty bubble.
      */
     fun generate(
         turns: List<CactusChatTurn>,
         options: CactusCompletionOptions,
         toolsJson: String?,
+        emptyResponseText: String? = null,
     ): Flow<LlamaGenerationEvent> = callbackFlow {
         val handle = nativeHandle
         if (handle == 0L) {
             close(RuntimeException("Model not loaded"))
             return@callbackFlow
         }
-        val streaming = toolsJson == null
+        val streaming = toolsJson == null && !needleBackend
         val callback = if (streaming) {
             CactusTokenStream { token ->
                 trySendBlocking(LlamaGenerationEvent.Text(token)).isSuccess
@@ -404,8 +597,16 @@ internal class CactusChatEngine(
             if (result.thinking.isNotEmpty()) {
                 trySendBlocking(LlamaGenerationEvent.Thought(result.thinking))
             }
-            if (result.response.isNotEmpty()) {
-                trySendBlocking(LlamaGenerationEvent.Text(result.response))
+            val visibleText = if (result.isContinuation) {
+                // After tool results the cards are the answer: no filler text.
+                ""
+            } else {
+                result.response.ifBlank {
+                    if (result.functionCalls.isEmpty()) emptyResponseText.orEmpty() else ""
+                }
+            }
+            if (visibleText.isNotEmpty()) {
+                trySendBlocking(LlamaGenerationEvent.Text(visibleText))
             }
         }
         if (result.functionCalls.isNotEmpty()) {
@@ -441,6 +642,12 @@ internal class CactusChatEngine(
 
     private companion object {
         private const val TAG = "CactusChatEngine"
+
+        /** Static-prefix budget for the needle router (8192-token context). */
+        private const val NEEDLE_MAX_SYSTEM_CHARS = 6000
+
+        /** Hard ceiling on one needle generation (see completeNeedle). */
+        private const val NEEDLE_MAX_NEW_TOKENS = 512
     }
 }
 

@@ -444,6 +444,17 @@ process environment flags at library load, so the engine runs fully on device.
 Cactus models share the single resident-model admission gate with llama.cpp
 (`LocalModelRuntime`), and per-request options always restate the no-cloud flags.
 
+On armeabi-v7a the same `libagora_cactus.so` name packages Cactus' prebuilt Needle 3
+engine (`cactus-prebuilt/`, HuggingFace `Cactus-Compute/needle3`) instead: it runs
+single `.cact` model files rather than bundle directories, and its `needle.h` C API
+is conversation-stateful, so the Kotlin `CactusChatEngine` session shadows the fed
+user turns and sends only deltas (full replay on branch/regenerate), while the
+arm64 bridge stays stateless through `cactus_complete`. Both bridges implement the
+same `CactusEngine` JNI surface and identify themselves through
+`nativeEngineBackend()` (`"cactus"` vs `"needle"`); the needle engine's only
+libc++ gap against NDK r28 (`std::__ndk1::__hash_memory`) is closed by a weak shim
+compiled from the verbatim LLVM murmur2 source.
+
 The F-Droid sandbox runs commands with concurrent output collection and an actual
 wall-clock timeout. The shared glob matcher is implemented without API-26-only
 `java.nio.file` APIs so the API 24 minimum remains real.

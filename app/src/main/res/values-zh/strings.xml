@@ -339,7 +339,7 @@
     <string name="import_model_chat">导入 GGUF 模型</string>
     <string name="cactus_add_model_title">添加 Cactus 模型</string>
     <string name="cactus_engine_badge">Cactus</string>
-    <string name="cactus_requires_64bit">Cactus 引擎需要 64 位（arm64-v8a）版本的 Agora。此设备运行的是 32 位版本，因此无法在此运行 Cactus 模型——llama.cpp 模型仍可正常使用。</string>
+    <string name="cactus_requires_64bit">此设备未打包 Cactus 引擎（模拟器构建不包含）。32 位手机可运行 Needle 3；完整 Cactus 模型需要 64 位（arm64-v8a）构建。llama.cpp 模型照常工作。</string>
     <string name="cactus_catalog_gemma_desc">多模态指令模型，可识读图片并支持思考。Cactus 系列中的最佳质量。</string>
     <string name="cactus_catalog_needle_desc">专为工具调用打造的 2600 万参数专用模型。小巧快速，不适合开放聊天。</string>
     <string name="cactus_download_variant">下载 %1$s · %2$s</string>
@@ -348,6 +348,11 @@
     <string name="cactus_import_folder">导入文件夹</string>
     <string name="cactus_transfer_failed">传输失败：%1$s</string>
     <string name="cactus_bundle_ready">%1$s 已就绪。配置后即可完成。</string>
+    <string name="cactus_catalog_needle3_desc">35 MB 的工具调用模型，可在 32 位手机上运行。它会挑对工具并填好每个参数，完全离线。不适合开放式聊天。</string>
+    <string name="cactus_needle_no_tools">Needle 3 是工具调用模型：仅当本会话启用了工具或技能时才会行动。如需开放式聊天，请选择 llama.cpp 模型。</string>
+    <string name="cactus_needle_no_match">没有已启用的工具匹配这条请求，或模型对执行没有足够把握。请启用更多工具或换个说法。</string>
+    <string name="cactus_needle_32bit_note">32 位引擎：Needle 3 从单个 .cact 文件运行。完整 Cactus 模型（Gemma 4 E2B）需要 64 位构建。</string>
+    <string name="cactus_import_act">导入 .cact</string>
     <string name="add_local_chat_model">添加本地模型</string>
     <string name="local_ctx_size">上下文大小</string>
     <string name="local_temperature">温度</string>

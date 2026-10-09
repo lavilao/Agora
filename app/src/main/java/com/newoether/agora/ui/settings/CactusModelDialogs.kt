@@ -60,11 +60,13 @@ import kotlinx.coroutines.launch
 /**
  * Catalog, download and import surface for the Cactus alternative engine.
  *
- * The catalog lists model families that publish prebuilt "-cqN" bundles for the
- * vendored runtime revision; downloads stream from HuggingFace with checksum
- * verification, and bundles can also be imported from a .zip archive or a
- * folder produced by `cactus convert` on a computer. On 32-bit builds — where
- * the Cactus library is not packaged — the whole surface explains the
+ * On arm64 the catalog lists model families that publish prebuilt "-cqN"
+ * bundles for the vendored runtime revision; downloads stream from
+ * HuggingFace with checksum verification, and bundles can also be imported
+ * from a .zip archive or a folder produced by `cactus convert` on a computer.
+ * On 32-bit phones the catalog offers the single-file Needle 3 model (.cact)
+ * that the prebuilt runtime packaged in those builds runs. Where no engine is
+ * packaged at all (emulator builds) the whole surface explains the
  * requirement instead of failing silently.
  */
 @Composable
@@ -77,17 +79,27 @@ internal fun CactusModelDialogs(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val manager = remember { CactusBundleManager(context.applicationContext) }
-    val engineAvailable = remember {
+    val backend = remember {
         runCatching {
-            CactusEngine.isAvailable(context.applicationInfo.nativeLibraryDir)
-        }.getOrDefault(false)
+            if (CactusEngine.isAvailable(context.applicationInfo.nativeLibraryDir)) {
+                CactusEngine.backendKind()
+            } else {
+                null
+            }
+        }.getOrNull()
     }
+    val engineAvailable = backend != null
+    val catalogEntries = remember(backend) {
+        CactusModelCatalog.entriesForBackend(backend)
+    }
+    val isNeedle = backend == CactusEngine.BACKEND_NEEDLE
 
     var installedDirs by remember { mutableStateOf(manager.installedBundleDirNames()) }
+    var installedActs by remember { mutableStateOf(manager.installedActFilenames()) }
     var activeDownload by remember { mutableStateOf<ActiveDownload?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
     var errorText by remember { mutableStateOf<String?>(null) }
-    var pendingBundle by remember { mutableStateOf<PendingCactusBundle?>(null) }
+    var pendingBundle by remember { mutableStateOf<PendingCactusModel?>(null) }
 
     fun startTransfer(block: suspend () -> Unit) {
         downloadJob = scope.launch { block() }
@@ -101,7 +113,7 @@ internal fun CactusModelDialogs(
                     val dir = manager.importZip(uri) { bytes, _ ->
                         activeDownload = activeDownload?.copy(bytes = bytes)
                     }
-                    pendingBundle = PendingCactusBundle.fromDirectory(dir)
+                    pendingBundle = PendingCactusModel.fromDirectory(dir)
                 } catch (e: Exception) {
                     if (e !is kotlinx.coroutines.CancellationException) {
                         DebugLog.e("CactusCatalog", "zip import failed", e)
@@ -115,13 +127,35 @@ internal fun CactusModelDialogs(
         }
     }
 
+    val actLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && activeDownload == null) {
+            activeDownload = ActiveDownload(label = "import")
+            startTransfer {
+                try {
+                    val file = manager.importActFile(uri) { bytes, _ ->
+                        activeDownload = activeDownload?.copy(bytes = bytes)
+                    }
+                    pendingBundle = PendingCactusModel.fromFile(file)
+                } catch (e: Exception) {
+                    if (e !is kotlinx.coroutines.CancellationException) {
+                        DebugLog.e("CactusCatalog", ".cact import failed", e)
+                        errorText = e.message
+                    }
+                } finally {
+                    activeDownload = null
+                    installedActs = manager.installedActFilenames()
+                }
+            }
+        }
+    }
+
     val treeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null && activeDownload == null) {
             activeDownload = ActiveDownload(label = "import")
             startTransfer {
                 try {
                     val dir = manager.importDirectory(uri)
-                    pendingBundle = PendingCactusBundle.fromDirectory(dir)
+                    pendingBundle = PendingCactusModel.fromDirectory(dir)
                 } catch (e: Exception) {
                     if (e !is kotlinx.coroutines.CancellationException) {
                         DebugLog.e("CactusCatalog", "folder import failed", e)
@@ -138,13 +172,14 @@ internal fun CactusModelDialogs(
     pendingBundle?.let { pending ->
         AddCactusModelDialog(
             viewModel = viewModel,
-            bundle = pending,
+            model = pending,
             onDismissed = {
                 if (it) {
-                    manager.deleteBundle(pending.directory.absolutePath)
+                    manager.deleteBundle(pending.path.absolutePath)
                 }
                 pendingBundle = null
                 installedDirs = manager.installedBundleDirNames()
+                installedActs = manager.installedActFilenames()
             },
         )
         return
@@ -175,31 +210,65 @@ internal fun CactusModelDialogs(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
+                } else if (isNeedle) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                stringResource(R.string.cactus_needle_32bit_note),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
                 }
-                CactusModelCatalog.entries.forEach { entry ->
+                catalogEntries.forEach { entry ->
                     CactusCatalogEntryRow(
                         entry = entry,
                         engineAvailable = engineAvailable,
-                        installedDirs = installedDirs,
+                        installedKeys = if (entry.isActFile) installedActs else installedDirs,
                         activeDownload = activeDownload,
                         onDownload = { variant ->
                             if (activeDownload == null) {
-                                val dirName = CactusModelCatalog.bundleDirName(entry, variant)
+                                val key = if (entry.isActFile) {
+                                    variant.filename
+                                } else {
+                                    CactusModelCatalog.bundleDirName(entry, variant)
+                                }
                                 activeDownload = ActiveDownload(
-                                    key = dirName,
+                                    key = key,
                                     totalBytes = variant.sizeBytes,
                                 )
                                 startTransfer {
                                     try {
-                                        val dir = manager.download(entry, variant) { bytes, _ ->
-                                            activeDownload = activeDownload?.copy(bytes = bytes)
+                                        if (entry.isActFile) {
+                                            val file = manager.downloadAct(entry, variant) { bytes, _ ->
+                                                activeDownload = activeDownload?.copy(bytes = bytes)
+                                            }
+                                            pendingBundle = PendingCactusModel(
+                                                path = file,
+                                                suggestedModelId = file.name.removeSuffix(".cact"),
+                                                suggestedAlias = suggestedAlias(entry, variant),
+                                            )
+                                        } else {
+                                            val dir = manager.download(entry, variant) { bytes, _ ->
+                                                activeDownload = activeDownload?.copy(bytes = bytes)
+                                            }
+                                            pendingBundle = PendingCactusModel(
+                                                path = dir,
+                                                suggestedModelId =
+                                                    CactusModelCatalog.suggestedModelId(entry, variant),
+                                                suggestedAlias = suggestedAlias(entry, variant),
+                                            )
                                         }
-                                        pendingBundle = PendingCactusBundle(
-                                            directory = dir,
-                                            suggestedModelId =
-                                                CactusModelCatalog.suggestedModelId(entry, variant),
-                                            suggestedAlias = suggestedAlias(entry, variant),
-                                        )
                                     } catch (e: Exception) {
                                         if (e !is kotlinx.coroutines.CancellationException) {
                                             DebugLog.e("CactusCatalog", "download failed", e)
@@ -208,6 +277,7 @@ internal fun CactusModelDialogs(
                                     } finally {
                                         activeDownload = null
                                         installedDirs = manager.installedBundleDirNames()
+                                        installedActs = manager.installedActFilenames()
                                     }
                                 }
                             }
@@ -220,35 +290,57 @@ internal fun CactusModelDialogs(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    OutlinedButton(
-                        onClick = { zipLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
-                        enabled = engineAvailable && activeDownload == null,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.cactus_import_zip),
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    if (isNeedle) {
+                        OutlinedButton(
+                            onClick = { actLauncher.launch(arrayOf("*/*")) },
+                            enabled = engineAvailable && activeDownload == null,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                stringResource(R.string.cactus_import_act),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { zipLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                            enabled = engineAvailable && activeDownload == null,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                stringResource(R.string.cactus_import_zip),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
-                    OutlinedButton(
-                        onClick = { treeLauncher.launch(null) },
-                        enabled = engineAvailable && activeDownload == null,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            stringResource(R.string.cactus_import_folder),
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    // Folder import brings bundle directories, which only the
+                    // full engine runs; needle builds import .cact files.
+                    if (!isNeedle) {
+                        OutlinedButton(
+                            onClick = { treeLauncher.launch(null) },
+                            enabled = engineAvailable && activeDownload == null,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                stringResource(R.string.cactus_import_folder),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
                 errorText?.let { message ->
@@ -279,6 +371,7 @@ private fun suggestedAlias(
     entry: CactusModelCatalog.Entry,
     variant: CactusModelCatalog.Variant,
 ): String {
+    if (entry.isActFile) return "Needle 3 · CQ${variant.bits}"
     val family = if (entry.slug.startsWith("gemma")) "Gemma 4 E2B" else entry.slug
     val bits = if (variant.bits == variant.bits.toInt().toDouble()) {
         variant.bits.toInt().toString()
@@ -295,16 +388,23 @@ private data class ActiveDownload(
     val totalBytes: Long? = null,
 )
 
-internal data class PendingCactusBundle(
-    val directory: java.io.File,
+/** A downloaded or imported model awaiting registration: bundle dir or .cact file. */
+internal data class PendingCactusModel(
+    val path: java.io.File,
     val suggestedModelId: String,
     val suggestedAlias: String,
 ) {
     companion object {
-        fun fromDirectory(dir: java.io.File): PendingCactusBundle = PendingCactusBundle(
-            directory = dir,
+        fun fromDirectory(dir: java.io.File): PendingCactusModel = PendingCactusModel(
+            path = dir,
             suggestedModelId = dir.name,
             suggestedAlias = dir.name,
+        )
+
+        fun fromFile(file: java.io.File): PendingCactusModel = PendingCactusModel(
+            path = file,
+            suggestedModelId = file.name.removeSuffix(".cact"),
+            suggestedAlias = file.name.removeSuffix(".cact"),
         )
     }
 }
@@ -313,16 +413,20 @@ internal data class PendingCactusBundle(
 private fun CactusCatalogEntryRow(
     entry: CactusModelCatalog.Entry,
     engineAvailable: Boolean,
-    installedDirs: Set<String>,
+    installedKeys: Set<String>,
     activeDownload: ActiveDownload?,
     onDownload: (CactusModelCatalog.Variant) -> Unit,
 ) {
     var selectedVariant by remember(entry) { mutableStateOf(entry.defaultVariant) }
-    val displayName = if (entry.slug.startsWith("gemma")) "Gemma 4 E2B (it)" else "Needle"
-    val description = if (entry.slug.startsWith("gemma")) {
-        stringResource(R.string.cactus_catalog_gemma_desc)
-    } else {
-        stringResource(R.string.cactus_catalog_needle_desc)
+    val displayName = when {
+        entry.isActFile -> "Needle 3"
+        entry.slug.startsWith("gemma") -> "Gemma 4 E2B (it)"
+        else -> "Needle"
+    }
+    val description = when {
+        entry.isActFile -> stringResource(R.string.cactus_catalog_needle3_desc)
+        entry.slug.startsWith("gemma") -> stringResource(R.string.cactus_catalog_gemma_desc)
+        else -> stringResource(R.string.cactus_catalog_needle_desc)
     }
 
     Surface(
@@ -347,9 +451,13 @@ private fun CactusCatalogEntryRow(
             Spacer(Modifier.height(8.dp))
             Column {
                 entry.variants.forEach { variant ->
-                    val dirName = CactusModelCatalog.bundleDirName(entry, variant)
-                    val installed = dirName in installedDirs
-                    val downloading = activeDownload?.key == dirName
+                    val key = if (entry.isActFile) {
+                        variant.filename
+                    } else {
+                        CactusModelCatalog.bundleDirName(entry, variant)
+                    }
+                    val installed = key in installedKeys
+                    val downloading = activeDownload?.key == key
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -382,7 +490,11 @@ private fun CactusCatalogEntryRow(
                 }
             }
             val downloading = activeDownload?.key ==
-                CactusModelCatalog.bundleDirName(entry, selectedVariant)
+                if (entry.isActFile) {
+                    selectedVariant.filename
+                } else {
+                    CactusModelCatalog.bundleDirName(entry, selectedVariant)
+                }
             if (downloading && activeDownload != null) {
                 Spacer(Modifier.height(4.dp))
                 val progress = activeDownload.totalBytes?.takeIf { it > 0 }?.let { total ->
@@ -431,11 +543,11 @@ private fun CactusCatalogEntryRow(
 @Composable
 private fun AddCactusModelDialog(
     viewModel: ChatViewModel,
-    bundle: PendingCactusBundle,
+    model: PendingCactusModel,
     onDismissed: (deleteFiles: Boolean) -> Unit,
 ) {
-    var modelId by remember { mutableStateOf(bundle.suggestedModelId) }
-    var modelAlias by remember { mutableStateOf(bundle.suggestedAlias) }
+    var modelId by remember { mutableStateOf(model.suggestedModelId) }
+    var modelAlias by remember { mutableStateOf(model.suggestedAlias) }
     var temperature by remember { mutableStateOf("0.7") }
     var topP by remember { mutableStateOf("0.9") }
     var maxTokens by remember { mutableStateOf("1024") }
@@ -450,7 +562,7 @@ private fun AddCactusModelDialog(
         text = {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Text(
-                    stringResource(R.string.cactus_bundle_ready, bundle.directory.name),
+                    stringResource(R.string.cactus_bundle_ready, model.path.name),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -523,7 +635,7 @@ private fun AddCactusModelDialog(
                     LocalChatModelConfig(
                         modelId = id,
                         alias = modelAlias.ifBlank { id },
-                        localFilePath = bundle.directory.absolutePath,
+                        localFilePath = model.path.absolutePath,
                         nCtx = CACTUS_NOMINAL_CONTEXT,
                         temperature = t,
                         topP = p,

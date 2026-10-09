@@ -12,7 +12,7 @@ Cactus is a self-contained on-device engine with its own kernels and CQ (rotatio
 
 Cactus models appear with their own badge in the local model list and reuse the same chat experience: streaming, thinking output, tool calling, images (for multimodal bundles) and message statistics all work the same as with llama.cpp models. Cactus manages its own context window and always runs on its own CPU kernels, so the Auto/CPU/Vulkan runtime switch only applies to GGUF models.
 
-Cactus' kernels require a 64-bit (arm64-v8a) build of Agora. On 32-bit devices the entry explains this instead of offering unusable downloads, and every llama.cpp model keeps working as usual.
+The full Cactus kernels require a 64-bit (arm64-v8a) build of Agora. On 32-bit phones Agora ships Cactus' prebuilt Needle 3 engine instead: the catalog offers the single-file `needle3.cact` model (about 35 MB), downloaded with checksum verification or imported from a `.cact` file. Needle 3 is a tool-calling specialist — given the conversation's enabled tools it picks the right ones and fills every argument, entirely on device. It does not free-form chat: without tools active it answers with an explanatory note, and tool rounds surface the model's reasoning as a thought. Full Cactus models (Gemma 4 E2B) keep requiring a 64-bit build, and every llama.cpp model keeps working as usual.
 
 ## Configure and use
 

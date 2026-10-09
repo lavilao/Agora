@@ -33,6 +33,12 @@ internal object CactusModelCatalog {
         val pinnedRevision: String,
         /** True when the family ships no version tags and lives on main. */
         val tracksMain: Boolean = false,
+        /**
+         * True when the artifact is a single ".cact" model file for the
+         * prebuilt Needle runtime (32-bit devices) instead of a "-cqN" zip
+         * bundle directory for the full engine.
+         */
+        val isActFile: Boolean = false,
         /** Ordered variants, first is the recommended default. */
         val variants: List<Variant>,
     ) {
@@ -95,7 +101,41 @@ internal object CactusModelCatalog {
         ),
     )
 
-    fun entryForSlug(slug: String): Entry? = entries.firstOrNull { it.slug == slug }
+    /**
+     * The single ".cact" model the prebuilt Needle runtime runs on 32-bit
+     * devices (HuggingFace Cactus-Compute/needle3). The full-engine entries
+     * above cannot run there: their kernels need ARMv8.2-A.
+     */
+    val needle3ActEntry: Entry = Entry(
+        repoId = "$ORG/needle3",
+        slug = "needle3",
+        pinnedRevision = "main",
+        tracksMain = true,
+        isActFile = true,
+        variants = listOf(
+            Variant(
+                bits = 2.125,
+                filename = "needle3.cact",
+                sizeBytes = 35_335_380L,
+                sha256 = "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+            ),
+        ),
+    )
+
+    /**
+     * Catalog entries the given engine backend can actually run:
+     * [CactusEngine.BACKEND_NEEDLE] (32-bit phones) gets the .cact Needle 3
+     * model, [CactusEngine.BACKEND_CACTUS] (arm64) the full bundle families,
+     * and a null backend (no engine packaged) nothing.
+     */
+    fun entriesForBackend(backend: String?): List<Entry> = when (backend) {
+        CactusEngine.BACKEND_NEEDLE -> listOf(needle3ActEntry)
+        CactusEngine.BACKEND_CACTUS -> entries
+        else -> emptyList()
+    }
+
+    fun entryForSlug(slug: String): Entry? =
+        (entries + needle3ActEntry).firstOrNull { it.slug == slug }
 
     /** Local directory name for one downloaded variant, e.g. "gemma-4-e2b-it-cq4". */
     fun bundleDirName(entry: Entry, variant: Variant): String {

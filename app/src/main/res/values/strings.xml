@@ -345,7 +345,7 @@
     <string name="import_model_chat">Import GGUF Model</string>
     <string name="cactus_add_model_title">Add Cactus Model</string>
     <string name="cactus_engine_badge">Cactus</string>
-    <string name="cactus_requires_64bit">The Cactus engine needs a 64-bit (arm64-v8a) build of Agora. This device runs a 32-bit build, so Cactus models cannot run here — llama.cpp models keep working as usual.</string>
+    <string name="cactus_requires_64bit">The Cactus engine is not packaged for this device (emulator builds ship none). 32-bit phones run Needle 3; full Cactus models need a 64-bit (arm64-v8a) build. llama.cpp models keep working as usual.</string>
     <string name="cactus_catalog_gemma_desc">Multimodal instruction model that reads images and supports thinking. Best quality of the Cactus family.</string>
     <string name="cactus_catalog_needle_desc">A 26M-parameter specialist built for tool calling. Tiny and fast, not made for open-ended chat.</string>
     <string name="cactus_download_variant">Download %1$s · %2$s</string>
@@ -354,6 +354,11 @@
     <string name="cactus_import_folder">Import folder</string>
     <string name="cactus_transfer_failed">Transfer failed: %1$s</string>
     <string name="cactus_bundle_ready">%1$s is ready. Configure it to finish.</string>
+    <string name="cactus_catalog_needle3_desc">A 35 MB on-device tool-calling model that runs on 32-bit phones. It picks the right tool and fills every argument, fully offline. Not made for open-ended chat.</string>
+    <string name="cactus_needle_no_tools">Needle 3 is a tool-calling model: it acts when this conversation has tools or skills enabled. For open-ended chat, pick a llama.cpp model.</string>
+    <string name="cactus_needle_no_match">No active tool matched this request, or the model was not confident enough to act. Enable more tools or rephrase.</string>
+    <string name="cactus_needle_32bit_note">32-bit engine: Needle 3 runs from a single .cact file. Full Cactus models (Gemma 4 E2B) need a 64-bit build.</string>
+    <string name="cactus_import_act">Import .cact</string>
     <string name="add_local_chat_model">Add Local Model</string>
     <string name="local_ctx_size">Context Size</string>
     <string name="local_temperature">Temperature</string>

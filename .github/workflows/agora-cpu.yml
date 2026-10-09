@@ -243,7 +243,7 @@ jobs:
             echo "=== $(basename "$apk") ==="
             for lib in libomp.so libagora_llama.so libggml-cpu.so \
                        libmtmd.so libc++_shared.so \
-                       libproot_exec.so; do
+                       libproot_exec.so libagora_cactus.so; do
               unzip -l "$apk" | grep -q "lib/armeabi-v7a/$lib" \
                 && echo "  OK: $lib" \
                 || { echo "  FALTA: $lib  →  la app crasheará al cargar"; exit 1; }
@@ -253,6 +253,7 @@ jobs:
               echo "  ERROR: libggml-vulkan.so presente en un build CPU"; exit 1
             fi
             echo "  OK: sin libggml-vulkan.so (build CPU confirmado)"
+            echo "  OK: motor Cactus Needle 3 incluido (libagora_cactus.so)"
           done
           echo "APK verificado: CPU+OpenMP armv7 completo"
 

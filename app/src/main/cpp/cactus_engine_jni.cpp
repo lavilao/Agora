@@ -85,6 +85,15 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM * /*vm*/, void * /*reserved*/) {
     return JNI_VERSION_1_6;
 }
 
+// Which engine flavour this library implements: "cactus" for the full
+// runtime built from source (arm64), "needle" for the prebuilt armv7
+// runtime. CactusEngine.backendKind() surfaces it to Kotlin.
+JNIEXPORT jstring JNICALL
+Java_com_newoether_agora_api_CactusEngine_nativeEngineBackend(
+        JNIEnv * env, jobject /*thiz*/) {
+    return env->NewStringUTF("cactus");
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_newoether_agora_api_CactusEngine_nativeInit(
         JNIEnv * env, jobject /*thiz*/, jstring bundle_path) {

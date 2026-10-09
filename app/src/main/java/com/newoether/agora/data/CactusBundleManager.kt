@@ -10,6 +10,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -88,10 +89,20 @@ internal class CactusBundleManager(private val context: Context) {
 
     private suspend fun resolveRevision(entry: CactusModelCatalog.Entry): String {
         if (entry.tracksMain) return "main"
+        val runtime = CactusModelCatalog.runtimeVersion.toList()
         val tags = fetchVersionTags(entry.repoId)
         val eligible = tags
-            .filter { it.second <= CactusModelCatalog.runtimeVersion }
-            .sortedBy { it.second }
+            .filter { (_, version) ->
+                // Lexicographic list comparison == semantic version order.
+                version.toList() <= runtime
+            }
+            .sortedWith(
+                compareBy(
+                    { (_, version) -> version.first },
+                    { (_, version) -> version.second },
+                    { (_, version) -> version.third },
+                ),
+            )
         return eligible.lastOrNull()?.first ?: "main"
     }
 
@@ -197,7 +208,7 @@ internal class CactusBundleManager(private val context: Context) {
                         output.write(buffer, 0, read)
                         digest.update(buffer, 0, read)
                         copied += read
-                        ensureActive()
+                        currentCoroutineContext().ensureActive()
                         onProgress(copied, expectedSize)
                     }
                     if (expectedSize != null && copied != expectedSize) {
@@ -319,8 +330,9 @@ internal class CactusBundleManager(private val context: Context) {
     private fun copyDocumentInto(document: androidx.documentfile.provider.DocumentFile, target: File) {
         if (document.isDirectory) {
             target.mkdirs()
-            document.listFiles().forEach { child ->
-                copyDocumentInto(child, File(target, child.name ?: continue))
+            for (child in document.listFiles()) {
+                val name = child.name ?: continue
+                copyDocumentInto(child, File(target, name))
             }
         } else {
             target.parentFile?.mkdirs()
@@ -338,13 +350,13 @@ internal class CactusBundleManager(private val context: Context) {
                 if (entry.isDirectory) {
                     continue
                 }
-                // Mirror the upstream guards: refuse symlinks and links.
-                val mode = (entry.externalAttributes shr 16) and 0xF0000L
-                if (mode == 0xA0000L || mode == 0x1000L) {
-                    throw IOException("Refusing unsafe archive member: ${entry.name}")
-                }
-                val target = File(outputDir, entry.name)
                 // Zip-slip: every member must stay inside the extraction root.
+                // (Android's ZipEntry does not expose unix mode bits, and
+                // java.util.zip can only write regular files — a zip "symlink"
+                // member is extracted as a plain file containing the target
+                // path, so the containment guard below is the real defense,
+                // matching the protection level of the upstream CLI.)
+                val target = File(outputDir, entry.name)
                 if (!target.canonicalFile.toPath().startsWith(canonicalRoot)) {
                     throw IOException("Unsafe path in archive: ${entry.name}")
                 }

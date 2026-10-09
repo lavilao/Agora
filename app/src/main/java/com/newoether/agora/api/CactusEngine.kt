@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
@@ -250,7 +251,7 @@ internal object CactusJson {
                 put("content", turn.content)
                 if (turn.images.isNotEmpty()) {
                     put("images", buildJsonArray {
-                        turn.images.forEach { image -> add(image) }
+                        turn.images.forEach { image -> add(JsonPrimitive(image)) }
                     })
                 }
                 if (turn.role == "tool" && turn.toolName.isNotBlank()) {
@@ -331,7 +332,7 @@ internal class CactusChatEngine(
         turns: List<CactusChatTurn>,
         options: CactusCompletionOptions,
         toolsJson: String?,
-        onToken: ((String) -> Boolean)?,
+        onToken: CactusTokenStream?,
     ): CactusCompletionResult {
         val handle = nativeHandle
         if (handle == 0L) {
@@ -458,10 +459,7 @@ private object CactusEngineBridge {
         messagesJson: String,
         optionsJson: String,
         toolsJson: String?,
-        onToken: ((String) -> Boolean)?,
+        onToken: CactusTokenStream?,
         buffer: ByteArray,
-    ): Int {
-        val callback = onToken?.let { stream -> CactusTokenStream(stream) }
-        return CactusEngine.nativeCompletePublic(handle, messagesJson, optionsJson, toolsJson, callback, buffer)
-    }
+    ): Int = CactusEngine.nativeCompletePublic(handle, messagesJson, optionsJson, toolsJson, onToken, buffer)
 }

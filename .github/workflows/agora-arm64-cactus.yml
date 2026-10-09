@@ -139,15 +139,21 @@ jobs:
           [ -n "$APKS" ] || { echo "No hay APKs"; exit 1; }
           for apk in $APKS; do
             echo "=== $(basename "$apk") ==="
+            echo "  Librerías nativas empaquetadas:"
+            unzip -l "$apk" | awk '/lib\/arm64-v8a\// {print "    " $NF}'
             # Motores: llama.cpp + Cactus, más el runtime compartido.
-            for lib in libagora_llama.so libggml-cpu.so \
-                       libmtmd.so libc++_shared.so \
+            for lib in libagora_llama.so libmtmd.so libc++_shared.so \
                        libagora_cactus.so \
                        libproot_exec.so; do
               unzip -l "$apk" | grep -q "lib/arm64-v8a/$lib" \
                 && echo "  OK: $lib" \
                 || { echo "  FALTA: $lib  →  la app crasheará al cargar"; exit 1; }
             done
+            # arm64 compila ggml-cpu por variantes (GGML_CPU_ALL_VARIANTS ON):
+            # se exige al menos un backend libggml-cpu-*.
+            unzip -l "$apk" | grep -q "lib/arm64-v8a/libggml-cpu" \
+              && echo "  OK: backends ggml-cpu (variantes armv8.x)" \
+              || { echo "  FALTA: backends ggml-cpu  →  la app crasheará al cargar"; exit 1; }
             if unzip -l "$apk" | grep -q "lib/arm64-v8a/libggml-vulkan.so"; then
               echo "  ERROR: libggml-vulkan.so presente (build CPU esperado)"; exit 1
             fi

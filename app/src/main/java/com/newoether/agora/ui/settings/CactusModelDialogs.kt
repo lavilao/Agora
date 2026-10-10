@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -265,7 +266,7 @@ internal fun CactusModelDialogs(
                                                 // Whistle is the composer's dictation model,
                                                 // not a chat model: nothing to register, the
                                                 // microphone button picks the file up.
-                                                DebugLog.i(
+                                                DebugLog.d(
                                                     "CactusCatalog",
                                                     "Speech model installed: ${file.name}",
                                                 )

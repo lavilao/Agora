@@ -149,7 +149,7 @@ internal class ComposerVoiceRecorderState(private val appContext: Context) {
     }
 
     /** Marks (or unmarks) the slide-left cancel state while the hold lasts. */
-    fun setCancelArmed(armed: Boolean) {
+    fun armCancel(armed: Boolean) {
         if (phase == Phase.RECORDING) cancelArmed = armed
     }
 
@@ -328,7 +328,7 @@ internal fun ComposerVoiceRecorderButton(
                             val nowArmed = (press.position.x - startX) < -cancelDragPx
                             if (nowArmed != armed) {
                                 armed = nowArmed
-                                state.setCancelArmed(armed)
+                                state.armCancel(armed)
                                 haptics.selection()
                             }
                             press.consume()

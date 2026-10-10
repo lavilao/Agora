@@ -14,12 +14,14 @@ Cactus models appear with their own badge in the local model list and reuse the 
 
 The full Cactus kernels require a 64-bit (arm64-v8a) build of Agora. On 32-bit phones Agora ships Cactus' prebuilt Needle 3 engine instead: the catalog offers the single-file `needle3.cact` model (about 35 MB), downloaded with checksum verification or imported from a `.cact` file. Needle 3 is a tool-calling specialist — given the conversation's enabled tools it picks the right ones and fills every argument, entirely on device. It does not free-form chat: without tools active it answers with an explanatory note, and tool rounds surface the model's reasoning as a thought. Full Cactus models (Gemma 4 E2B) keep requiring a 64-bit build, and every llama.cpp model keeps working as usual.
 
+The same catalog offers **Whistle**, Cactus' on-device speech-to-text model: a single 16.9 MB `.cact` file that runs on the very same engine as Needle 3, beside whichever chat model is active. Installing it adds a microphone button to the chat composer (next to send): hold it to record, release to insert the transcript, slide left to cancel — the WhatsApp interaction. Dictation works with every local chat model, `.cact` or GGUF, detects the language automatically (English, German, French, Spanish, Italian, Dutch and Polish), records up to 30 seconds per clip, and never leaves the device; the microphone permission is requested the first time you hold the button. Whistle stays resident next to the chat model, so the first dictation after a fresh app start also loads the model (~17 MB) before transcribing. Removing Whistle from the catalog row also removes the button.
+
 ## Configure and use
 
 Model-specific context and generation capability depend on the GGUF and available device memory. Large context sizes and models require more RAM and may be slow or fail on constrained devices.
 
 ## Delete
 
-Deleting an imported local model removes Agora's managed GGUF and associated projection file. It does not delete an unrelated source file outside Agora's managed storage.
+Deleting an imported local model removes Agora's managed GGUF and associated projection file. It does not delete an unrelated source file outside Agora's managed storage. The Whistle speech model is not a chat model: it is removed from its row in **Add Cactus Model**.
 
 Review [Models](models.md), [Generation](generation.md), and [Privacy & Security](privacy.md). The separate Alpine sandbox is F-Droid-only, but it is not required for llama.cpp model inference.

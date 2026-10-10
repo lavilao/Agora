@@ -1,6 +1,7 @@
 package com.newoether.agora.data
 
 import com.newoether.agora.api.CactusEngine
+import com.newoether.agora.api.CactusSpeechEngine
 
 /**
  * Curated catalog of Cactus engine models that publish prebuilt "-cqN" bundles
@@ -39,6 +40,12 @@ internal object CactusModelCatalog {
          * bundle directory for the full engine.
          */
         val isActFile: Boolean = false,
+        /**
+         * True when the ".cact" carries a speech model (Whistle): it is used
+         * by the composer's microphone button for dictation, not registered
+         * as a chat model.
+         */
+        val isSpeech: Boolean = false,
         /** Ordered variants, first is the recommended default. */
         val variants: List<Variant>,
     ) {
@@ -123,19 +130,45 @@ internal object CactusModelCatalog {
     )
 
     /**
+     * Whistle, Cactus' speech-to-text model (HuggingFace
+     * Cactus-Compute/whistle): a single 16.9 MB ".cact" that runs on the
+     * same prebuilt engine as Needle 3, beside the resident chat model. It
+     * powers the composer's microphone button (16 kHz mono clips, language
+     * auto-detected among en de fr es it nl pl) and is never registered as a
+     * chat model.
+     */
+    val whistleActEntry: Entry = Entry(
+        repoId = "$ORG/whistle",
+        slug = "whistle",
+        pinnedRevision = "main",
+        tracksMain = true,
+        isActFile = true,
+        isSpeech = true,
+        variants = listOf(
+            Variant(
+                bits = 4.0,
+                filename = CactusSpeechEngine.WHISTLE_FILENAME,
+                sizeBytes = 16_919_407L,
+                sha256 = "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb",
+            ),
+        ),
+    )
+
+    /**
      * Catalog entries the given engine backend can actually run:
-     * [CactusEngine.BACKEND_NEEDLE] (32-bit phones) gets the .cact Needle 3
-     * model, [CactusEngine.BACKEND_CACTUS] (arm64) the full bundle families,
-     * and a null backend (no engine packaged) nothing.
+     * [CactusEngine.BACKEND_NEEDLE] (32-bit phones) gets the ".cact" models
+     * (Needle 3 for tool-calling chat, Whistle for speech to text),
+     * [CactusEngine.BACKEND_CACTUS] (arm64) the full bundle families, and a
+     * null backend (no engine packaged) nothing.
      */
     fun entriesForBackend(backend: String?): List<Entry> = when (backend) {
-        CactusEngine.BACKEND_NEEDLE -> listOf(needle3ActEntry)
+        CactusEngine.BACKEND_NEEDLE -> listOf(needle3ActEntry, whistleActEntry)
         CactusEngine.BACKEND_CACTUS -> entries
         else -> emptyList()
     }
 
     fun entryForSlug(slug: String): Entry? =
-        (entries + needle3ActEntry).firstOrNull { it.slug == slug }
+        (entries + needle3ActEntry + whistleActEntry).firstOrNull { it.slug == slug }
 
     /** Local directory name for one downloaded variant, e.g. "gemma-4-e2b-it-cq4". */
     fun bundleDirName(entry: Entry, variant: Variant): String {

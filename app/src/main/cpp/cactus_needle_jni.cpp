@@ -22,6 +22,16 @@
 //                        interrupted, it is bounded by max_new_tokens and
 //                        the response grammar.
 //
+// The same engine also runs Whistle speech models: needle keeps one model
+// per kind (NEEDLE_TEXT, NEEDLE_SPEECH), so the chat model and a 16 kHz
+// transcription model are resident side by side. The speech side is exposed
+// through CactusSpeechEngine:
+//   nativeLoadSpeechModel(path)  loads a Whistle .cact (kept independent of
+//                                 the resident chat model);
+//   nativeTranscribe(pcm, ...)    16 kHz mono float PCM in [-1, 1], at most
+//                                 30 s, returns the engine's JSON verbatim
+//                                 or an error envelope.
+//
 // The needle API is plain C, so no STL types cross the library boundary, but
 // the prebuilt engine's internals live in the NDK libc++ "__ndk1" namespace.
 // The module links the shared STL (ANDROID_STL=c++_shared), whose r28
@@ -37,6 +47,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -53,10 +64,13 @@ namespace {
 // serializes through this mutex.
 std::mutex g_needle_mutex;
 
-// The engine reads the .cact bytes in place: the buffer must outlive the
-// model, so it lives here until another model replaces it.
-std::vector<unsigned char> g_model_bytes;
-std::string g_loaded_path;
+// The engine reads the .cact bytes in place and has no unload API, so every
+// loaded file's buffer must outlive the process. They are keyed by path; a
+// slot's bytes are only dropped when that model kind is definitively replaced
+// (see the reconciliation notes in nativeInit / nativeLoadSpeechModel).
+std::map<std::string, std::vector<unsigned char>> g_act_bytes;
+std::string g_text_path;   // .cact currently loaded as the NEEDLE_TEXT model
+std::string g_speech_path; // .cact currently loaded as the NEEDLE_SPEECH model
 
 // Static-prefix cache: needle_init() re-tokenizes system + tools; it is only
 // re-run when either side actually changed between completions.
@@ -324,6 +338,45 @@ std::string error_envelope(const std::string & message) {
     return "{\"success\":false,\"error\":\"" + json_escape(message) + "\"}";
 }
 
+// Reads one .cact file's bytes into the path-keyed store. The engine maps the
+// bytes in place, so a successful needle_load() transfers ownership: the entry
+// stays until its model kind is definitively replaced. A path that is already
+// resident reuses its original buffer - re-reading could free memory a loaded
+// model still maps, so a file replaced on disk is only picked up after a
+// process restart (the same-path fast paths already behave that way).
+// Returns nullptr when the file cannot be read (the map is left untouched).
+const std::vector<unsigned char> * read_act_file(const std::string & path) {
+    const auto existing = g_act_bytes.find(path);
+    if (existing != g_act_bytes.end()) {
+        return &existing->second;
+    }
+    FILE * file = std::fopen(path.c_str(), "rb");
+    if (file == nullptr) {
+        g_bridge_error = "cannot open " + path;
+        LOGE("%s", g_bridge_error.c_str());
+        return nullptr;
+    }
+    std::fseek(file, 0, SEEK_END);
+    long size = std::ftell(file);
+    std::fseek(file, 0, SEEK_SET);
+    if (size <= 0 || size > kMaxActSize) {
+        g_bridge_error = "unusable .cact size: " + std::to_string(size);
+        LOGE("%s", g_bridge_error.c_str());
+        std::fclose(file);
+        return nullptr;
+    }
+    std::vector<unsigned char> bytes(static_cast<size_t>(size));
+    size_t read = std::fread(bytes.data(), 1, static_cast<size_t>(size), file);
+    std::fclose(file);
+    if (read != static_cast<size_t>(size)) {
+        g_bridge_error = "short read of " + path;
+        LOGE("%s", g_bridge_error.c_str());
+        return nullptr;
+    }
+    const auto inserted = g_act_bytes.emplace(path, std::move(bytes));
+    return &inserted.first->second;
+}
+
 // The needle runtime answers with its own JSON object (function_calls,
 // suppressed_calls, reasoning, confidence, prefill_tps, decode_tps,
 // peak_ram_mb); the Kotlin result parser understands it natively, so the
@@ -352,47 +405,183 @@ Java_com_newoether_agora_api_CactusEngine_nativeInit(
     g_bridge_error.clear();
 
     // Reloading the very same file only needs a fresh conversation.
-    if (g_loaded_path == path && (needle_models() & NEEDLE_TEXT)) {
+    if (g_text_path == path && (needle_models() & NEEDLE_TEXT)) {
         needle_reset();
+        g_last_system.clear();
+        g_last_tools.clear();
+        g_initialized = false;
         return 1;
     }
 
-    FILE * file = std::fopen(path.c_str(), "rb");
-    if (file == nullptr) {
-        g_bridge_error = "cannot open " + path;
-        LOGE("%s", g_bridge_error.c_str());
-        return 0;
-    }
-    std::fseek(file, 0, SEEK_END);
-    long size = std::ftell(file);
-    std::fseek(file, 0, SEEK_SET);
-    if (size <= 0 || size > kMaxActSize) {
-        g_bridge_error = "unusable .cact size: " + std::to_string(size);
-        LOGE("%s", g_bridge_error.c_str());
-        std::fclose(file);
-        return 0;
-    }
-    std::vector<unsigned char> bytes(static_cast<size_t>(size));
-    size_t read = std::fread(bytes.data(), 1, static_cast<size_t>(size), file);
-    std::fclose(file);
-    if (read != static_cast<size_t>(size)) {
-        g_bridge_error = "short read of " + path;
-        LOGE("%s", g_bridge_error.c_str());
-        return 0;
-    }
-
-    const int rc = needle_load(bytes.data(), static_cast<unsigned long long>(bytes.size()));
+    const std::vector<unsigned char> * bytes = read_act_file(path);
+    if (bytes == nullptr) return 0;
+    const int models_before = needle_models();
+    const int rc = needle_load(
+        bytes->data(), static_cast<unsigned long long>(bytes->size()));
     if (rc != 0) {
         g_bridge_error = needle_last_error() ? needle_last_error() : "needle_load failed";
         LOGE("needle_load failed: rc=%d err=%s", rc, g_bridge_error.c_str());
+        // Nothing was loaded from these bytes; the engine does not map them.
+        g_act_bytes.erase(path);
         return 0;
     }
-    g_model_bytes = std::move(bytes);
-    g_loaded_path = path;
+
+    // needle_load reads whichever kind the .cact carries and keeps the other:
+    // reconcile which slot owns the file now. needle_models() only reveals a
+    // newly-added kind, so the one ambiguous case (both kinds resident, the
+    // file replaced one of them) is resolved by comparing the bytes with the
+    // already-loaded speech model. Freeing a still-mapped buffer is the one
+    // unrecoverable mistake; retaining a replaced one only costs its file size.
+    const int models_after = needle_models();
+    const bool was_text = (models_before & NEEDLE_TEXT) != 0;
+    const bool was_speech = (models_before & NEEDLE_SPEECH) != 0;
+    const bool now_speech = (models_after & NEEDLE_SPEECH) != 0;
+    bool carried_speech = !was_speech && now_speech;
+    if (!carried_speech && was_speech && was_text) {
+        const auto loaded = g_act_bytes.find(g_speech_path);
+        carried_speech = loaded != g_act_bytes.end() &&
+            loaded->second.size() == bytes->size() &&
+            std::memcmp(loaded->second.data(), bytes->data(), bytes->size()) == 0;
+    }
+    if (carried_speech) {
+        // The file carried a speech model (Whistle): it cannot be a chat model.
+        g_speech_path = path;
+        g_bridge_error = "this .cact carries a speech model, not a text model";
+        LOGE("%s", g_bridge_error.c_str());
+        return 0;
+    }
+    if (g_text_path != path) {
+        // Safe to forget the replaced text model's bytes only when it cannot
+        // still be mapped: speech was not loaded, so the engine's text model
+        // necessarily came from this file. With both kinds resident the old
+        // text bytes are retained instead (bounded by the files ever loaded).
+        if (!was_speech) g_act_bytes.erase(g_text_path);
+        g_text_path = path;
+    }
     g_last_system.clear();
     g_last_tools.clear();
     g_initialized = false;
     return 1;
+}
+
+// Loads one .cact as the process's NEEDLE_SPEECH model (Whistle). The speech
+// model is independent of the chat model: loading it never disturbs the text
+// model, and the engine keeps both resident once loaded. Returns JNI_FALSE
+// with g_bridge_error set when the file cannot be read or carries a text
+// model instead.
+JNIEXPORT jboolean JNICALL
+Java_com_newoether_agora_api_CactusSpeechEngine_nativeLoadSpeechModel(
+        JNIEnv * env, jobject /*thiz*/, jstring model_path) {
+    std::string path;
+    if (!agora::jni::read_java_path(env, model_path, path)) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    g_bridge_error.clear();
+
+    if (g_speech_path == path && (needle_models() & NEEDLE_SPEECH)) {
+        return JNI_TRUE;
+    }
+
+    const std::vector<unsigned char> * bytes = read_act_file(path);
+    if (bytes == nullptr) return JNI_FALSE;
+    const int models_before = needle_models();
+    const int rc = needle_load(
+        bytes->data(), static_cast<unsigned long long>(bytes->size()));
+    if (rc != 0) {
+        g_bridge_error = needle_last_error() ? needle_last_error() : "needle_load failed";
+        LOGE("needle_load failed: rc=%d err=%s", rc, g_bridge_error.c_str());
+        g_act_bytes.erase(path);
+        return JNI_FALSE;
+    }
+
+    const int models_after = needle_models();
+    const bool was_text = (models_before & NEEDLE_TEXT) != 0;
+    const bool was_speech = (models_before & NEEDLE_SPEECH) != 0;
+    const bool now_text = (models_after & NEEDLE_TEXT) != 0;
+    const bool now_speech = (models_after & NEEDLE_SPEECH) != 0;
+    bool carried_text = !was_text && now_text;
+    if (!carried_text && !now_speech) {
+        // A text file with no speech model anywhere: the text model was
+        // replaced by it and nothing usable for the mic remains.
+        carried_text = true;
+    }
+    if (!carried_text && was_text && was_speech) {
+        // Both kinds were resident and the model bits alone cannot tell which
+        // one this file replaced: byte-identical to the loaded text model
+        // means it carried the text model.
+        const auto loaded = g_act_bytes.find(g_text_path);
+        carried_text = loaded != g_act_bytes.end() &&
+            loaded->second.size() == bytes->size() &&
+            std::memcmp(loaded->second.data(), bytes->data(), bytes->size()) == 0;
+    }
+    if (carried_text) {
+        // The file carried a text model (Needle 3): it cannot transcribe.
+        g_text_path = path;
+        g_bridge_error = "this .cact carries a text model, not a speech model";
+        LOGE("%s", g_bridge_error.c_str());
+        return JNI_FALSE;
+    }
+    if (g_speech_path != path) {
+        // The speech model was replaced; its predecessor's bytes are only
+        // safe to drop when no text model shares the ambiguity (see above).
+        if (!was_text) g_act_bytes.erase(g_speech_path);
+        g_speech_path = path;
+    }
+    return JNI_TRUE;
+}
+
+// Transcribes 16 kHz mono float PCM in [-1, 1] (at most 30 s) with the loaded
+// speech model. Returns the engine's own JSON verbatim
+// ({"text","language","ttft_ms","decode_tps"}) or an error envelope. The call
+// serializes with chat generation on the engine's single mutex.
+JNIEXPORT jstring JNICALL
+Java_com_newoether_agora_api_CactusSpeechEngine_nativeTranscribe(
+        JNIEnv * env, jobject /*thiz*/, jfloatArray pcm, jint samples,
+        jstring language, jstring keywords) {
+    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    g_bridge_error.clear();
+    if (pcm == nullptr || samples <= 0) {
+        g_bridge_error = "no audio was captured";
+        return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
+    }
+    const jsize capacity = env->GetArrayLength(pcm);
+    if (samples > capacity) {
+        g_bridge_error = "audio sample count exceeds the buffer";
+        return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
+    }
+    if (!(needle_models() & NEEDLE_SPEECH)) {
+        g_bridge_error = "no speech model is loaded";
+        return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
+    }
+
+    std::string language_code;
+    if (language != nullptr &&
+        !agora::jni::read_java_string(env, language, language_code)) {
+        return env->NewStringUTF(error_envelope("invalid language argument").c_str());
+    }
+    std::string keywords_text;
+    if (keywords != nullptr &&
+        !agora::jni::read_java_string(env, keywords, keywords_text)) {
+        return env->NewStringUTF(error_envelope("invalid keywords argument").c_str());
+    }
+
+    jfloat * audio = env->GetFloatArrayElements(pcm, nullptr);
+    if (audio == nullptr) {
+        return env->NewStringUTF(error_envelope("cannot access the audio buffer").c_str());
+    }
+    std::vector<char> out(kOutCapacity);
+    const int rc = needle_transcribe(
+        audio, samples,
+        language != nullptr ? language_code.c_str() : nullptr,
+        keywords != nullptr ? keywords_text.c_str() : nullptr,
+        0, out.data(), kOutCapacity);
+    env->ReleaseFloatArrayElements(pcm, audio, JNI_ABORT);
+    if (rc < 0) {
+        const char * engine_error = needle_last_error();
+        g_bridge_error = engine_error ? engine_error : "needle_transcribe failed";
+        LOGE("needle_transcribe failed: %s", g_bridge_error.c_str());
+        return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
+    }
+    return env->NewStringUTF(out.data());
 }
 
 JNIEXPORT void JNICALL

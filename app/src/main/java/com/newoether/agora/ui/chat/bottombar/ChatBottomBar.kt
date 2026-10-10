@@ -25,11 +25,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.newoether.agora.R
 import com.newoether.agora.model.AttachmentImportState
+import com.newoether.agora.model.SelectedAttachment
 import com.newoether.agora.ui.common.LocalAgoraHaptics
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 import com.newoether.agora.viewmodel.ConversationComposerController
@@ -152,6 +154,31 @@ internal fun ChatBottomBar(
     val context = LocalContext.current
     val haptics = LocalAgoraHaptics.current
     val activityLaunchScope = rememberCoroutineScope()
+    // Whistle dictation: hold-to-record beside whichever local model the
+    // conversation uses; availability (needle engine + installed speech .cact)
+    // refreshes every time the chat regains focus, so downloading Whistle in
+    // settings and returning is enough for the button to appear.
+    val voiceRecorder = rememberComposerVoiceRecorderState()
+
+    /** Inserts one dictated transcript, sending immediately when the hold
+     *  began on an empty composer (the WhatsApp release-to-send behaviour). */
+    fun insertVoiceTranscript(text: String, autoSend: Boolean) {
+        if (text.isBlank()) return
+        val current = textFieldState.text.toString()
+        val separator = if (current.isNotEmpty() && !current.endsWith(" ")) " " else ""
+        val next = current + separator + text
+        textFieldState.edit { replace(0, length, next) }
+        if (!autoSend) return
+        val canSend = composerSnapshot.loaded && isModelValid &&
+            !isSwitching && !isStopping && !submission.isFrozen
+        if (canSend) {
+            submissionController.submit(
+                ownerId = composerOwnerId,
+                text = next,
+                attachmentIds = composerSnapshot.attachments.map(SelectedAttachment::localId),
+            )
+        }
+    }
     suspend fun withOwner(ownerId: String, action: suspend () -> Unit): Boolean {
         if (submissionController.snapshot(ownerId).isFrozen) return false
         composerController.load(ownerId)
@@ -366,6 +393,14 @@ internal fun ChatBottomBar(
         }
         },
     ) {
+        if (voiceRecorder.isAvailable &&
+            (voiceRecorder.phase != ComposerVoiceRecorderState.Phase.IDLE ||
+                voiceRecorder.noticeRes != null)
+        ) {
+            // While dictating (or right after) the control group's icons give
+            // way to the recording HUD: red dot, timer, slide-to-cancel hint.
+            ComposerVoiceRecordingHud(voiceRecorder)
+        } else {
             ComposerControlGroup {
                 AttachmentAddMenu(
                     enabled = !submission.isFrozen,
@@ -575,6 +610,20 @@ internal fun ChatBottomBar(
                     }
                 }
             }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (voiceRecorder.isAvailable) {
+                ComposerVoiceRecorderButton(
+                    state = voiceRecorder,
+                    enabled = !submission.isFrozen,
+                    onCaptureEmpty = {
+                        textFieldState.text.isBlank() &&
+                            composerSnapshot.attachments.isEmpty()
+                    },
+                    onTranscript = ::insertVoiceTranscript,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             ComposerSendButton(
                 textFieldState = textFieldState,
                 ownerId = composerOwnerId,
@@ -590,6 +639,7 @@ internal fun ChatBottomBar(
                 onStopGeneration = onStopGeneration,
                 onCollapse = onCollapse,
             )
+        }
     }
 
     ChatBottomBarOverlayHost(

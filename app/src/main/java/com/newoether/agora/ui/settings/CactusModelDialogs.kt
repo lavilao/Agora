@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -230,6 +231,13 @@ internal fun CactusModelDialogs(
                     }
                     Spacer(Modifier.height(12.dp))
                 }
+                // A speech model is not registered as a chat model, so the only
+                // place to remove it from is the row that installed it.
+                fun deleteSpeechModel(entry: CactusModelCatalog.Entry) {
+                    val file = manager.actFile(entry, entry.defaultVariant)
+                    manager.deleteBundle(file.absolutePath)
+                    installedActs = manager.installedActFilenames()
+                }
                 catalogEntries.forEach { entry ->
                     CactusCatalogEntryRow(
                         entry = entry,
@@ -253,11 +261,21 @@ internal fun CactusModelDialogs(
                                             val file = manager.downloadAct(entry, variant) { bytes, _ ->
                                                 activeDownload = activeDownload?.copy(bytes = bytes)
                                             }
-                                            pendingBundle = PendingCactusModel(
-                                                path = file,
-                                                suggestedModelId = file.name.removeSuffix(".cact"),
-                                                suggestedAlias = suggestedAlias(entry, variant),
-                                            )
+                                            if (entry.isSpeech) {
+                                                // Whistle is the composer's dictation model,
+                                                // not a chat model: nothing to register, the
+                                                // microphone button picks the file up.
+                                                DebugLog.i(
+                                                    "CactusCatalog",
+                                                    "Speech model installed: ${file.name}",
+                                                )
+                                            } else {
+                                                pendingBundle = PendingCactusModel(
+                                                    path = file,
+                                                    suggestedModelId = file.name.removeSuffix(".cact"),
+                                                    suggestedAlias = suggestedAlias(entry, variant),
+                                                )
+                                            }
                                         } else {
                                             val dir = manager.download(entry, variant) { bytes, _ ->
                                                 activeDownload = activeDownload?.copy(bytes = bytes)
@@ -282,6 +300,7 @@ internal fun CactusModelDialogs(
                                 }
                             }
                         },
+                        onDeleteSpeech = ::deleteSpeechModel,
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -416,14 +435,17 @@ private fun CactusCatalogEntryRow(
     installedKeys: Set<String>,
     activeDownload: ActiveDownload?,
     onDownload: (CactusModelCatalog.Variant) -> Unit,
+    onDeleteSpeech: ((CactusModelCatalog.Entry) -> Unit)? = null,
 ) {
     var selectedVariant by remember(entry) { mutableStateOf(entry.defaultVariant) }
     val displayName = when {
+        entry.isSpeech -> "Whistle"
         entry.isActFile -> "Needle 3"
         entry.slug.startsWith("gemma") -> "Gemma 4 E2B (it)"
         else -> "Needle"
     }
     val description = when {
+        entry.isSpeech -> stringResource(R.string.cactus_catalog_whistle_desc)
         entry.isActFile -> stringResource(R.string.cactus_catalog_needle3_desc)
         entry.slug.startsWith("gemma") -> stringResource(R.string.cactus_catalog_gemma_desc)
         else -> stringResource(R.string.cactus_catalog_needle_desc)
@@ -474,11 +496,28 @@ private fun CactusCatalogEntryRow(
                             },
                         )
                         Text(
-                            "CQ${variant.bits} · ${formatBytes(variant.sizeBytes)}",
+                            if (entry.isSpeech) {
+                                formatBytes(variant.sizeBytes)
+                            } else {
+                                "CQ${variant.bits} · ${formatBytes(variant.sizeBytes)}"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f),
                         )
                         if (installed) {
+                            if (entry.isSpeech && onDeleteSpeech != null) {
+                                IconButton(
+                                    onClick = { onDeleteSpeech(entry) },
+                                    modifier = Modifier.size(24.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = stringResource(R.string.delete),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
                             Icon(
                                 Icons.Default.CheckCircle,
                                 contentDescription = stringResource(R.string.cactus_installed),

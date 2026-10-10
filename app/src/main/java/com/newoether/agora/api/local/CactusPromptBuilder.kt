@@ -27,6 +27,24 @@ internal object CactusPromptBuilder {
 
     private val schemaJson = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Session facts for the Needle router, following the engine's design
+     * guide: environment state goes in the system turn as facts ("date:
+     * 2026-07-21 Tue; locale: en-US; device: phone") that the model resolves
+     * phrases like "tomorrow" against, while instructions placed there do not
+     * steer it. Day precision keeps the engine's static-prefix cache stable
+     * for the whole day instead of re-tokenizing every turn.
+     */
+    fun needleSessionFacts(): String {
+        val today = java.time.LocalDate.now()
+        val weekday = today.dayOfWeek.getDisplayName(
+            java.time.format.TextStyle.SHORT,
+            java.util.Locale.ENGLISH,
+        )
+        val locale = java.util.Locale.getDefault().toLanguageTag()
+        return "date: $today $weekday; locale: $locale; device: phone"
+    }
+
     fun buildTurns(
         messages: List<ChatMessage>,
         systemPrompt: String?,

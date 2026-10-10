@@ -455,6 +455,25 @@ same `CactusEngine` JNI surface and identify themselves through
 libc++ gap against NDK r28 (`std::__ndk1::__hash_memory`) is closed by a weak shim
 compiled from the verbatim LLVM murmur2 source.
 
+The needle engine also runs Whistle, Cactus' speech-to-text `.cact` model
+(HuggingFace `Cactus-Compute/whistle`): the runtime keeps one process-global model
+per kind (`NEEDLE_TEXT`, `NEEDLE_SPEECH`), so the speech model sits beside the chat
+model without disturbing it. `.cact` bytes are held in a path-keyed store in the
+bridge (the engine maps them in place and has no unload API); a slot's bytes are
+only dropped when that kind is definitively replaced, resolved through
+`needle_models()` bits plus a byte-identity check in the one ambiguous case. The
+speech surface (`CactusSpeechEngine`: `nativeLoadSpeechModel`, `nativeTranscribe`)
+serializes on the engine's single mutex with chat generation. Dictation is a
+composer feature (`ComposerVoiceRecorder`), not a model feature: a 16 kHz mono
+PCM16 `AudioRecord` feed capped at the engine's 30 s ceiling is transcribed after
+release (slide-left cancels) and works with any resident chat model — needle `.cact`
+or llama.cpp GGUF — so the arm64 full-engine build simply hides the button
+(no `.cact` support there) rather than failing at record time. The needle system
+turn carries factual session state (date/locale/device, day precision) per the
+engine's tool-design guide: facts resolve phrases like "tomorrow", instructions
+there do not steer decoding, and the coarse precision keeps the engine's
+static-prefix cache stable across a day.
+
 The F-Droid sandbox runs commands with concurrent output collection and an actual
 wall-clock timeout. The shared glob matcher is implemented without API-26-only
 `java.nio.file` APIs so the API 24 minimum remains real.

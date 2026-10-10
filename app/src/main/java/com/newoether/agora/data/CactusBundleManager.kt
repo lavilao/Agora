@@ -280,8 +280,10 @@ internal class CactusBundleManager(private val context: Context) {
 
     /**
      * Imports a ".cact" model file picked through SAF, copying it into app
-     * storage under a non-conflicting name. Size sanity only: the engine
-     * rejects malformed containers at load time with its own diagnostics.
+     * storage under a non-conflicting name derived from the document's
+     * display name (the catalog's "whistle.cact" is discovered by that name).
+     * Size sanity only: the engine rejects malformed containers at load time
+     * with its own diagnostics.
      */
     suspend fun importActFile(
         uri: Uri,
@@ -311,10 +313,11 @@ internal class CactusBundleManager(private val context: Context) {
             ) {
                 throw IOException("Not a usable .cact model (size ${destination.length()})")
             }
-            var name = "needle3.cact"
+            val base = importedActBaseName(uri)
+            var name = base
             var index = 2
             while (File(bundlesRoot(), name).exists()) {
-                name = "needle3-${index++}.cact"
+                name = base.removeSuffix(".cact") + "-${index++}.cact"
             }
             val target = File(bundlesRoot(), name)
             if (!destination.renameTo(target)) {
@@ -325,6 +328,23 @@ internal class CactusBundleManager(private val context: Context) {
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /** Sanitized display name of the picked document, ending in ".cact". */
+    private fun importedActBaseName(uri: Uri): String {
+        val displayName = runCatching {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        }.getOrNull()
+        val cleaned = (displayName ?: "")
+            .trim()
+            .lowercase(Locale.ROOT)
+            .replace(Regex("[^a-z0-9._-]+"), "-")
+            .trim('-', '.')
+        if (cleaned.isEmpty() || cleaned == "cact") return "needle3.cact"
+        return if (cleaned.endsWith(".cact")) cleaned else "$cleaned.cact"
     }
 
     /** Extracts an archive picked through SAF into a fresh bundle directory. */

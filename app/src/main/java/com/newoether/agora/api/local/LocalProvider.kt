@@ -347,9 +347,20 @@ class LocalProvider(
         val imagePaths = mutableListOf<String>()
         val localContextWindow = minOf(config.maxContextWindow, modelConfig.nCtx).coerceAtLeast(1)
         val resolvedRequest = config.copy(maxContextWindow = localContextWindow).resolveRequest(messages)
+        // The Needle router resolves phrases like "tomorrow" against session
+        // facts, not instructions (see Cactus' tool-design guide): the factual
+        // date/locale/device line is prepended to whatever system prompt the
+        // conversation carries, standing alone when there is none.
+        val baseSystemPrompt = resolvedRequest.systemPrompt
+        val systemPrompt = if (CactusEngine.isNeedleBackend()) {
+            val facts = CactusPromptBuilder.needleSessionFacts()
+            if (baseSystemPrompt.isNullOrBlank()) facts else "$facts\n$baseSystemPrompt"
+        } else {
+            baseSystemPrompt
+        }
         val turns = CactusPromptBuilder.buildTurns(
             resolvedRequest.messages,
-            resolvedRequest.systemPrompt,
+            systemPrompt,
             imagePaths,
         )
         val tools = config.tools.orEmpty()

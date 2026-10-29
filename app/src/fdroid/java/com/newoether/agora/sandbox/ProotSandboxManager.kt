@@ -47,13 +47,11 @@ class ProotSandboxManager(
     // intentionally NOT serialized — they read snapshots and don't mutate state.
     private val mutationMutex = Mutex()
 
-    // Pin to the stable v3.21 branch to match the downloaded minirootfs (3.21.0). Using edge here
-    // caused `apk upgrade` to pull divergent packages (e.g. yash-binsh vs busybox-binsh /bin/sh
-    // conflict) and rotates signing keys; the stable branch avoids both.
-    private val alpineMirror = "https://dl-cdn.alpinelinux.org/alpine/v3.21/main"
-    // Base rootfs is fetched on-device at install time (not bundled in the APK), verified against
-    // a pinned SHA-256. Architecture-aware (AlpineArchitecture): the rootfs ABI must match this
-    // process — a 64-bit rootfs on a 32-bit ROM fails every exec with ENOEXEC.
+    // Pin to the stable v3.21 branch to match the downloaded minirootfs (3.21.0): edge pulled
+    // divergent packages (yash- vs busybox-binsh /bin/sh conflict) and rotates signing keys.
+    private val alpineMirror = "https://dl.cdn.alpinelinux.org/alpine/v3.21/main"
+    // Rootfs is fetched on-device (not in the APK), checksum-verified, and architecture-aware
+    // (AlpineArchitecture): a 64-bit rootfs on a 32-bit ROM fails every exec with ENOEXEC.
     private val rootfsUrl: String get() = AlpineArchitecture.rootfsUrl
     private val rootfsSha256: String get() = AlpineArchitecture.rootfsSha256
     private var sandboxScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

@@ -413,7 +413,7 @@ internal fun String.toRenderableMarkdownText(parseInlineDollarMath: Boolean = fa
             else span.content
         }
     }
-    return markdown.escapeForMarkdown()
+    return markdown.escapeForMarkdown().openTableBlocks()
 }
 
 internal fun String.escapeForMarkdown(): String = escapeDollarForMarkdown()

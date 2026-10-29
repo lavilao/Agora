@@ -195,7 +195,6 @@ fun AttachmentThumbnailItem(
                 (textContent != null || originalUri != null)
             val clickMod = if (canOpen) {
                 Modifier
-                    .clip(shape)
                     .clickable {
                         scope.launch {
                             val content = textContent ?: originalUri?.let {

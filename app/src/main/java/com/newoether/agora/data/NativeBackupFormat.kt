@@ -3,8 +3,14 @@ package com.newoether.agora.data
 import kotlinx.serialization.Serializable
 
 internal object NativeBackupFormat {
-    const val CURRENT_VERSION = 5
+    /** v6 adds messages[].sourceJson (automatic user input source); v5 archives import with none. */
+    const val CURRENT_VERSION = 6
     const val MIN_SUPPORTED_VERSION = 1
+    /**
+     * Backups older than this embedded secrets inside settings. From this version on secrets live
+     * only in [SECRETS_ENTRY], so settings-embedded secrets are never trusted.
+     */
+    const val SEPARATE_SECRETS_SINCE_VERSION = 5
     /**
      * Written to the manifest of every backup whose conversation items can be reused by the next
      * incremental export. Older backups predate complete dataChangedAt tracking, so they lack it
@@ -53,6 +59,8 @@ internal data class NativeConversationIndexEntry(
 internal data class ShellDeviceSecrets(
     val apiKey: String = "",
     val sshPassword: String = "",
+    val sshPrivateKey: String? = null,
+    val sshKeyPassphrase: String? = null,
 )
 
 @Serializable
@@ -69,7 +77,7 @@ internal data class NativeBackupSecrets(
 )
 
 internal fun ShellDeviceConfig.withoutSecrets(): ShellDeviceConfig =
-    copy(apiKey = "", sshPassword = "")
+    copy(apiKey = "", sshPassword = "", sshPrivateKey = "", sshKeyPassphrase = "")
 
 internal fun McpServerConfig.withoutSecrets(): McpServerConfig =
     copy(headers = emptyMap())

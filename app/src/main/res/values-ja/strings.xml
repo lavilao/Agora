@@ -92,8 +92,8 @@
     <string name="tool_reading_file">%1$s を読み込み中…</string>
     <string name="tool_writing_file">%1$s に書き込み中…</string>
     <string name="tool_editing_file">%1$s を編集中…</string>
-    <string name="tool_finding_files">%1$s を検索中…</string>
-    <string name="tool_searching_file">%1$s を検索中…</string>
+    <string name="tool_finding_files">ファイル %1$s を検索中…</string>
+    <string name="tool_searching_file">ファイル内で %1$s を検索中…</string>
     <string name="tool_executing_shell">実行中: %1$s…</string>
     <string name="tool_reading_memory">%1$s を読み込み中…</string>
     <string name="tool_saving_memory">%1$s を保存中…</string>
@@ -172,6 +172,9 @@
 
     <!-- Drawer -->
     <string name="conversations">会話</string>
+    <string name="pinned_conversations">ピン留め済み</string>
+    <string name="pin_conversation">ピン留め</string>
+    <string name="unpin_conversation">ピン留めを解除</string>
     <string name="conversation_unread_generation">未読の生成済み回答</string>
     <string name="new_chat">新しいチャット</string>
 
@@ -198,6 +201,22 @@
     <string name="embedding_custom_model_desc">プロバイダーがサポートする任意のモデル名を入力</string>
     <string name="embedding_batch_size">バッチサイズ</string>
     <string name="embedding_batch_size_desc">リクエストごとにキャッシュするメッセージ数（1-100）</string>
+    <string name="embedding_add_model">モデルを追加</string>
+    <string name="embedding_edit_model">モデルを編集</string>
+    <string name="embedding_choose_type">モデルの種類を選択</string>
+    <string name="embedding_type_remote_desc">OpenAI、Voyage AI、Ollama などの埋め込み API を使用します。</string>
+    <string name="embedding_type_local_desc">このデバイスで GGUF 埋め込みモデルを実行します。</string>
+    <string name="embedding_provider_custom">カスタム</string>
+    <string name="embedding_connection">接続</string>
+    <string name="embedding_general">一般</string>
+    <string name="embedding_cache_status">キャッシュ</string>
+    <string name="embedding_use_saved_key">保存済みの %1$s キーを使用</string>
+    <string name="embedding_use_saved_key_desc">チャットのプロバイダー設定から取得</string>
+    <string name="embedding_model_id_hint">モデル ID（例: text-embedding-3-small）</string>
+    <string name="embedding_model_locked_desc">キャッシュ済みの埋め込みはこのモデル専用です。切り替えるには新しいモデルを追加してください。</string>
+    <string name="embedding_model_file">モデルファイル</string>
+    <string name="embedding_replace_file">置き換え</string>
+    <string name="embedding_test_failed">接続テストに失敗しました: %1$s</string>
     <string name="local_model_ready">モデルをインポートしました。</string>
     <string name="import_model">モデルをインポート（.gguf）</string>
     <string name="importing_model">インポート中...</string>
@@ -541,8 +560,8 @@
     <string name="onboarding_no_models">モデルが読み込まれていません。</string>
     <string name="onboarding_invalid_gguf_title">無効な GGUF ファイル</string>
     <string name="onboarding_invalid_gguf_desc">選択したファイルは有効な GGUF モデルではないようです。</string>
-    <string name="onboarding_hide_key">キーを隠す</string>
-    <string name="onboarding_show_key">キーを表示</string>
+    <string name="secret_hide">値を隠す</string>
+    <string name="secret_show">値を表示</string>
     <!-- ── Auto Backup ── -->
     <string name="auto_backup_title">自動バックアップ</string>
     <string name="auto_backup_subtitle">スケジュールに従ってデータを自動エクスポート</string>
@@ -574,7 +593,7 @@
     <!-- SSH host-key pinning -->
     <string name="shell_ssh_verify_host_key">ホストキーを検証して固定</string>
     <string name="shell_ssh_host_key_pinned">ホストキーを固定済み</string>
-    <string name="shell_ssh_host_key_not_pinned">ホストキーが未固定 — 傍受に対して脆弱</string>
+    <string name="shell_ssh_host_key_not_pinned">ホストキーが未固定のため、傍受に対して脆弱です</string>
     <string name="shell_ssh_verify_title">SSH ホストキーを検証</string>
     <string name="shell_ssh_verify_message">信頼する前に、このフィンガープリントがサーバーと一致することを確認してください。固定することで中間者攻撃から保護されます。</string>
     <string name="shell_ssh_trust">信頼して固定</string>
@@ -620,6 +639,7 @@
     <string name="conversation_search_hint">検索…</string>
     <string name="conversation_share">共有</string>
     <string name="conversation_share_failed">会話を共有できませんでした: %1$s</string>
+    <string name="conversation_deleted_elsewhere">この会話は別のデバイスで削除されました。</string>
     <string name="custom_provider_protocol_label">API 形式</string>
     <string name="file_path_unknown">不明なファイル</string>
     <string name="import_file_too_large">ファイルが大きすぎます（%1$d MB）。より小さいエクスポートファイルを選択してください。</string>
@@ -697,6 +717,7 @@
     <string name="context_part_messages">メッセージ</string>
     <string name="context_part_free">空き</string>
     <string name="context_part_reserved">予約済み</string>
+    <string name="context_part_used">使用済み</string>
     <string name="context_compact_streaming">コンテキストを圧縮中…</string>
     <string name="context_compact_error">圧縮エラー</string>
     <string name="context_compact_stopped">圧縮を停止しました</string>
@@ -810,6 +831,9 @@
     <string name="tool_edit_skill">スキルを編集</string>
     <string name="tool_delete_skill">スキルを削除</string>
     <string name="tool_read_file_truncated">一部の内容を表示 · バイト %1$d から続行</string>
+    <string name="tool_read_file_truncated_line">一部の内容を表示 · %1$d 行目から続行</string>
+    <string name="tool_edit_count">%1$d 件の変更</string>
+    <string name="tool_edit_replace_all">すべて置換</string>
     <string name="low_context_mode">低コンテキストモード</string>
     <string name="low_context_mode_default_desc">低コンテキストモードをデフォルトで有効にする</string>
     <string name="learn_more">詳細...</string>
@@ -906,4 +930,57 @@
     <string name="local_ubatch_size_title">物理バッチサイズ</string>
     <string name="local_ubatch_size_desc">エンジンがバッチを分割する物理単位。低い値はプレフィル時のピークメモリを減らします。次回のモデル読み込みから適用されます。</string>
     <string name="local_draft_model_path_label">ドラフトモデルを追加（投機的デコード）</string>
+    <string name="message_source_task">タスク</string>
+    <string name="message_source_loop">ループ</string>
+    <string name="message_source_ask_user">質問</string>
+    <string name="message_source_unanswered">未回答</string>
+    <string name="settings_todo">やることリスト</string>
+    <string name="settings_todo_desc">モデルが管理する会話のチェックリスト</string>
+    <string name="todo_enable">やることリストを有効にする</string>
+    <string name="todo_enable_desc">モデルが会話のチェックリストを読み取り、更新できるようにします。オフにしても既存のリストは保持されます。</string>
+    <string name="settings_subagents">サブエージェント</string>
+    <string name="settings_subagents_desc">独立した会話に作業を委任</string>
+    <string name="subagents_enable">サブエージェントを有効にする</string>
+    <string name="subagents_enable_desc">モデルが独立した会話に作業を委任できるようにします。オフにしても既存のサブエージェントは停止しません。</string>
+    <string name="local_projector_title">視覚プロジェクター</string>
+    <string name="local_projector_desc">任意：画像入力に対応するため、チャットモデルに合った mmproj GGUF ファイルをインポート</string>
+    <string name="local_model_error_id_required">モデル ID を入力してください</string>
+    <string name="local_model_error_id_invalid">a-z、0-9、ピリオド、アンダースコア、ハイフンのみ使用できます</string>
+    <string name="local_model_error_id_taken">このモデル ID は既に使用されています</string>
+    <string name="local_model_error_file_required">GGUF モデルファイルをインポートしてください</string>
+    <string name="local_model_error_context">コンテキストサイズは正の整数にしてください</string>
+    <string name="local_model_error_temperature">温度は 0 から 2 の範囲にしてください</string>
+    <string name="local_model_error_top_p">Top P は 0 から 1 の範囲にしてください</string>
+    <string name="local_model_error_max_tokens">最大トークン数は正の整数にしてください</string>
+    <string name="local_model_error_output">最大トークン数はコンテキストサイズ以下にしてください</string>
+    <string name="tool_read_todo">やることリストを読む</string>
+    <string name="tool_update_todo">やることリストを更新</string>
+    <string name="tool_spawn_agent">サブエージェントを起動</string>
+    <string name="tool_send_agent_message">サブエージェントにメッセージを送信</string>
+    <string name="tool_wait_agents">サブエージェントを待つ</string>
+    <string name="tool_list_agents">サブエージェント一覧</string>
+    <string name="tool_stop_agent">サブエージェントを停止</string>
+    <string name="tool_reading_todo">やることリストを読み取り中…</string>
+    <string name="tool_updating_todo">やることリストを更新中…</string>
+    <string name="tool_spawning_agent">サブエージェントを起動中…</string>
+    <string name="tool_sending_agent_message">サブエージェントへのメッセージをキューに追加中…</string>
+    <string name="tool_waiting_agents">サブエージェントを待機中…</string>
+    <string name="tool_listing_agents">サブエージェント一覧を取得中…</string>
+    <string name="tool_stopping_agent">サブエージェントを停止中…</string>
+    <string name="tool_read_todo_done">やることリストを読み取りました</string>
+    <string name="tool_updated_todo">やることリストを更新しました</string>
+    <string name="tool_spawned_agent">サブエージェントを起動しました</string>
+    <string name="tool_queued_agent_message">サブエージェントへのメッセージをキューに追加しました</string>
+    <string name="tool_waited_agents">サブエージェントの待機を終了しました</string>
+    <string name="tool_listed_agents">サブエージェント一覧を取得しました</string>
+    <string name="tool_stopped_agent">サブエージェントを停止しました</string>
+    <string name="tool_delete_agent">サブエージェントを削除</string>
+    <string name="tool_deleting_agent">サブエージェントを削除中…</string>
+    <string name="tool_deleted_agent">サブエージェントを削除しました</string>
+    <string name="subagents_allow_delete">サブエージェントの削除を許可</string>
+    <string name="subagents_allow_delete_desc">親の会話がアイドル状態のサブエージェントを完全に削除して枠を空けられるようにします。実行中のサブエージェントや未配信の結果は削除されません。</string>
+    <string name="subagent_deleted_by_parent">このサブエージェントは親の会話によって削除されました。</string>
+    <string name="tool_todo_empty">やることリストは空です</string>
+    <string name="tool_agents_empty">サブエージェントはありません</string>
+    <string name="tool_agent_results_empty">サブエージェントの結果は返されませんでした</string>
 </resources>

@@ -21,7 +21,7 @@ class DeferredAskUserAnswerOwnershipTest {
     @Test
     fun oneSendOfNonBlockingAnswersQueuesOneMessage() {
         val askUser = AskUserController()
-        val registry = ConversationStateRegistry()
+        val registry = ConversationStateRegistry {}
         DeferredAskUserAnswerDelivery(
             askUser = askUser,
             registry = registry,
@@ -43,11 +43,13 @@ class DeferredAskUserAnswerOwnershipTest {
         val queued = registry.getOrCreate("conversation").queuedSends.value
         assertEquals(1, queued.size)
         assertEquals("model", queued.single().modelId)
-        assertEquals(
-            listOf(first to "A", second to "D").joinToString("\n\n") { (request, choice) ->
-                AskUserController.deferredAnswerText(request, AskUserController.Answer(listOf(choice), answered = true))
-            },
-            queued.single().text,
+        val source = com.newoether.agora.model.MessageSource.askUser(
+            listOf(
+                com.newoether.agora.model.MessageSource.AskUserItem("First?", "A"),
+                com.newoether.agora.model.MessageSource.AskUserItem("Second?", "D"),
+            ),
         )
+        assertEquals(source, queued.single().source)
+        assertEquals("First?\nA\n\nSecond?\nD", queued.single().text)
     }
 }

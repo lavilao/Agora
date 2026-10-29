@@ -129,6 +129,9 @@ fun SettingsIconContent(
     }
 }
 
+/** SettingsItem side padding for rows using sheetOptionClickable: 16dp less the 8dp sheet inset. */
+internal val SETTINGS_ITEM_SHEET_PADDING = 16.dp - com.newoether.agora.ui.components.SHEET_OPTION_INSET
+
 @Composable
 fun SettingsItem(
     modifier: Modifier = Modifier,
@@ -137,6 +140,7 @@ fun SettingsItem(
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     leadingSpacing: Dp = 16.dp,
+    startPadding: Dp = 16.dp,
     endPadding: Dp = 16.dp,
 ) {
     val verticalPadding = if (supportingContent == null) 12.dp else 16.dp
@@ -144,7 +148,7 @@ fun SettingsItem(
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                start = 16.dp,
+                start = startPadding,
                 end = endPadding,
                 top = verticalPadding,
                 bottom = verticalPadding,
@@ -265,10 +269,13 @@ internal val baseSettingsGroups = listOf(
             iconRes = R.drawable.ic_mcp,
         ),
         SettingsCategory("automation", R.string.settings_automation, R.string.settings_automation_desc, Icons.Default.Repeat),
+        SettingsCategory("todo", R.string.settings_todo, R.string.settings_todo_desc, Icons.Default.Checklist),
+        SettingsCategory("subagents", R.string.settings_subagents, R.string.settings_subagents_desc, Icons.Default.AccountTree),
         SettingsCategory("interaction", R.string.settings_interaction, R.string.settings_interaction_desc, Icons.Default.QuestionAnswer),
     )),
     SettingsGroupData(titleRes = R.string.settings_group_network, items = listOf(
         SettingsCategory("proxy", R.string.settings_proxy, R.string.settings_proxy_desc, Icons.Default.Lan),
+        SettingsCategory("webui", R.string.settings_webui, R.string.settings_webui_desc, Icons.Default.Web),
     )),
     SettingsGroupData(titleRes = R.string.settings_group_memory_data, items = listOf(
         SettingsCategory("memory", R.string.settings_memory, R.string.settings_memory_desc, Icons.Default.Description),
@@ -320,37 +327,42 @@ fun SettingsScreen(
         }
     }
     val listState = rememberLazyListState()
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val twoPane = maxWidth >= SettingsTwoPaneMinWidth
-        BackHandler {
-            if (twoPane || selectedCategory == null) onBack() else selectedCategory = null
-        }
-        if (twoPane) {
-            SettingsTwoPaneScreen(
-                viewModel = viewModel,
-                settingsGroups = settingsGroups,
-                selectedCategory = selectedCategory ?: "provider",
-                onCategorySelected = { selectedCategory = it },
-                onBack = onBack,
-            )
-        } else {
-            GuardedAnimatedContent(
-                targetState = selectedCategory,
-                forward = selectedCategory != null,
-            ) { category ->
-                if (category != null) {
-                    SettingsDestination(
-                        category = category,
-                        viewModel = viewModel,
-                        onBack = { selectedCategory = null },
-                    )
-                } else {
-                    SettingsCategoryHome(
-                        settingsGroups = settingsGroups,
-                        listState = listState,
-                        onBack = onBack,
-                        onCategorySelected = { selectedCategory = it },
-                    )
+    val navigationListState = rememberLazyListState()
+    val scrollRetention = remember { SettingsScrollRetention() }
+    CompositionLocalProvider(LocalSettingsScrollRetention provides scrollRetention) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val twoPane = maxWidth >= SettingsTwoPaneMinWidth
+            BackHandler {
+                if (twoPane || selectedCategory == null) onBack() else selectedCategory = null
+            }
+            if (twoPane) {
+                SettingsTwoPaneScreen(
+                    viewModel = viewModel,
+                    settingsGroups = settingsGroups,
+                    navigationListState = navigationListState,
+                    selectedCategory = selectedCategory ?: "provider",
+                    onCategorySelected = { selectedCategory = it },
+                    onBack = onBack,
+                )
+            } else {
+                GuardedAnimatedContent(
+                    targetState = selectedCategory,
+                    forward = selectedCategory != null,
+                ) { category ->
+                    if (category != null) {
+                        SettingsDestination(
+                            category = category,
+                            viewModel = viewModel,
+                            onBack = { selectedCategory = null },
+                        )
+                    } else {
+                        SettingsCategoryHome(
+                            settingsGroups = settingsGroups,
+                            listState = listState,
+                            onBack = onBack,
+                            onCategorySelected = { selectedCategory = it },
+                        )
+                    }
                 }
             }
         }

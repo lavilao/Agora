@@ -119,7 +119,7 @@ class TaskManager(
             val last = latestByConversation[conversation.id]
             ExecutionSummary(
                 conversation = conversation,
-                preview = last?.text.orEmpty(),
+                preview = last?.preview.orEmpty(),
                 status = last?.status,
                 timestamp = last?.timestamp ?: 0L,
             )
@@ -446,20 +446,8 @@ class TaskManager(
             requestKind = "task",
         )
         val outcome = when (result) {
-            is TaskExecutionEngine.Result.Success -> {
-                try {
-                    titleExecutionConversation(conversationId, result.text)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    DebugLog.e(
-                        "TaskManager",
-                        "Task execution title update failed for conversation=$conversationId",
-                        e,
-                    )
-                }
+            is TaskExecutionEngine.Result.Success ->
                 ExecutionResult.Success(conversationId, result.text)
-            }
             is TaskExecutionEngine.Result.Busy ->
                 ExecutionResult.Deferred(conversationId, result.reason)
             is TaskExecutionEngine.Result.Failure -> {
@@ -472,6 +460,22 @@ class TaskManager(
             }
         }
         if (finishManualSchedule) finishManualRunLocked(task.id)
+        if (outcome is ExecutionResult.Success) {
+            // Title generation is post-processing, not part of the Task's running reservation.
+            scope.launch {
+                try {
+                    titleExecutionConversation(conversationId, outcome.response)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    DebugLog.e(
+                        "TaskManager",
+                        "Task execution title update failed for conversation=$conversationId",
+                        e,
+                    )
+                }
+            }
+        }
         return outcome
     }
 

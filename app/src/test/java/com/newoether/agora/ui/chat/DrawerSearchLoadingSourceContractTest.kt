@@ -11,14 +11,13 @@ class DrawerSearchLoadingSourceContractTest {
     fun `keyword search uses a single SQLite LIKE escape character`() {
         val dao = source("data/local/ChatSearchDao.kt")
         val repository = source("data/repository/ConversationMessageSearch.kt")
-        val globalSearchQuery = dao
-            .substringBefore("suspend fun searchMessages")
-            .substringAfterLast("@Query(")
-        val kotlinEncodedSingleBackslashEscape = """ESCAPE '\\'"""
-        val kotlinEncodedDoubleBackslashEscape = """ESCAPE '\\\\'"""
+        val globalSearchQuery = dao.substringAfter("KEYWORD_MESSAGE_PROJECTION = \"\"\"")
+            .substringBefore("\"\"\"")
+        val singleBackslashEscape = """ESCAPE '\'"""
+        val doubleBackslashEscape = """ESCAPE '\\'"""
 
-        assertEquals(2, globalSearchQuery.count(kotlinEncodedSingleBackslashEscape))
-        assertFalse(globalSearchQuery.contains(kotlinEncodedDoubleBackslashEscape))
+        assertEquals(2, globalSearchQuery.count(singleBackslashEscape))
+        assertFalse(globalSearchQuery.contains(doubleBackslashEscape))
         assertTrue(
             repository.contains(
                 """query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")""",
@@ -38,7 +37,10 @@ class DrawerSearchLoadingSourceContractTest {
         val searchBar = source("ui/chat/search/DrawerSearchBar.kt")
         val searchResultItem = source("ui/chat/search/ChatSearchResultItem.kt")
 
-        assertTrue(dao.contains("SELECT id, title, systemPromptId, modelId, taskId, origin, graduated, hasUnreadGeneration, selectedBranchesJson FROM conversations"))
+        assertTrue(dao.contains("SELECT id, title, systemPromptId, modelId, taskId, origin, graduated, hasUnreadGeneration, isPinned, NULL AS selectedBranchesJson, parentConversationId FROM conversations"))
+        assertTrue(dao.contains("WHERE taskId IS NULL AND parentConversationId IS NULL ORDER BY lastUpdated DESC"))
+        assertTrue(dao.contains("WHERE taskId IS NULL AND parentConversationId IS NULL ORDER BY isPinned DESC"))
+        assertTrue(dao.contains("WHERE taskId IS NULL AND parentConversationId IS NULL AND id IN (:ids)"))
         assertTrue(dao.contains("fun getAllConversations(): Flow<List<ChatConversation>>"))
         assertFalse(dao.contains("SELECT * FROM conversations WHERE taskId IS NULL ORDER BY lastUpdated DESC"))
         assertTrue(repository.contains("fun getAllConversations(): Flow<List<ChatConversation>> = chatDao.getAllConversations()"))
@@ -49,12 +51,16 @@ class DrawerSearchLoadingSourceContractTest {
         assertTrue(drawer.contains("visible = !isConversationListLoading"))
         assertTrue(drawer.split("enter = fadeIn(tween(180))").size - 1 == 2)
         assertTrue(drawer.split("exit = fadeOut(tween(180))").size - 1 == 2)
-        assertTrue(drawer.contains("modifier = Modifier.size(32.dp)"))
-        assertTrue(drawer.contains("strokeWidth = 3.dp"))
+        assertTrue(drawer.contains("modifier = Modifier.size(36.dp)"))
+        assertTrue(drawer.contains("strokeWidth = 4.dp"))
         assertTrue(drawer.contains("Crossfade("))
         assertTrue(
             drawer.contains("targetState = search.results.takeIf { search.isActive }"),
         )
+        assertTrue(drawer.contains("?.filter { \"conversation:\${it.first.conversationId}\" in conversationsByKey }"))
+        assertTrue(drawer.contains("val isSelected = conversation.id == drawerConversationId"))
+        assertTrue(drawer.contains("if (!isSelected) viewModel.selectConversation(conversation.id)"))
+        assertTrue(drawer.contains("if (convId != drawerConversationId) viewModel.selectConversation(convId)"))
         assertTrue(drawer.contains("animationSpec = tween(180)"))
         assertTrue(drawer.contains("label = \"DrawerConversationContentTransition\""))
         assertTrue(drawer.split("rememberLazyListState()").size - 1 == 2)
@@ -62,7 +68,8 @@ class DrawerSearchLoadingSourceContractTest {
         assertTrue(drawer.contains("state = searchListState"))
         assertTrue(drawer.split("LazyColumn(").size - 1 == 2)
         assertTrue(drawer.contains("key = { \"search:\${it.key}\" }"))
-        assertTrue(drawer.contains("key = { \"conversation:\${it.id}\" }"))
+        assertTrue(drawer.contains("key = { it },"))
+        assertTrue(drawer.contains("add(\"conversation:\${it.id}\")"))
         assertTrue(drawer.split("fadeInSpec = null").size - 1 == 1)
         assertTrue(drawer.split("fadeOutSpec = tween(180)").size - 1 == 1)
         val normalizedDrawer = drawer.replace("\r\n", "\n")
@@ -81,13 +88,13 @@ class DrawerSearchLoadingSourceContractTest {
         assertTrue(numericReorderAnchorBlock.contains("!search.isActive"))
         assertTrue(
             numericReorderAnchorBlock.contains(
-                "conversationListState.layoutInfo.totalItemsCount == conversations.size",
+                "conversationListState.layoutInfo.totalItemsCount == conversationKeys.size",
             ),
         )
         assertTrue(numericReorderAnchorBlock.contains("indexedConversationId != firstVisibleConversationId"))
         assertTrue(
             numericReorderAnchorBlock.contains(
-                "conversations.any { it.id == firstVisibleConversationId }",
+                "firstVisibleConversationId in conversationKeys",
             ),
         )
         assertTrue(numericReorderAnchorBlock.contains("firstVisibleIndex,"))
@@ -111,7 +118,8 @@ class DrawerSearchLoadingSourceContractTest {
         assertTrue(normalizedViewModel.contains("val firstMessageCommitted = _firstMessageCommitted.asSharedFlow()"))
         assertTrue(
             normalizedViewModel.contains(
-                "onConversationCreatedBySend = { conversationId ->\n" +
+                "            if (selected) {\n" +
+                    "                // The send's own bottom scroll handles the first message; skip the open scroll.\n" +
                     "                scrollRequests.suppressNextOpenScroll = true\n" +
                     "                _firstMessageCommitted.tryEmit(conversationId)",
             ),

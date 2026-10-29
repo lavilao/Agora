@@ -24,6 +24,9 @@ import com.newoether.agora.data.local.migration.MIGRATION_31_32
 import com.newoether.agora.data.local.migration.MIGRATION_32_33
 import com.newoether.agora.data.local.migration.MIGRATION_33_34
 import com.newoether.agora.data.local.migration.MIGRATION_34_35
+import com.newoether.agora.data.local.migration.MIGRATION_39_40
+import com.newoether.agora.data.local.migration.MIGRATION_40_41
+import com.newoether.agora.data.local.migration.MIGRATION_41_42
 import java.util.concurrent.Executor
 
 @Database(
@@ -50,7 +53,7 @@ abstract class ChatDatabase : RoomDatabase() {
     abstract fun semanticIndexDao(): SemanticIndexDao
 
     companion object {
-        const val CURRENT_VERSION = 35
+        const val CURRENT_VERSION = 42
         const val DB_NAME = "agora_db"
 
         val ALL_MIGRATIONS = listOf(
@@ -198,6 +201,45 @@ abstract class ChatDatabase : RoomDatabase() {
             MIGRATION_32_33,
             MIGRATION_33_34,
             MIGRATION_34_35,
+            object : Migration(35, 36) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+                }
+            },
+            object : Migration(36, 37) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN todoJson TEXT")
+                }
+            },
+            object : Migration(37, 38) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN parentConversationId TEXT")
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN subagentResultJson TEXT")
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN subagentResultId TEXT")
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN subagentResultStatus TEXT")
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN subagentDeliveredResultId TEXT")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_conversations_parentConversationId ON conversations (parentConversationId)")
+                }
+            },
+            object : Migration(38, 39) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE conversations ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0")
+                    // Legacy rows have no exact creation record. Freeze their earliest stored activity once.
+                    db.execSQL("""
+                        UPDATE conversations SET createdAt = MIN(lastUpdated,
+                            COALESCE((SELECT MIN(startedAt) FROM runs
+                                WHERE conversationId = conversations.id), lastUpdated),
+                            COALESCE((SELECT MIN(timestamp) FROM messages
+                                WHERE conversationId = conversations.id), lastUpdated))
+                    """)
+                    db.execSQL("UPDATE conversations SET dataChangedAt = MAX(dataChangedAt + 1, lastUpdated, createdAt)")
+                }
+            },
+            MIGRATION_39_40,
+            MIGRATION_40_41,
+            // Fork reconciliation: fork 34->35 columns (prompt tps + runtime name)
+            // renumbered onto upstream's chain; idempotent for every lineage.
+            MIGRATION_41_42,
         )
 
         fun inspectCompatibility(context: Context): DatabaseCompatibility {

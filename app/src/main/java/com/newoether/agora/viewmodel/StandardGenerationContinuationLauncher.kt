@@ -26,6 +26,8 @@ internal data class StandardGenerationContinuationRequest(
     val replacementMessageId: String? = null,
     val requestKind: String = "chat",
     val touchConversationOnAdmission: Boolean,
+    /** Null keeps the conversation preference; the request and output still use the snapshot model. */
+    val conversationModelId: String? = snapshot.selectedModelId,
     val queueDrainRequiresSuccess: Boolean = false,
     val transformFinalText: (String, MessageStatus) -> String = { text, _ -> text },
 )
@@ -42,6 +44,7 @@ internal data class StandardGenerationContinuationLaunch(
     val job: Job,
     val modelMessageId: String,
     val started: Deferred<Boolean>,
+    val uiToken: Long,
 )
 
 /**
@@ -89,6 +92,7 @@ internal class StandardGenerationContinuationLauncher(
                 }
 
             try {
+                if (!state.acquireGenerationAdmission(uiToken, executionCoordinator)) return@generation
                 val persistId = state.nextPersistId()
                 val launchAtBoundary: suspend () -> Unit = boundary@{
                     if (!state.isCurrentToken(uiToken)) return@boundary
@@ -149,7 +153,7 @@ internal class StandardGenerationContinuationLauncher(
                             ),
                             messages = listOf(modelEntity),
                             messageSelectionUpdates = mapOf(parent.id to messageId),
-                            conversationModelId = generationSnapshot.selectedModelId,
+                            conversationModelId = request.conversationModelId,
                             touchConversationOnAdmission = request.touchConversationOnAdmission,
                         )
                         messageSelections = graphCommit.messageSelections
@@ -247,6 +251,7 @@ internal class StandardGenerationContinuationLauncher(
             job = generationJob,
             modelMessageId = modelMessageId,
             started = started,
+            uiToken = uiToken,
         )
     }
 }

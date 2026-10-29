@@ -26,6 +26,8 @@ data class ToolCallData(
     val responseOutputItemProvider: String? = null,
     /** Transcription description of a tool-result image; travels with the result row. */
     val transcription: String? = null,
+    /** Stable execution target retained for history without consulting a live registry. */
+    val target: String? = null,
 )
 
 @Serializable
@@ -85,22 +87,34 @@ data class MessageSegment(
     @Transient
     val toolImageRequestKey: String? = null,
     /**
-     * Transcription description of a tool-result image (view_image). Persisted WITH the result
+     * Transcription description of a tool-result image (file_view_image). Persisted WITH the result
      * row so the API projection can inject it into the model context — the round-boundary path
      * rebuild does not include the model message, so a segment living there is unreachable.
      * Displayed only in the Image Transcription thinking block, never in the tool card.
      */
     val toolTranscription: String? = null,
+    /** Committed protocol row owning this tool body; root checkpoints retain only its call reference. */
+    val toolRoundId: String? = null,
     /** Raw provider protocol items needed to reconstruct a stateless tool continuation. */
     val responseOutputItems: List<JsonObject> = emptyList(),
     /** Provider identity that owns [responseOutputItems]; foreign transports must ignore them. */
     val responseOutputItemProvider: String? = null,
     /** Stable semantic cause for terminal error segments. Null keeps old rows backward-compatible. */
     val errorCode: String? = null,
+    /** Remote-only rendering hint; native tool payloads remain unchanged and never enter Room. */
+    @Transient
+    val remoteToolSource: String? = null,
     /** In-memory Provider delta boundaries for the active answer; never persisted to Room JSON. */
     @Transient
     val streamingTextDeltas: List<StreamingTextDelta> = emptyList(),
-)
+) {
+    /** Provider-native segments keep their own replay format, not client function results. */
+    val isProviderHostedTool: Boolean
+        get() = type == "tool" && when (toolName) {
+            "openai_search", "google_search", "code_execution" -> true
+            else -> false
+        }
+}
 
 object ToolExecutionStates {
     const val CALLING = "calling"
@@ -189,6 +203,8 @@ data class ChatMessage(
     val runId: String? = null,
     val runSequence: Long? = null,
     val consumedAtPass: Int? = null,
+    /** Set only on automatic user input (Task, Loop, non-blocking ask_user answers). */
+    val source: MessageSource? = null,
     /** Optional in-memory page boundary; older pages cannot reparent a rendered list item. */
     val displayPageId: String? = null,
     /** Authenticated private files for inline Markdown images; never part of native history. */
@@ -210,7 +226,9 @@ data class ChatConversation(
     val origin: String = "user",
     val graduated: Boolean = false,
     val hasUnreadGeneration: Boolean = false,
+    val isPinned: Boolean = false,
     val selectedBranchesJson: String? = null,
+    val parentConversationId: String? = null,
 )
 
 fun ChatMessage.isContextCompact(): Boolean =

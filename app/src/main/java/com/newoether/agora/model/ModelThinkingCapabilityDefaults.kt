@@ -52,6 +52,13 @@ object ModelThinkingCapabilityDefaults {
         supportedEfforts = allEfforts,
         supportsThinkingBudget = false,
     )
+    private val gpt6Astra = openAi.copy(
+        canDisableThinking = false,
+        supportedEfforts = listOf("low", "medium", "high", "xhigh", "max"),
+    )
+    private val gpt6SolLuna = openAi.copy(
+        supportedEfforts = listOf("none", "low", "medium", "high", "xhigh", "max"),
+    )
 
     // OpenRouter: reasoning.effort accepts minimal..max plus none; reasoning.max_tokens is the
     // budget form. Per-model limits are published by GET /api/v1/models.
@@ -146,6 +153,11 @@ object ModelThinkingCapabilityDefaults {
         val model = modelId.trim().lowercase()
         return when (family) {
             ThinkingProviderFamily.ANTHROPIC -> anthropicCapability(model)
+            ThinkingProviderFamily.OPENAI -> when (model) {
+                "gpt-6-astra" -> gpt6Astra
+                "gpt-6-sol", "gpt-6-luna" -> gpt6SolLuna
+                else -> openAi
+            }
             ThinkingProviderFamily.OLLAMA -> ollamaCapability(model)
             ThinkingProviderFamily.QWEN -> qwenCapability(model)
             ThinkingProviderFamily.GROQ -> groqCapability(model)

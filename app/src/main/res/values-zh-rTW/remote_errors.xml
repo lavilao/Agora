@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="remote_failed">遠端操作未完成，請查看錯誤詳情。</string>
-    <string name="remote_unknown">尚未確認訊息是否送達。再次傳送前，請先在 Codex 中核對該對話。</string>
+    <string name="remote_unknown">未能確認傳送成功。</string>
     <string name="remote_rejected">Codex 未接受這則訊息，請查看錯誤詳情後再嘗試。</string>
     <string name="remote_storage_failed">Agora 無法存取本機遠端資料，請檢查剩餘儲存空間。</string>
     <string name="remote_network_failed">無法連線至 Filo，請檢查目標電腦、服務位址和網路。</string>
@@ -14,7 +14,7 @@
     <string name="remote_response_too_large">回應或附件超出了支援的大小。</string>
     <string name="remote_invalid_request">Filo 無法讀取此請求，請檢查輸入內容。</string>
     <string name="remote_not_found">請求的內容已無法使用，請重新整理清單。</string>
-    <string name="remote_not_supported">目前連線的用戶端不支援此操作。</string>
+    <string name="remote_not_supported">此來源不支援此操作。</string>
     <string name="remote_desktop_unavailable">Filo 無法連線至 Codex Desktop，請在目標電腦上開啟 Codex。</string>
     <string name="remote_session_unavailable">Codex 尚未準備好此對話，請在目標電腦上檢查。</string>
     <string name="remote_helper_unavailable">Filo 無法連線至使用者輔助程序，請檢查目標電腦上的 Filo 服務。</string>

@@ -1,13 +1,22 @@
 package com.newoether.agora.viewmodel
 
+import com.newoether.agora.api.OpenAiResponsesRequest
+import com.newoether.agora.api.gemini.geminiModelMessageParts
+import com.newoether.agora.api.openai.requireValidWireFormat
+import com.newoether.agora.api.openai.toResponsesInput
+import com.newoether.agora.api.util.Base64FileRegistry
+import com.newoether.agora.api.util.convertToOpenAiMessages
 import com.newoether.agora.data.local.MessageEntity
 import com.newoether.agora.model.MessageSegment
 import com.newoether.agora.model.MessageStatus
 import com.newoether.agora.model.Participant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ApiPathAssemblerTest {
@@ -261,6 +270,155 @@ class ApiPathAssemblerTest {
                 )
                 assertEquals(status.name, listOf("u", "m"), assembled.map { it.id })
             }
+    }
+
+    @Test
+    fun endedMixedHostedAndClientRound_replaysOnlyPairedClientOutputs() {
+        val rawItems = listOf(
+            """{"id":"rs_1","type":"reasoning","encrypted_content":"opaque"}""",
+            """{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"Checking tools"}]}""",
+            """{"id":"fc_1","type":"function_call","call_id":"call_1","name":"wait_for_job","arguments":"{}"}""",
+            """{"id":"fc_2","type":"function_call","call_id":"call_2","name":"file_edit","arguments":"{}"}""",
+        ).map { Json.parseToJsonElement(it).jsonObject }
+        val hosted = (1..4).map { index ->
+            MessageSegment(
+                type = "tool",
+                toolName = "openai_search",
+                toolArgs = "{}",
+                toolResult = "{}",
+                toolCallId = "ws_$index",
+            )
+        }
+        val clients = listOf("wait_for_job", "file_edit").mapIndexed { index, name ->
+            toolSegment("call_${index + 1}").copy(
+                toolName = name,
+                toolArgs = "{}",
+                responseOutputItems = rawItems,
+                responseOutputItemProvider = "OpenAI",
+            )
+        }
+        listOf(MessageStatus.STOPPED, MessageStatus.ERROR).forEach { status ->
+            val user = message("u", null, Participant.USER, 0)
+            val model = message(
+                "m", "u", Participant.MODEL, 1,
+                toolJson = Json.encodeToString(
+                    hosted + clients + MessageSegment(type = "answer", content = "partial"),
+                ),
+                status = status,
+            ).copy(modelName = "gpt-test")
+            val next = message("next", "m", Participant.USER, 2)
+            val path = listOf(user, model, next)
+            val assembled = ApiPathAssembler.assemble(path, path)
+            val input = convertToOpenAiMessages(
+                projectProviderMessages(assembled, includeStoredTranscriptions = false),
+                base64Files = Base64FileRegistry(),
+            ).toResponsesInput(providerName = "OpenAI", targetModel = "gpt-test")
+
+            OpenAiResponsesRequest(model = "gpt-test", input = input)
+                .requireValidWireFormat("OpenAI")
+            val outputs = input.filter {
+                it["type"]?.jsonPrimitive?.content == "function_call_output"
+            }
+            assertEquals(listOf("call_1", "call_2"), outputs.map {
+                it["call_id"]?.jsonPrimitive?.content
+            })
+            val expected = if (status == MessageStatus.STOPPED) {
+                InterruptedToolRounds.STOPPED_RESULT
+            } else {
+                InterruptedToolRounds.FAILED_RESULT
+            }
+            assertEquals(listOf(expected, expected), outputs.map {
+                it["output"]?.jsonPrimitive?.content
+            })
+            assertEquals(rawItems, input.subList(1, 5))
+            assertEquals(2, input.count { it["type"]?.jsonPrimitive?.content == "function_call" })
+            val retained = Json.decodeFromString<List<MessageSegment>>(
+                requireNotNull(assembled.first { it.id == "m" }.toolCallJson),
+            )
+            assertEquals(hosted, retained.filter { it.type == "tool" })
+        }
+    }
+
+    @Test
+    fun hostedSegments_surviveEndedRecoveryAndPersistedClientDeduplication() {
+        val hosted = listOf("openai_search", "google_search", "code_execution")
+            .mapIndexed { index, name ->
+                MessageSegment(
+                    type = "tool",
+                    toolName = name,
+                    toolCallId = "hosted_$index",
+                    toolArgs = """{"language":"PYTHON","code":"print(1)"}""",
+                    toolResult = if (name == "google_search") null else {
+                        """{"outcome":"OUTCOME_OK","output":"1"}"""
+                    },
+                )
+            }
+        val user = message("u", null, Participant.USER, 0)
+        listOf(MessageStatus.STOPPED, MessageStatus.ERROR, MessageStatus.SUCCESS).forEach { status ->
+            listOf(false, true).forEach { withClient ->
+                val client = toolSegment("call_1", result = "done")
+                val aggregate = hosted + if (withClient) listOf(client) else emptyList()
+                val model = message(
+                    "m", "u", Participant.MODEL, 1,
+                    toolJson = Json.encodeToString(aggregate),
+                    status = status,
+                )
+                val protocol = if (withClient) {
+                    listOf(
+                        message(
+                            "tool_round", "m", Participant.MODEL, 2,
+                            toolJson = toolSegments(client),
+                        ),
+                        message("result_round", "tool_round", Participant.USER, 3),
+                    )
+                } else {
+                    emptyList()
+                }
+                val assembled = ApiPathAssembler.assemble(
+                    ancestorPath = listOf(user, model),
+                    allMessages = listOf(user, model) + protocol,
+                )
+
+                assertEquals(listOf("u") + protocol.map { it.id } + "m", assembled.map { it.id })
+                assertEquals(
+                    hosted,
+                    Json.decodeFromString<List<MessageSegment>>(
+                        requireNotNull(assembled.last().toolCallJson),
+                    ),
+                )
+                val projected = projectProviderMessages(
+                    assembled, includeStoredTranscriptions = false,
+                ).last()
+                assertEquals(hosted, projected.segments)
+                val nativeParts = geminiModelMessageParts(projected)
+                assertEquals(
+                    "print(1)",
+                    nativeParts.single { it.executableCode != null }.executableCode?.code,
+                )
+                assertEquals(
+                    "1",
+                    nativeParts.single { it.codeExecutionResult != null }.codeExecutionResult?.output,
+                )
+                assertTrue(model.toolCallJson.orEmpty().contains("isProviderHostedTool").not())
+            }
+        }
+    }
+
+    @Test
+    fun genericWebSearch_remainsAnInterruptedClientCall() {
+        val user = message("u", null, Participant.USER, 0)
+        val model = message(
+            "m", "u", Participant.MODEL, 1,
+            toolJson = toolSegments(toolSegment("call_1").copy(toolName = "web_search")),
+            status = MessageStatus.STOPPED,
+        )
+        val assembled = ApiPathAssembler.assemble(listOf(user, model), listOf(user, model))
+
+        assertEquals(
+            listOf("u", "tool_interrupted-m", "result_interrupted-m-0", "m"),
+            assembled.map { it.id },
+        )
+        assertEquals(InterruptedToolRounds.STOPPED_RESULT, assembled[2].text)
     }
 
     private fun toolSegment(

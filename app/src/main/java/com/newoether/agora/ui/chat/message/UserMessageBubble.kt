@@ -36,6 +36,8 @@ import com.newoether.agora.R
 import com.newoether.agora.util.noOpBringIntoView
 import com.newoether.agora.model.AttachmentItem
 import com.newoether.agora.model.ChatMessage
+import com.newoether.agora.model.MessageSource
+import com.newoether.agora.model.subagentResultDisplay
 import com.newoether.agora.ui.chat.AttachmentThumbnailItem
 import com.newoether.agora.ui.chat.ThumbnailClickHandlers
 import com.newoether.agora.ui.chat.USER_BUBBLE_CONTENT_PADDING
@@ -43,6 +45,8 @@ import com.newoether.agora.ui.chat.resolveAttachmentType
 import com.newoether.agora.ui.common.LocalAgoraHaptics
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 import com.newoether.agora.ui.theme.ChatType
+import com.newoether.agora.ui.components.AgoraDropdownMenu
+import com.newoether.agora.ui.components.AgoraDropdownMenuItem
 
 /**
  * The right-aligned user message bubble: attachment thumbnails, the message text
@@ -116,10 +120,15 @@ internal fun UserMessageBubble(
     val clipboardManager = LocalClipboardManager.current
     val haptics = LocalAgoraHaptics.current
     val allowSpatialTransitions = LocalAgoraMotionPolicy.current.allowSpatialTransitions
+    val showEditor = isEditing && message.source == null
+    val editEnabled = isEditingAllowed && message.source == null
+    val subagentResult = remember(message.source, message.text) {
+        message.source?.subagentResultDisplay(message.text)
+    }
     var showMenu by remember { mutableStateOf(false) }
     val editFocusRequester = remember(message.id) { FocusRequester() }
-    LaunchedEffect(isEditing, editFocusRequester) {
-        if (isEditing) editFocusRequester.requestFocus()
+    LaunchedEffect(showEditor, editFocusRequester) {
+        if (showEditor) editFocusRequester.requestFocus()
     }
 
     Column(
@@ -132,6 +141,9 @@ internal fun UserMessageBubble(
             },
         ),
     ) {
+        message.source?.let { source ->
+            MessageSourceLabel(source = source, modifier = contextAlpha)
+        }
         Box {
             Surface(
             shape = shape,
@@ -141,7 +153,7 @@ internal fun UserMessageBubble(
                 .then(contextAlpha)
                 .clip(shape)
                 .combinedClickable(
-                    enabled = !isEditing && showActions,
+                    enabled = !showEditor && showActions,
                     hapticFeedbackEnabled = false,
                     onClick = {},
                     onLongClick = {
@@ -150,7 +162,7 @@ internal fun UserMessageBubble(
                     },
                 )
         ) {
-            if (isEditing) {
+            if (showEditor) {
                 val editState = rememberTextFieldState(message.text)
                 val editScrollState = rememberScrollState()
                 // Same inset as the read-only bubble, so the text stays put when editing starts;
@@ -286,7 +298,18 @@ internal fun UserMessageBubble(
                             }
                         }
                     }
-                    if (message.text.isNotEmpty()) {
+                    val askUser = message.source?.takeIf { it.kind == MessageSource.Kind.ASK_USER }
+                    if (subagentResult != null) {
+                        SubagentResultSummary(result = subagentResult, textColor = textColor)
+                    } else if (askUser != null) {
+                        AskUserAnswerBlocks(
+                            source = askUser,
+                            unansweredLabel = stringResource(R.string.message_source_unanswered),
+                            bodyStyle = ChatType.userBody,
+                            textColor = textColor,
+                            searchHighlight = searchHighlight,
+                        )
+                    } else if (message.text.isNotEmpty()) {
                         SearchHighlightedPlainText(
                             text = message.text,
                             style = ChatType.userBody,
@@ -299,15 +322,14 @@ internal fun UserMessageBubble(
             }
         }
 
-            DropdownMenu(
+            AgoraDropdownMenu(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 16.dp,
-                shape = RoundedCornerShape(12.dp),
-                expanded = showMenu && showActions && !isEditing,
+                expanded = showMenu && showActions && !showEditor,
                 onDismissRequest = { showMenu = false },
             ) {
                 if (!actionCopyText.isNullOrBlank()) {
-                    DropdownMenuItem(
+                    AgoraDropdownMenuItem(
                         text = { Text(stringResource(R.string.copy)) },
                         onClick = {
                             clipboardManager.setText(AnnotatedString(actionCopyText))
@@ -317,17 +339,17 @@ internal fun UserMessageBubble(
                         leadingIcon = { Icon(Icons.Default.ContentCopy, null) },
                     )
                 }
-                if (allowMutations) DropdownMenuItem(
+                if (allowMutations) AgoraDropdownMenuItem(
                     text = { Text(stringResource(R.string.edit)) },
                     onClick = {
                         showMenu = false
-                        onStartEdit()
+                        if (editEnabled) onStartEdit()
                     },
-                    enabled = isEditingAllowed,
+                    enabled = editEnabled,
                     leadingIcon = { Icon(Icons.Default.Edit, null) },
                 )
                 if (message.text.isNotBlank()) {
-                    DropdownMenuItem(
+                    AgoraDropdownMenuItem(
                         text = { Text(stringResource(R.string.select_text)) },
                         onClick = {
                             showMenu = false
@@ -336,7 +358,7 @@ internal fun UserMessageBubble(
                         leadingIcon = { Icon(Icons.Default.SelectAll, null) },
                     )
                 }
-                DropdownMenuItem(
+                AgoraDropdownMenuItem(
                     text = { Text(stringResource(R.string.info)) },
                     onClick = {
                         showMenu = false
@@ -344,7 +366,7 @@ internal fun UserMessageBubble(
                     },
                     leadingIcon = { Icon(Icons.Default.Info, null) },
                 )
-                if (allowMutations) DropdownMenuItem(
+                if (allowMutations) AgoraDropdownMenuItem(
                     text = {
                         Text(
                             stringResource(R.string.delete),
@@ -374,7 +396,7 @@ internal fun UserMessageBubble(
                 )
             }
         }
-        if (showBranchSelector && totalBranches > 1 && !isEditing) {
+        if (showBranchSelector && totalBranches > 1 && !showEditor) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier

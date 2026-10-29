@@ -455,7 +455,7 @@ class DataImporter(
                 val memDecision = decisions[DataExporter.ExportCategory.MEMORIES]
                 val settingsDecision = decisions[DataExporter.ExportCategory.SETTINGS]
                 val allowLegacySecrets =
-                    manifest.version < NativeBackupFormat.CURRENT_VERSION &&
+                    manifest.version < NativeBackupFormat.SEPARATE_SECRETS_SINCE_VERSION &&
                         keysDecision != null &&
                         keysDecision != ImportStrategy.SKIP
 

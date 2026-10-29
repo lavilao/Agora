@@ -62,7 +62,7 @@ class ToolPresentationResolverTest {
             singleLineShellCommand(command),
         )
         assertEquals(null, singleLineShellCommand(" \n\t "))
-        assertEquals("12345", singleLineShellCommand("123456789", maxCharacters = 5))
+        assertEquals("1234\u2026", singleLineShellCommand("123456789", maxCharacters = 5))
     }
 
     @Test
@@ -647,13 +647,14 @@ class ToolPresentationResolverTest {
     }
 
     @Test
-    fun plainTextToolFailureFailsEvenForContentLessToolKinds() {
+    fun declaredPlainTextToolFailureFailsEvenForContentLessToolKinds() {
         val presentation = ToolPresentationResolver.resolve(
             MessageSegment(
                 type = "tool",
                 toolName = "file_read",
                 toolArgs = """{"path":"/tmp/x.txt"}""",
                 toolResult = "Error: unexpected end of stream",
+                toolState = ToolExecutionStates.FAILED,
             ),
         )
 
@@ -725,5 +726,49 @@ class ToolPresentationResolverTest {
 
         assertEquals(ToolPresentationState.EMPTY, presentation.state)
         assertNull(presentation.errorMessage)
+    }
+    @Test
+    fun malformedStandInPresentsTheToolAndArgumentsTheModelSent() {
+        val sent = """[{"question":"Pick one","options":["a","b"]}]"""
+        val wrapper = JsonObject(
+            mapOf(
+                "error" to JsonPrimitive("arguments were not a valid JSON object"),
+                "original_name" to JsonPrimitive("ask_user"),
+                "original_arguments" to JsonPrimitive(sent),
+            ),
+        ).toString()
+        val presentation = ToolPresentationResolver.resolve(
+            MessageSegment(
+                type = "tool",
+                toolName = "agora_malformed_tool_call",
+                toolArgs = wrapper,
+                toolResult = "Error: the previous tool call was malformed and was not executed",
+                toolState = ToolExecutionStates.FAILED,
+            ),
+        )
+        assertEquals("ask_user", presentation.toolName)
+        assertEquals(sent, presentation.rawArguments)
+        assertEquals(ToolKind.UNKNOWN, presentation.kind)
+        assertEquals(ToolPresentationState.FAILED, presentation.state)
+        assertEquals(
+            "Error: the previous tool call was malformed and was not executed",
+            presentation.errorMessage,
+        )
+    }
+    @Test
+    fun malformedStandInWithoutCarriedOriginalsKeepsTheStandInItself() {
+        val wrapper = """{"error":"duplicate tool call id"}"""
+        val presentation = ToolPresentationResolver.resolve(
+            MessageSegment(
+                type = "tool",
+                toolName = "agora_malformed_tool_call",
+                toolArgs = wrapper,
+                toolResult = "Error: the previous tool call was malformed and was not executed",
+                toolState = ToolExecutionStates.FAILED,
+            ),
+        )
+        assertEquals("agora_malformed_tool_call", presentation.toolName)
+        assertEquals(wrapper, presentation.rawArguments)
+        assertEquals(ToolPresentationState.FAILED, presentation.state)
     }
 }

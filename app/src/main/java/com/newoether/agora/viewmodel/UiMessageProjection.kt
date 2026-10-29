@@ -3,9 +3,11 @@ package com.newoether.agora.viewmodel
 import android.content.Context
 import com.newoether.agora.data.local.MessageContextTopology
 import com.newoether.agora.data.local.MessageEntity
+import com.newoether.agora.data.repository.resolveToolRoundReferences
 import com.newoether.agora.model.AttachmentMeta
 import com.newoether.agora.model.ChatMessage
 import com.newoether.agora.model.MessageSegment
+import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.MessageStatus
 import com.newoether.agora.model.Participant
 import com.newoether.agora.model.RunRecoveryPolicy
@@ -59,10 +61,13 @@ internal fun List<MessageSegment>?.withDurableModelAnswer(
  * Otherwise a branch mutation can temporarily replace a fully decoded message with a partial
  * copy and leave persisted thought/tool segments invisible until the conversation is reopened.
  */
-internal fun MessageEntity.toUiChatMessage(context: Context): ChatMessage =
-    toUiChatMessage { value -> SearchResultFormatter.format(value, context) }
+internal fun MessageEntity.toUiChatMessage(
+    context: Context,
+    toolRoundRows: List<MessageEntity>? = null,
+): ChatMessage = toUiChatMessage(toolRoundRows) { value -> SearchResultFormatter.format(value, context) }
 
 internal fun MessageEntity.toUiChatMessage(
+    toolRoundRows: List<MessageEntity>? = null,
     formatText: (String) -> String,
 ): ChatMessage {
     val isSynthetic = id.isSyntheticMessageId()
@@ -78,12 +83,14 @@ internal fun MessageEntity.toUiChatMessage(
             }.getOrNull()
         }
     }
+    val resolvedSegments = if (toolRoundRows == null) decodedSegments else
+        resolveToolRoundReferences(decodedSegments, toolRoundRows)
     val terminalSegments = if (
         participant == Participant.MODEL && status == MessageStatus.STOPPED
     ) {
-        decodedSegments?.let(RunRecoveryPolicy::stopIncompleteTools)
+        resolvedSegments?.let(RunRecoveryPolicy::stopIncompleteTools)
     } else {
-        decodedSegments
+        resolvedSegments
     }
     val recovered = recoverPersistedThinkingBoundary(
         participant = participant,
@@ -139,6 +146,7 @@ internal fun MessageEntity.toUiChatMessage(
                     toolCallId = segment.toolCallId,
                     resultImages = segment.toolImages,
                     displayName = segment.toolDisplayName,
+                    target = segment.toolTarget,
                     resultText = segment.toolResultText,
                     structuredResult = segment.toolStructuredResult,
                 )
@@ -153,5 +161,6 @@ internal fun MessageEntity.toUiChatMessage(
         runId = runId,
         runSequence = runSequence,
         consumedAtPass = consumedAtPass,
+        source = if (isSynthetic) null else MessageSource.decode(sourceJson),
     )
 }

@@ -123,7 +123,7 @@ internal class GenerationApiPathBuilder(
                     frequencyPenalty = config.frequencyPenalty,
                     presencePenalty = config.presencePenalty,
                     promptCacheKey = request.conversationId.takeIf {
-                        config.providerName == Constants.PROVIDER_OPENAI
+                        config.promptCacheKeyEnabled
                     },
                     sessionId = request.conversationId.takeIf {
                         config.providerName == Constants.PROVIDER_OPENCODE_GO

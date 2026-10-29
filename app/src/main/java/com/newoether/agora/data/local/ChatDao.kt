@@ -9,24 +9,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private fun decodeSelectionMap(raw: String?): MutableMap<String?, String> =
-    raw?.let {
-        runCatching {
-            Json.decodeFromString<Map<String, String>>(it)
-                .mapKeysTo(mutableMapOf()) { entry ->
-                    if (entry.key == "null") null else entry.key
-                }
-        }.getOrDefault(mutableMapOf())
-    } ?: mutableMapOf()
-
-internal fun encodeSelectionMap(selections: Map<String?, String>): String =
-    Json.encodeToString(selections.mapKeys { it.key ?: "null" })
-
-/** SQLite's per-statement bound-parameter ceiling on older Android releases
- * (999 for the bundled pre-3.32 engines; 900 leaves headroom for any fixed
- * parameters a statement might add). */
-internal const val SQLITE_MAX_BIND_PARAMETERS = 900
-
 @Dao
 interface ChatDao :
     ChatAutomationDao,
@@ -34,10 +16,16 @@ interface ChatDao :
     ChatProviderContextDao,
     ChatSearchDao,
     ChatMediaReferencesDao,
+    ChatTodoDao,
+    ChatSubagentDao,
     NewChatPersistDao {
-    // Task executions always remain in their owning Task's History.
-    @Query("SELECT id, title, systemPromptId, modelId, taskId, origin, graduated, hasUnreadGeneration, selectedBranchesJson FROM conversations WHERE taskId IS NULL ORDER BY lastUpdated DESC")
+    // Navigation never reads branch payloads; selected-owner observation owns them.
+    @Query("SELECT id, title, systemPromptId, modelId, taskId, origin, graduated, hasUnreadGeneration, isPinned, NULL AS selectedBranchesJson, parentConversationId FROM conversations WHERE taskId IS NULL AND parentConversationId IS NULL ORDER BY lastUpdated DESC")
     fun getAllConversations(): Flow<List<ChatConversation>>
+    @Query("SELECT id, title, hasUnreadGeneration, isPinned FROM conversations WHERE taskId IS NULL AND parentConversationId IS NULL ORDER BY isPinned DESC, lastUpdated DESC, id LIMIT :limit")
+    fun observeDrawerConversations(limit: Int): Flow<List<DrawerConversationRow>>
+    @Query("SELECT id, title, hasUnreadGeneration, isPinned FROM conversations WHERE taskId IS NULL AND parentConversationId IS NULL AND id IN (:ids)")
+    suspend fun getDrawerConversations(ids: List<String>): List<DrawerConversationRow>
 
     @Query("SELECT * FROM conversations WHERE taskId = :taskId ORDER BY lastUpdated DESC")
     fun getExecutionsForTask(taskId: String): Flow<List<ChatEntity>>
@@ -90,6 +78,10 @@ interface ChatDao :
 
     @Upsert
     suspend fun upsertConversation(conversation: ChatEntity)
+    @Query("UPDATE conversations SET modelId = :modelId, dataChangedAt = MAX(dataChangedAt + 1, :at) WHERE id = :conversationId")
+    suspend fun updateConversationModel(conversationId: String, modelId: String?, at: Long): Int
+    @Query("UPDATE conversations SET systemPromptId = :promptId, dataChangedAt = MAX(dataChangedAt + 1, :at) WHERE id = :conversationId")
+    suspend fun updateConversationSystemPrompt(conversationId: String, promptId: String?, at: Long): Int
 
     /**
      * Marks exported conversation data as changed. The value always moves forward, so an
@@ -135,6 +127,15 @@ interface ChatDao :
 
     @Query("UPDATE conversations SET title = :title, dataChangedAt = :at WHERE id = :conversationId")
     suspend fun updateConversationTitle(conversationId: String, title: String, at: Long): Int
+
+    @Query(
+        """
+        UPDATE conversations
+        SET isPinned = :pinned, dataChangedAt = MAX(dataChangedAt + 1, :at)
+        WHERE id = :conversationId AND taskId IS NULL AND isPinned != :pinned
+        """
+    )
+    suspend fun setConversationPinned(conversationId: String, pinned: Boolean, at: Long): Int
 
     @Query(
         """
@@ -199,7 +200,7 @@ interface ChatDao :
         UPDATE conversations
         SET selectedBranchesJson = :selectedBranchesJson,
             selectedRunBranchesJson = :selectedRunBranchesJson,
-            modelId = :modelId,
+            modelId = CASE WHEN :modelId IS NULL THEN modelId ELSE :modelId END,
             dataChangedAt = :at,
             lastUpdated = CASE
                 WHEN :touchConversationOnAdmission THEN :at
@@ -212,7 +213,7 @@ interface ChatDao :
         conversationId: String,
         selectedBranchesJson: String,
         selectedRunBranchesJson: String,
-        modelId: String,
+        modelId: String?,
         at: Long,
         touchConversationOnAdmission: Boolean,
     ): Int
@@ -265,14 +266,14 @@ interface ChatDao :
         run: RunEntity,
         messages: List<MessageEntity>,
         messageSelectionUpdates: Map<String?, String>,
-        conversationModelId: String,
+        conversationModelId: String?,
         at: Long,
         touchConversationOnAdmission: Boolean,
     ): RunGraphCommit {
         require(run.status == RunStatus.ACTIVE)
         require(run.activeSlot == 1)
         require(messages.isNotEmpty())
-        require(conversationModelId.isNotBlank())
+        require(conversationModelId == null || conversationModelId.isNotBlank())
         require(messages.all { it.runId == run.id })
         require(messages.map { it.runSequence } == messages.indices.map { it.toLong() })
         val conversation = checkNotNull(getConversation(run.conversationId)) {
@@ -623,9 +624,16 @@ interface ChatDao :
     suspend fun getLastMessageForConversation(conversationId: String): MessageEntity?
 
     /** Message invalidations for task execution summaries. Unlike getExecutionsForTask(),
-     * this Flow observes the messages table, so terminal status/snippet changes are emitted. */
-    @Query("SELECT m.* FROM messages m INNER JOIN conversations c ON m.conversationId = c.id WHERE c.taskId = :taskId ORDER BY m.timestamp ASC")
-    fun observeExecutionMessagesForTask(taskId: String): Flow<List<MessageEntity>>
+     * this Flow observes the messages table, so terminal status/snippet changes are emitted.
+     * Only the summary columns and a bounded text prefix are read: a full message row can
+     * exceed the CursorWindow and crash the execution list. */
+    @Query(
+        "SELECT m.id, m.conversationId, m.participant, m.status, m.timestamp, " +
+            "substr(m.text, 1, $EXECUTION_PREVIEW_MAX_CHARS) AS preview " +
+            "FROM messages m INNER JOIN conversations c ON m.conversationId = c.id " +
+            "WHERE c.taskId = :taskId AND m.participant IN ('MODEL', 'ERROR') ORDER BY m.timestamp ASC",
+    )
+    fun observeExecutionMessagesForTask(taskId: String): Flow<List<ExecutionMessageSummaryRow>>
 
     // Embeddings
     @Insert
@@ -654,6 +662,9 @@ interface ChatDao :
      * exceeds it with the raw query. */
     suspend fun getMessagesByIds(ids: List<String>): List<MessageEntity> =
         ids.chunked(SQLITE_MAX_BIND_PARAMETERS).flatMap { getMessagesByIdsRaw(it) }
+
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND id IN (:ids)")
+    fun observeMessagesByIds(conversationId: String, ids: List<String>): Flow<List<MessageEntity>>
 
     @Query("UPDATE conversations SET draftText = :text, draftAttachments = :attachments, dataChangedAt = :at WHERE id = :id")
     suspend fun updateDraft(id: String, text: String, attachments: String?, at: Long)

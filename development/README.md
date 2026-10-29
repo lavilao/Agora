@@ -80,10 +80,14 @@ model and may admit one bounded low-priority cache worker. It never authorizes a
 conversation, embedding, attachment, Run, or owner scan.
 
 Explicitly opening one conversation is the admission boundary for its state. That action may load,
-deserialize, validate, and recover only the selected owner. Opening conversation A must not read,
-validate, restore, cache, or schedule work for conversation B. Durable state for an unopened owner
-remains dormant after process death. Work already admitted for an opened owner may continue in the
-same process after the user switches away, but this never authorizes a new global scan.
+deserialize, validate, and recover the selected owner. It also admits ordinary validation of all indexed
+child conversations in the selected parent family; a selected child must prove its durable parent
+membership before widening that scope. Native and WebUI share one open-recovery boundary. Enumerate
+only child IDs, validate one child at a time, and skip active in-process execution or registered
+delegation Jobs until their lifecycle owner removes them.
+Opening conversation A must not read, validate, restore, cache, or schedule work for unrelated owners.
+Unopened families remain dormant after process death. Work already admitted for an opened family may
+continue in the same process after navigation, but this never authorizes a global scan or restart.
 
 Load performance is a primary architecture, implementation, and review constraint. Startup and page
 entry queries must use narrow projections, avoid unused large columns, and keep database, JSON, file,
@@ -152,6 +156,7 @@ Never:
 | Provider structured citations, citation persistence, marker cleanup, answer/source projection, citation copy/search/import/export, or citation accessibility | [citations.md](citations.md) |
 | Embedding-cache reads, semantic conversation search, RAG ranking, or search eligibility | [semantic-search.md](semantic-search.md) |
 | Generic Web Search providers/settings/tool execution or native provider-hosted web search | [web-search.md](web-search.md) |
+| MCP fixed list/search/call tools, catalog discovery, target permission and cache-stable projection | [mcp-tools.md](mcp-tools.md) |
 | Persistent Skill files, Skill catalog prompt projection, Skill tools/settings, or Skill archive transport | [skills.md](skills.md) |
 | Application-level onboarding motion, settings category copy, or other non-message global UI behavior | [application-ui.md](application-ui.md) |
 | Native `.agora` archive categories, settings portability, import strategies, secrets, or backup compatibility | [import-export.md](import-export.md) |

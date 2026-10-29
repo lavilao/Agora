@@ -41,23 +41,17 @@ internal class DurableSelectedContextLoader(
     private val conversations: ConversationRepository,
     private val generationErrorFormatter: (String) -> String,
 ) {
-    suspend fun load(request: DurableSelectedContextRequest): DurableSelectedContext =
-        conversations.withProviderContextSnapshot {
+    suspend fun load(request: DurableSelectedContextRequest): DurableSelectedContext {
+        val rows = conversations.withProviderContextSnapshot {
             val snapshot = conversations.getProviderContextTopologySnapshot(request.conversationId)
-                ?: return@withProviderContextSnapshot DurableSelectedContext(
-                    messages = emptyList(),
-                    entities = emptyList(),
-                )
+                ?: return@withProviderContextSnapshot emptyList<InterruptedToolRounds.Row>()
             val plannedRows = ProviderContextTopologyPlanner.plan(
                 snapshot = snapshot,
                 anchorMessageId = request.anchorMessageId,
                 followSelectedBranch = request.followSelectedBranch,
             )
             if (plannedRows.isEmpty()) {
-                return@withProviderContextSnapshot DurableSelectedContext(
-                    messages = emptyList(),
-                    entities = emptyList(),
-                )
+                return@withProviderContextSnapshot emptyList<InterruptedToolRounds.Row>()
             }
 
             val ids = plannedRows.map { it.row.id }
@@ -67,7 +61,7 @@ internal class DurableSelectedContextLoader(
                     "Provider context changed while loading message rows",
                 )
             }
-            val entities = plannedRows.map { planned ->
+            plannedRows.map { planned ->
                 val topology = planned.row
                 val entity = fetched[topology.id]
                     ?: throw DurableContextLoadException("A Provider context message disappeared")
@@ -78,17 +72,20 @@ internal class DurableSelectedContextLoader(
                     ),
                     stripAggregateToolSegments = planned.stripAggregateToolSegments,
                 )
-            }.let(InterruptedToolRounds::materialize)
-            DurableSelectedContext(
-                messages = projectProviderMessages(
-                    entities = entities,
-                    includeStoredTranscriptions = request.includeStoredTranscriptions,
-                ).let { messages ->
-                    projectGenerationStatusesForApi(messages, generationErrorFormatter)
-                },
-                entities = entities,
-            )
+            }
         }
+        // All rows belong to the same durable snapshot; pure payload conversion needs no DB lock.
+        val entities = InterruptedToolRounds.materialize(rows)
+        return DurableSelectedContext(
+            messages = projectProviderMessages(
+                entities = entities,
+                includeStoredTranscriptions = request.includeStoredTranscriptions,
+            ).let { messages ->
+                projectGenerationStatusesForApi(messages, generationErrorFormatter)
+            },
+            entities = entities,
+        )
+    }
 
     private fun validateEntity(
         conversationId: String,

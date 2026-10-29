@@ -48,6 +48,9 @@ interface ChatContextCompactDao {
     @Query("SELECT * FROM messages WHERE runId IN (:runIds) ORDER BY runSequence, timestamp, id")
     suspend fun getMessagesForRuns(runIds: List<String>): List<MessageEntity>
 
+    @Query("SELECT NOT EXISTS(SELECT 1 FROM messages WHERE runId = :runId AND id != :messageId)")
+    suspend fun isOnlyMessageInRun(runId: String, messageId: String): Boolean
+
     @Query("DELETE FROM runs WHERE id = :runId")
     suspend fun deleteRun(runId: String): Int
 
@@ -176,7 +179,7 @@ interface ChatContextCompactDao {
         check(oldRun.status.isTerminal && oldRun.activeSlot == null) {
             "Compact Run is not terminal"
         }
-        check(getMessagesForRuns(listOf(oldRun.id)).map(MessageEntity::id) == listOf(message.id)) {
+        check(isOnlyMessageInRun(oldRun.id, message.id)) {
             "Compact Run is not independently replaceable"
         }
         check(
@@ -248,7 +251,7 @@ interface ChatContextCompactDao {
         val conversation = getConversation(message.conversationId) ?: return false
         val compactRun = getRun(message.runId) ?: return false
         val compactOwnsDedicatedRun =
-            getMessagesForRuns(listOf(compactRun.id)).map(MessageEntity::id) == listOf(message.id)
+            isOnlyMessageInRun(compactRun.id, message.id)
         reparentMessageChildren(message.id, message.parentId)
         deleteEmbeddingsByMessageIds(listOf(message.id))
         deleteMessagesByIds(listOf(message.id))

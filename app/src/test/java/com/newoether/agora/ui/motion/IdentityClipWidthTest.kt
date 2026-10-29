@@ -75,6 +75,42 @@ class IdentityClipWidthTest {
     }
 
     @Test
+    fun conversationToMenuCircleShrinksAndAnInterruptedReturnExpandsFromTheCurrentEdge() {
+        start()
+        compose.runOnIdle { identity = "new-chat"; target = 52.dp }
+        frames(160)
+        val interrupted = width
+        assertTrue("$interrupted", interrupted > 52.dp && interrupted < 100.dp)
+        compose.runOnIdle { identity = "conversation"; target = 200.dp }
+        frames(48)
+        val rebased = width
+        assertTrue("$width", width > 52.dp && width < 200.dp)
+        frames(48)
+        assertTrue("$width", width > rebased && width < 200.dp)
+        frames(IDENTITY_CLIP_DURATION_MILLIS.toLong())
+        assertEquals(200.dp, width)
+        compose.runOnIdle { identity = "new-chat"; target = 52.dp }
+        frames(IDENTITY_CLIP_DURATION_MILLIS + 64L)
+        assertEquals(52.dp, width)
+    }
+    @Test
+    fun interruptedReturnToPreviousIdentityKeepsMovingFromTheCurrentEdge() {
+        start()
+        compose.runOnIdle { identity = "b"; target = 200.dp }
+        frames(160)
+        val beforeReturn = width
+        assertTrue("$beforeReturn", beforeReturn > 100.dp && beforeReturn < 200.dp)
+        compose.runOnIdle { identity = "a"; target = 100.dp }
+        frames(48)
+        val returning = width
+        assertTrue("Returning must not snap to its old target: $returning", returning > 100.dp)
+        frames(48)
+        assertTrue("Return must keep shrinking: $width", width > 100.dp && width < returning)
+        frames(IDENTITY_CLIP_DURATION_MILLIS.toLong())
+        assertEquals(100.dp, width)
+    }
+
+    @Test
     fun reducedMotionSnapsTheEdge() {
         start()
         compose.runOnIdle { spatial = false; identity = "b"; target = 60.dp }

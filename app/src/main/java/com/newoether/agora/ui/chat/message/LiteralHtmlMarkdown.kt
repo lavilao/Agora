@@ -10,6 +10,7 @@ import com.mikepenz.markdown.compose.elements.MarkdownText
 import com.mikepenz.markdown.model.MarkdownAnnotator
 import com.mikepenz.markdown.model.markdownAnnotator
 import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
+import com.newoether.agora.ui.components.formulaAlternateText
 import com.newoether.agora.ui.components.latexSourceForLink
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
@@ -46,7 +47,7 @@ internal val chatMarkdownAnnotator: MarkdownAnnotator = markdownAnnotator { cont
     if (child.type != MarkdownElementTypes.IMAGE) return@markdownAnnotator false
     val link = markdownImageLink(content, child, null)
     val source = link?.let(::latexSourceForLink) ?: return@markdownAnnotator false
-    appendInlineContent("${MARKDOWN_TAG_IMAGE_URL}_$link", source)
+    appendInlineContent("${MARKDOWN_TAG_IMAGE_URL}_$link", formulaAlternateText(source))
     true
 }
 internal fun literalHtmlBlockText(content: String, node: ASTNode): String? =

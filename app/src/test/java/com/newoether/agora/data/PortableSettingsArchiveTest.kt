@@ -27,6 +27,115 @@ import org.junit.Test
 
 class PortableSettingsArchiveTest {
     @Test
+    fun todoAndSubagentPermissionsPersistRoundTripAndRespectLegacyStrategies() = runTest {
+        val directory = java.nio.file.Files.createTempDirectory("agora-tool-permissions").toFile()
+        val context = mockk<android.content.Context>()
+        every { context.applicationContext } returns context
+        every { context.filesDir } returns directory
+        val movesClass = "androidx.datastore.core.FileMoves_androidKt"
+        val atomicMove = Class.forName(movesClass)
+            .getDeclaredMethod("atomicMoveTo", File::class.java, File::class.java)
+        mockkStatic(movesClass)
+        every { atomicMove.invoke(null, any<File>(), any<File>()) } answers {
+            java.nio.file.Files.move(firstArg<File>().toPath(), secondArg<File>().toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            true
+        }
+        mockkObject(SecretCrypto)
+        every { SecretCrypto.encrypt(any()) } answers { firstArg<String>() }
+        every { SecretCrypto.decrypt(any()) } answers { firstArg<String>() }
+        try {
+            val manager = SettingsManager(context)
+            assertTrue(manager.todoEnabled.first())
+            assertTrue(manager.subagentToolsEnabled.first())
+            manager.saveTodoEnabled(false)
+            manager.saveSubagentToolsEnabled(false)
+            manager.saveLocalLowContextModeEnabled(true)
+            val conversationSettings = mapOf("conversation" to ConversationSettings(shellEnabled = false))
+            manager.saveConversationSettingsMap(conversationSettings)
+            val reopened = SettingsManager(context)
+            assertFalse(reopened.todoEnabled.first())
+            assertFalse(reopened.subagentToolsEnabled.first())
+            val exported = PortableSettingsArchive.toJsonObject(manager, false)
+            assertEquals(JsonPrimitive(false), exported["todoEnabled"])
+            assertEquals(JsonPrimitive(false), exported["subagentToolsEnabled"])
+            val permissions = JsonObject(exported.filterKeys {
+                it == "todoEnabled" || it == "subagentToolsEnabled"
+            })
+            val empty = JsonObject(emptyMap())
+            PortableSettingsArchive.restoreFromJsonObject(empty, manager, false, false, null) { it }
+            assertFalse(manager.todoEnabled.first())
+            assertFalse(manager.subagentToolsEnabled.first())
+            PortableSettingsArchive.restoreFromJsonObject(
+                JsonObject(mapOf("todoEnabled" to JsonPrimitive(true))), manager, false, false, null,
+            ) { it }
+            assertTrue(manager.todoEnabled.first())
+            assertFalse(manager.subagentToolsEnabled.first())
+            PortableSettingsArchive.restoreFromJsonObject(
+                JsonObject(mapOf("subagentToolsEnabled" to JsonPrimitive(true))), manager, false, false, null,
+            ) { it }
+            assertTrue(manager.todoEnabled.first())
+            assertTrue(manager.subagentToolsEnabled.first())
+            PortableSettingsArchive.restoreFromJsonObject(permissions, manager, false, false, null) { it }
+            assertFalse(manager.todoEnabled.first())
+            assertFalse(manager.subagentToolsEnabled.first())
+            PortableSettingsArchive.restoreFromJsonObject(empty, manager, true, false, null) { it }
+            assertTrue(manager.todoEnabled.first())
+            assertTrue(manager.subagentToolsEnabled.first())
+            assertTrue(manager.localLowContextModeEnabled.first())
+            assertEquals(conversationSettings, manager.conversationSettings.first())
+            PortableSettingsArchive.restoreFromJsonObject(permissions, manager, true, false, null) { it }
+            val restored = SettingsManager(context)
+            assertFalse(restored.todoEnabled.first())
+            assertFalse(restored.subagentToolsEnabled.first())
+            assertTrue(restored.localLowContextModeEnabled.first())
+            assertEquals(conversationSettings, restored.conversationSettings.first())
+        } finally {
+            unmockkObject(SecretCrypto)
+            unmockkStatic(movesClass)
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun legacyServiceTiersNormalizeThroughPortableImportAndExport() = runTest {
+        val directory = java.nio.file.Files.createTempDirectory("agora-tier-settings").toFile()
+        val context = mockk<android.content.Context>()
+        every { context.applicationContext } returns context
+        every { context.filesDir } returns directory
+        val movesClass = "androidx.datastore.core.FileMoves_androidKt"
+        val atomicMove = Class.forName(movesClass)
+            .getDeclaredMethod("atomicMoveTo", File::class.java, File::class.java)
+        mockkStatic(movesClass)
+        every { atomicMove.invoke(null, any<File>(), any<File>()) } answers {
+            java.nio.file.Files.move(firstArg<File>().toPath(), secondArg<File>().toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            true
+        }
+        try {
+            val manager = SettingsManager(context)
+            manager.saveOpenAiServiceTier("priority")
+            assertEquals("fast", manager.openAiServiceTier.first())
+            val legacy = Json.parseToJsonElement("""{"openAiServiceTier":"scale"}""") as JsonObject
+            PortableSettingsArchive.restoreFromJsonObject(legacy, manager, false, false, null) { it }
+            assertEquals("default", manager.openAiServiceTier.first())
+            assertEquals("default", PortableSettingsArchive.toJsonObject(manager, false)
+                .getValue("openAiServiceTier").jsonPrimitive.content)
+            manager.saveConversationSettings("conversation", ConversationSettings(openAiServiceTier = "scale"))
+            assertEquals("default", manager.conversationSettings.first()
+                .getValue("conversation").openAiServiceTier)
+            manager.saveConversationSettingsMap(
+                mapOf("conversation" to ConversationSettings(openAiServiceTier = "priority")),
+            )
+            assertEquals("fast", SettingsManager(context).conversationSettings.first()
+                .getValue("conversation").openAiServiceTier)
+        } finally {
+            unmockkStatic(movesClass)
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cacheArchiveRoundTripAndLegacyStrategiesUseRealSettingsStorage() = runTest {
         val directory = java.nio.file.Files.createTempDirectory("agora-cache-settings").toFile()
         val context = mockk<android.content.Context>()

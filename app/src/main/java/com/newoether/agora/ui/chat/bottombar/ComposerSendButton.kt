@@ -159,7 +159,7 @@ internal fun ComposerSendButton(
     Surface(
         onClick = onClick,
         enabled = isActionable,
-        modifier = Modifier.size(46.dp),
+        modifier = Modifier.size(COMPOSER_CONTROL_HEIGHT),
         shape = CircleShape,
         color = containerColor,
         contentColor = contentColor,

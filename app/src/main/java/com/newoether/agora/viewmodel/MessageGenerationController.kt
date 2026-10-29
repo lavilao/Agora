@@ -15,14 +15,11 @@ import com.newoether.agora.model.MessageStatus
 import com.newoether.agora.model.Participant
 import com.newoether.agora.model.RunEffect
 import com.newoether.agora.model.SelectedAttachment
-import com.newoether.agora.service.AppForegroundTracker
 import com.newoether.agora.util.Constants
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -36,14 +33,13 @@ import java.util.UUID
  * conversation runtime. Durable accepted-input execution is delegated after mailbox admission.
  *
  * Generation state is held per-conversation in [ConversationGenerationState]
- * (obtained from [ConversationStateRegistry]); the StateFlows ChatViewModel
- * exposes to the UI are a mirror of whichever conversation is currently open.
- * Synchronous writes to those flows inside the generation coroutines are gated
- * on the open conversation via [ifOpenOn] so a background generation can't
- * clobber the visible conversation's UI.
+ * (obtained from [ConversationStateRegistry]). Graph projections fan out through [ChatClients] to
+ * every attached client that has the conversation open, and visibility means any attached client
+ * can see it, so a background generation never writes into a client showing another
+ * conversation.
  */
 internal class MessageGenerationController(
-    private val viewModelScope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val application: Application,
     private val appContext: Context,
     // -- Process-scoped collaborators --
@@ -56,35 +52,10 @@ internal class MessageGenerationController(
     private val providerRegistry: ProviderRegistry,
     private val localProvider: LocalProvider,
     private val executionCoordinator: ConversationExecutionCoordinator,
-    // -- Shared UI state: the SAME instances ChatViewModel exposes -never recreate --
-    private val renderStore: ConversationRenderStore,
-    private val currentConversationId: StateFlow<String?>,
-    private val isNewChatMode: StateFlow<Boolean>,
-    private val newChatEntryId: StateFlow<Long>,
-    private val captureNewChatWorkspace: () -> NewChatWorkspaceSnapshot,
-    private val applyCommittedNewConversationState: suspend (String) -> Unit,
-    private val currentActiveModel: StateFlow<String>,
-    private val messages: StateFlow<List<ChatMessage>>,
-    // -- Callbacks into ChatViewModel-owned side effects --
-    private val onScrollToMessage: (String?) -> Unit,
-    private val onScrollToAbsoluteBottomAfter: (conversationId: String, messageId: String) -> Unit,
-    /** Like [onScrollToAbsoluteBottomAfter] but the scroll is suppressed when the viewport is not
-     *  already at the bottom. Used by loop cycles so automated messages never steal the user's
-     *  scroll position. */
-    private val onScrollToAttachedBottomAfter: (conversationId: String, messageId: String) -> Unit,
-    /** Fires on every send acceptance (Direct + Queued) regardless of trigger source.
-     *  ChatApp wires this to haptics.confirm() so manual send, queue drain, and loop cycle
-     *  all produce identical haptic feedback. */
-    private val onSendAcceptedEvent: ((conversationId: String, messageId: String) -> Unit)? = null,
+    /** Every attached client; conversation-scoped projections and visibility go through it. */
+    private val clients: ChatClients,
+    // -- Runtime-wide messages (not tied to one command's origin client) --
     private val onSnackbar: (String) -> Unit,
-    private val onSnackbarSuspend: suspend (String) -> Unit,  // sequential emit inside generateTitle
-    // Called when sendMessage creates a NEW conversation, so the UI can suppress the
-    // conversation-open auto-scroll (the send's own physical-bottom scroll handles it) and
-    // avoid a double scroll on the first message of a new chat.
-    private val onConversationCreatedBySend: (String) -> Unit = {},
-    /** Selects a first durable Send only while its exact New Chat entry is still occupied. */
-    private val onConversationAcceptedBySend:
-        suspend (String, String, Long) -> Boolean = { _, _, _ -> false },
     // Called once when a hidden task/loop execution becomes searchable. The callback
     // only enqueues background work; embedding computation must not run under the send lock.
     // Called after a USER message row is persisted (send / edit), so incremental RAG
@@ -92,15 +63,6 @@ internal class MessageGenerationController(
     // via GenerationManager.onMessagePersisted, and without this hook user messages only
     // ever entered the cache through a manual full re-cache. Enqueues background work only.
     private val onUserMessagePersisted: (messageId: String, text: String) -> Unit = { _, _ -> },
-    /** Covers destructive tree mutation until ChatApp has settled the resulting path. */
-    private val onTreeMutationStart: suspend (
-        conversationId: String,
-        scrollToTarget: Boolean,
-    ) -> Long? = { _, _ -> null },
-    private val onTreeMutationSettling: (requestId: Long?, targetMessageId: String?) -> Unit =
-        { _, _ -> },
-    private val onTreeMutationFailed: (requestId: Long?) -> Unit = {},
-    private val regenerationTransitions: BranchReplacementTransitionCoordinator,
     private val pauseConversationTasks: suspend (String) -> Unit = {},
 ) {
     private val titleGenerator = ConversationTitleGenerator(convRepo, settings, providerRegistry)
@@ -137,9 +99,10 @@ internal class MessageGenerationController(
         terminalSettlement = terminalSettlement,
         boundRunGenerationLauncher = { boundRunGenerationLauncher },
         toUiMessage = { it.toUiChatMessage(appContext) },
-        isConversationOpen = { currentConversationId.value == it },
-        projectGraph = { _, committedMessages, selectedChildren, streamingMessage ->
-            renderStore.commitGraph(
+        isConversationOpen = clients::isConversationOpen,
+        projectGraph = { conversationId, committedMessages, selectedChildren, streamingMessage ->
+            clients.commitGraph(
+                conversationId = conversationId,
                 committedMessages = committedMessages,
                 selectedChildren = selectedChildren,
                 streamingMessage = streamingMessage,
@@ -152,27 +115,22 @@ internal class MessageGenerationController(
         requestBuilder = requestBuilder,
         generationManagerProvider = generationManagerProvider,
         continuationLauncher = { standardContinuationLauncher },
-        onCompactStarted = onScrollToAttachedBottomAfter,
+        onCompactStarted = { conversationId, messageId ->
+            requestScroll(conversationId, messageId, attachedOnly = true, origin = null)
+        },
     )
-    private val acceptanceNotifier = SendAcceptanceNotifier(onSendAcceptedEvent)
+    private val acceptanceNotifier = SendAcceptanceNotifier(clients)
     private val directAcceptedInputExecutor = DirectAcceptedInputEffectExecutor(
         conversations = convRepo,
         settings = settings,
         executionCoordinator = executionCoordinator,
         graphWriter = AcceptedInputGraphWriter(convRepo),
-        renderStore = renderStore,
+        clients = clients,
         requestBuilder = requestBuilder,
         terminalSettlement = terminalSettlement,
         boundRunGenerationLauncher = boundRunGenerationLauncher,
         acceptanceNotifier = acceptanceNotifier,
         toUiMessage = { it.toUiChatMessage(appContext) },
-        isConversationOpen = { currentConversationId.value == it },
-        applyCommittedNewConversationState = applyCommittedNewConversationState,
-        publishNewConversation = { conversationId, modelId, entryId ->
-            onConversationAcceptedBySend(conversationId, modelId, entryId).also { selected ->
-                if (selected) onConversationCreatedBySend(conversationId)
-            }
-        },
         onUserMessagePersisted = onUserMessagePersisted,
         onGenerateTitle = ::generateTitle,
     )
@@ -184,22 +142,24 @@ internal class MessageGenerationController(
         terminalSettlement = terminalSettlement,
         boundRunGenerationLauncher = boundRunGenerationLauncher,
         toUiMessage = { it.toUiChatMessage(appContext) },
-        isConversationOpen = { currentConversationId.value == it },
-        projectGraph = { _, committedMessages, selectedChildren, streamingMessage ->
-            renderStore.commitGraph(
+        isConversationOpen = clients::isConversationOpen,
+        projectGraph = { conversationId, committedMessages, selectedChildren, streamingMessage ->
+            clients.commitGraph(
+                conversationId = conversationId,
                 committedMessages = committedMessages,
                 selectedChildren = selectedChildren,
                 streamingMessage = streamingMessage,
             )
         },
-        onScrollToAbsoluteBottomAfter = onScrollToAbsoluteBottomAfter,
+        onScrollToAbsoluteBottomAfter = { conversationId, messageId ->
+            requestScroll(conversationId, messageId, attachedOnly = false, origin = null)
+        },
         onUserMessagePersisted = onUserMessagePersisted,
     )
     private val editService = ConversationEditService(
         conversations = convRepo,
         requestBuilder = requestBuilder,
         executionCoordinator = executionCoordinator,
-        transitions = regenerationTransitions,
         inputCloner = EditedRunInputCloner(
             java.io.File(application.filesDir, "run-inputs"),
         ),
@@ -207,18 +167,14 @@ internal class MessageGenerationController(
         boundRunGenerationLauncher = boundRunGenerationLauncher,
         guidanceDrain = queuedGuidanceDrainExecutor,
         toUiMessage = { it.toUiChatMessage(appContext) },
-        isConversationOpen = { currentConversationId.value == it },
-        projectGraph = { _, committedMessages, selectedChildren, streamingMessage ->
-            renderStore.commitGraph(
+        isConversationOpen = clients::isConversationOpen,
+        projectGraph = { conversationId, committedMessages, selectedChildren, streamingMessage ->
+            clients.commitGraph(
+                conversationId = conversationId,
                 committedMessages = committedMessages,
                 selectedChildren = selectedChildren,
                 streamingMessage = streamingMessage,
             )
-        },
-        awaitProjectedPath = { conversationId, messageId ->
-            combine(messages, currentConversationId) { path, openConversationId ->
-                openConversationId != conversationId || path.any { it.id == messageId }
-            }.first { projectedOrClosed -> projectedOrClosed }
         },
         onUserMessagePersisted = onUserMessagePersisted,
     )
@@ -226,14 +182,14 @@ internal class MessageGenerationController(
         conversations = convRepo,
         requestBuilder = requestBuilder,
         executionCoordinator = executionCoordinator,
-        transitions = regenerationTransitions,
         terminalSettlement = terminalSettlement,
         boundRunGenerationLauncher = boundRunGenerationLauncher,
         guidanceDrain = queuedGuidanceDrainExecutor,
         toUiMessage = { it.toUiChatMessage(appContext) },
-        isConversationOpen = { currentConversationId.value == it },
-        projectGraph = { _, committedMessages, selectedChildren, streamingMessage ->
-            renderStore.commitGraph(
+        isConversationOpen = clients::isConversationOpen,
+        projectGraph = { conversationId, committedMessages, selectedChildren, streamingMessage ->
+            clients.commitGraph(
+                conversationId = conversationId,
                 committedMessages = committedMessages,
                 selectedChildren = selectedChildren,
                 streamingMessage = streamingMessage,
@@ -241,42 +197,33 @@ internal class MessageGenerationController(
         },
     )
     private val branchMutationService = ConversationBranchMutationService(
-        scope = viewModelScope,
+        scope = scope,
         conversations = convRepo,
         executionCoordinator = executionCoordinator,
         toUiMessage = { it.toUiChatMessage(appContext) },
-        isConversationOpen = { currentConversationId.value == it },
-        projectGraph = { all, selected ->
-            renderStore.replaceGraph(allMessages = all, selectedChildren = selected)
+        isConversationOpen = clients::isConversationOpen,
+        projectGraph = { conversationId, all, selected ->
+            clients.replaceGraph(conversationId, allMessages = all, selectedChildren = selected)
         },
-        onMutationStart = onTreeMutationStart,
-        onMutationSettling = onTreeMutationSettling,
-        onMutationFailed = onTreeMutationFailed,
     )
 
-    private fun resolveScrollCallback(policy: SendScrollPolicy): (String, String) -> Unit =
-        when (policy) {
-            SendScrollPolicy.FORCE -> onScrollToAbsoluteBottomAfter
-            SendScrollPolicy.ATTACHED_ONLY -> onScrollToAttachedBottomAfter
+    /** Scroll effect for [origin], or for every client showing the conversation when null. */
+    private fun requestScroll(
+        conversationId: String,
+        messageId: String,
+        attachedOnly: Boolean,
+        origin: ChatClient?,
+    ) {
+        clients.effectTargets(conversationId, origin).forEach { client ->
+            client.requestScrollToBottomAfter(conversationId, messageId, attachedOnly)
         }
-
-    /**
-     * Run [block] only if the currently-open conversation is [genId]. Guards synchronous
-     * writes to the shared global flows so a background generation (operating on its own
-     * private [ConversationGenerationState] flows) cannot clobber the visible conversation's UI.
-     */
-    private fun ifOpenOn(genId: String, block: () -> Unit) {
-        if (currentConversationId.value == genId) block()
     }
 
     private fun isConversationVisible(conversationId: String): Boolean =
-        AppForegroundTracker.isInForeground &&
-            AppForegroundTracker.isChatPresented &&
-            currentConversationId.value == conversationId
+        clients.isConversationVisible(conversationId)
 
-    suspend fun compactManual(request: CompactRequest): CompactResult {
-        val conversationId = currentConversationId.value
-            ?: return CompactResult.Failed(CompactFailureReason.OPEN_CONVERSATION)
+    suspend fun compactManual(conversationId: String?, request: CompactRequest): CompactResult {
+        conversationId ?: return CompactResult.Failed(CompactFailureReason.OPEN_CONVERSATION)
         return compactController.manual(
             conversationId = conversationId,
             request = request,
@@ -294,10 +241,13 @@ internal class MessageGenerationController(
      * ACTIVE and STOPPING both reject deletion; Stop is never an implicit side effect.
      */
     fun deleteMessage(
+        origin: ChatClient,
+        conversationId: String?,
         messageId: String,
+        snapshot: List<ChatMessage>,
         onResult: ((Boolean) -> Unit)? = null,
     ): Int {
-        val currentId = currentConversationId.value ?: run {
+        val currentId = conversationId ?: run {
             onResult?.invoke(false)
             return 0
         }
@@ -306,7 +256,8 @@ internal class MessageGenerationController(
             conversationId = currentId,
             messageId = messageId,
             state = state,
-            snapshot = renderStore.allMessages,
+            snapshot = snapshot,
+            origin = origin,
             onResult = onResult,
         )
     }
@@ -315,16 +266,22 @@ internal class MessageGenerationController(
     // regenerate
     // ==================================
 
-    fun regenerate(messageId: String): Boolean {
-        val genId = currentConversationId.value ?: return false
+    fun regenerate(
+        origin: ChatClient,
+        conversationId: String?,
+        messageId: String,
+        modelId: String,
+        visiblePath: List<ChatMessage>,
+    ): Boolean {
+        val genId = conversationId ?: return false
         val state = registry.getOrCreate(genId)
-        val modelId = currentActiveModel.value
         return regenerationService.regenerate(
             ConversationRegenerationRequest(
                 conversationId = genId,
                 messageId = messageId,
                 modelId = modelId,
-                visiblePath = messages.value.toList(),
+                visiblePath = visiblePath,
+                origin = origin,
             ),
             state,
         )
@@ -334,24 +291,37 @@ internal class MessageGenerationController(
     // editMessage
     // ==================================
 
-    suspend fun editMessage(messageId: String, newText: String): Boolean =
-        withContext(Dispatchers.Default) {
-            editMessageOffMain(messageId, newText)
-        }
+    suspend fun editMessage(
+        origin: ChatClient,
+        conversationId: String?,
+        messageId: String,
+        newText: String,
+        modelId: String,
+        visiblePath: List<ChatMessage>,
+    ): Boolean = withContext(Dispatchers.Default) {
+        editMessageOffMain(origin, conversationId, messageId, newText, modelId, visiblePath)
+    }
 
-    private suspend fun editMessageOffMain(messageId: String, newText: String): Boolean {
+    private suspend fun editMessageOffMain(
+        origin: ChatClient,
+        conversationId: String?,
+        messageId: String,
+        newText: String,
+        modelId: String,
+        visiblePath: List<ChatMessage>,
+    ): Boolean {
         if (newText.isBlank()) return false
-        val genId = currentConversationId.value ?: return false
+        val genId = conversationId ?: return false
         val state = registry.getOrCreate(genId)
-        val modelId = currentActiveModel.value
-        requestBuilder.awaitProviderKey(modelId) ?: return false
+        requestBuilder.awaitProviderKey(modelId, origin::showSnackbar) ?: return false
         return editService.edit(
             ConversationEditRequest(
                 conversationId = genId,
                 messageId = messageId,
                 newText = newText,
                 modelId = modelId,
-                visiblePath = messages.value.toList(),
+                visiblePath = visiblePath,
+                origin = origin,
             ),
             state,
         )
@@ -361,12 +331,22 @@ internal class MessageGenerationController(
     // sendMessage
     // ==================================
 
-    internal fun captureForegroundSendTarget(ownerId: String): ForegroundSendTarget? {
-        val currentId = currentConversationId.value
+    /**
+     * Captures a send target from the sending client's own state: the conversation it shows
+     * ([currentId]), whether it shows its New Chat page, that page's entry, and its active model.
+     */
+    internal fun captureForegroundSendTarget(
+        ownerId: String,
+        currentId: String?,
+        isNewChatMode: Boolean,
+        newChatEntryId: Long,
+        modelId: String,
+        captureNewChatWorkspace: () -> NewChatWorkspaceSnapshot,
+    ): ForegroundSendTarget? {
         val wasNewChat = ownerId == NEW_CHAT_WORKSPACE_ID
         if (wasNewChat) {
-            if (!isNewChatMode.value || currentId != null) return null
-        } else if (isNewChatMode.value || currentId != ownerId) {
+            if (!isNewChatMode || currentId != null) return null
+        } else if (isNewChatMode || currentId != ownerId) {
             return null
         }
         return ForegroundSendTarget(
@@ -374,8 +354,8 @@ internal class MessageGenerationController(
             conversationId = if (wasNewChat) UUID.randomUUID().toString() else ownerId,
             runId = UUID.randomUUID().toString(),
             wasNewChat = wasNewChat,
-            newChatEntryId = newChatEntryId.value.takeIf { wasNewChat },
-            modelId = currentActiveModel.value,
+            newChatEntryId = newChatEntryId.takeIf { wasNewChat },
+            modelId = modelId,
             newChatWorkspace = if (wasNewChat) captureNewChatWorkspace() else null,
         )
     }
@@ -383,13 +363,16 @@ internal class MessageGenerationController(
     internal suspend fun prepareForegroundSend(
         target: ForegroundSendTarget,
         composer: ConversationComposerSnapshot,
-    ): ForegroundSendAdmission? = requestBuilder.prepareForegroundSend(target, composer, application)
+        origin: ChatClient,
+    ): ForegroundSendAdmission? =
+        requestBuilder.prepareForegroundSend(target, composer, application, origin::showSnackbar)
 
     internal suspend fun sendMessage(
         admission: ForegroundSendAdmission,
         text: String,
         attachments: List<SelectedAttachment>,
         onAccepted: suspend (SendAcceptance) -> Unit,
+        origin: ChatClient,
     ): SendAcceptance? = withContext(Dispatchers.Default) {
         val target = admission.target
         val startedNs = System.nanoTime()
@@ -426,7 +409,7 @@ internal class MessageGenerationController(
                     )
                 ) {
                     is CompactResult.Failed -> {
-                        onSnackbar(compactFailureMessage(appContext, compact))
+                        origin.showSnackbar(compactFailureMessage(appContext, compact))
                         return@withContext null
                     }
                     is CompactResult.Stopped -> return@withContext null
@@ -445,6 +428,7 @@ internal class MessageGenerationController(
             modelId = admission.generationSnapshot.selectedModelId,
             touchConversationOnAdmission = true,
             onAccepted = onAccepted,
+            origin = origin,
             newConversationSettings = admission.newConversationSettings,
             newChatPersistSnapshot = admission.newChatPersistSnapshot,
             proposedRunId = target.runId,
@@ -476,6 +460,8 @@ internal class MessageGenerationController(
         requestKind: String = "chat",
         touchConversationOnAdmission: Boolean,
         onAccepted: suspend (SendAcceptance) -> Unit,
+        /** Client that issued this Send; null for automatic sends (queue drain, Loop cycle). */
+        origin: ChatClient?,
         newConversationSettings: ConversationSettings? = null,
         newChatPersistSnapshot: NewChatPersistEntity? = null,
         scrollPolicy: SendScrollPolicy = SendScrollPolicy.FORCE,
@@ -501,12 +487,13 @@ internal class MessageGenerationController(
         markStage("runtime-state")
         val state = registry.getOrCreate(genId)
         if (admissionSnapshot == null) {
-            val providerName = requestBuilder.awaitProviderKey(modelId)?.providerName ?: return null
+            val report: (String) -> Unit = { message -> origin?.showSnackbar(message) ?: onSnackbar(message) }
+            val providerName = requestBuilder.awaitProviderKey(modelId, report)?.providerName ?: return null
             if (providerName == Constants.PROVIDER_LOCAL) {
                 val localModelId = modelId.substringAfter("${Constants.PROVIDER_LOCAL}:")
                 val config = settings.localChatModels.value.find { it.modelId == localModelId }
                 if (config == null || !java.io.File(config.localFilePath).exists()) {
-                    onSnackbar(application.getString(R.string.local_model_not_found))
+                    report(application.getString(R.string.local_model_not_found))
                     return null
                 }
             }
@@ -539,6 +526,7 @@ internal class MessageGenerationController(
                 acceptanceNotifier.notify(
                     acceptance = SendAcceptance.Queued(queued.id, genId),
                     onAccepted = onAccepted,
+                    origin = origin,
                 )
             } catch (error: Exception) {
                 state.removeQueuedSend(queued.id)
@@ -641,7 +629,15 @@ internal class MessageGenerationController(
                 newConversationSettings = newConversationSettings,
                 newChatPersistSnapshot = newChatPersistSnapshot,
                 alreadyHoldsLock = alreadyHoldsLock,
-                requestScroll = resolveScrollCallback(scrollPolicy),
+                origin = origin,
+                requestScroll = { conversationId, messageId ->
+                    requestScroll(
+                        conversationId = conversationId,
+                        messageId = messageId,
+                        attachedOnly = scrollPolicy == SendScrollPolicy.ATTACHED_ONLY,
+                        origin = origin,
+                    )
+                },
                 onAccepted = onAccepted,
                 onModelMessageCreated = onModelMessageCreated,
                 generationSnapshot = admissionSnapshot,
@@ -697,6 +693,7 @@ internal class MessageGenerationController(
             requestKind = requestKind,
             touchConversationOnAdmission = false,
             onAccepted = {},
+            origin = null,
             scrollPolicy = SendScrollPolicy.ATTACHED_ONLY,
             alreadyHoldsLock = true,
             directOnly = true,
@@ -731,43 +728,48 @@ internal class MessageGenerationController(
         // The current Assistant must release first. Suppress exactly that release's ordinary queue
         // drain so the already-decided Compact generation owns the next standard slot.
         state.deferNextQueueDrain()
-        state.scope.launch {
-            state.awaitSendAvailable()
-            val compactLaunch = compactController.startAutomaticStandard(
-                conversationId = request.generationRequest.conversationId,
-                contextLimit = request.generationRequest.snapshot.config.maxContextWindow,
-                config = request.config,
-                state = state,
-            ) ?: return@launch
-            compactLaunch.job.join()
-            val compactMessageId = compactLaunch.messageId
-            val compactStatus = convRepo.getMessage(compactMessageId)?.status
-            if (!automaticCompactAllowsHandoff(compactStatus)) return@launch
-
-            // Queue inspection and no-input continuation admission share the queue mutex, so
-            // guidance arriving at Compact settlement cannot lose the Queue-before-Loop race.
-            launchStandardContinuationAfterGuidance(
-                state = state,
-                guidanceClaimRevision = guidanceClaimRevision,
-            ) {
-                standardContinuationLauncher.launch(
-                    request = StandardGenerationContinuationRequest(
-                        conversationId = request.generationRequest.conversationId,
-                        parentMessageId = compactMessageId,
-                        snapshot = request.generationRequest.snapshot,
-                        touchConversationOnAdmission = false,
-                    ),
+        state.scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            executionCoordinator.withGenerationAdmission(state.conversationId) admission@ {
+                state.awaitSendAvailable()
+                val compactLaunch = compactController.startAutomaticStandard(
+                    conversationId = request.generationRequest.conversationId,
+                    contextLimit = request.generationRequest.snapshot.config.maxContextWindow,
+                    config = request.config,
                     state = state,
-                )
+                ) ?: return@admission
+                compactLaunch.job.join()
+                state.awaitSendAvailable()
+                val compactMessageId = compactLaunch.messageId
+                val compactStatus = convRepo.getMessage(compactMessageId)?.status
+                if (!automaticCompactAllowsHandoff(compactStatus)) return@admission
+
+                // Guidance inspection and continuation admission share the ordinary queue boundary.
+                val continuation = launchStandardContinuationAfterGuidance(
+                    state = state,
+                    guidanceClaimRevision = guidanceClaimRevision,
+                ) {
+                    standardContinuationLauncher.launch(
+                        request = StandardGenerationContinuationRequest(
+                            conversationId = request.generationRequest.conversationId,
+                            parentMessageId = compactMessageId,
+                            snapshot = request.generationRequest.snapshot,
+                            touchConversationOnAdmission = false,
+                        ),
+                        state = state,
+                    )
+                }
+                continuation?.job?.join()
             }
         }
     }
 
-    fun generateTitle(conversationId: String) {
-        viewModelScope.launch {
+    /** Title notices go to [origin], or runtime-wide when the request has none. */
+    fun generateTitle(conversationId: String, origin: ChatClient?) {
+        val runtimeSnapshot = registry.get(conversationId)?.generationSnapshot?.value
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             titleGenerator.generateWithNotifications(
-                conversationId, settings, appContext, onSnackbarSuspend,
-            )
+                conversationId, settings, appContext, runtimeSnapshot,
+            ) { message -> origin?.showSnackbar(message) ?: onSnackbar(message) }
         }
     }
 }

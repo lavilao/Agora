@@ -24,6 +24,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -55,7 +56,7 @@ class DirectAcceptedInputEffectExecutorTest {
     fun diagnosticFailureDoesNotPreventDurableAcceptanceOrGeneration() = runBlocking {
         every { Log.i("SendDiagnostics", any()) } throws IllegalStateException("logger unavailable")
         val fixture = Fixture()
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         coEvery { fixture.graphWriter.commit(any(), any()) } returns fixture.commit
         coEvery { fixture.boundLauncher.launch(any(), state) } just Runs
@@ -70,7 +71,7 @@ class DirectAcceptedInputEffectExecutorTest {
     @Test
     fun durableCommitPrecedesAcceptanceProjectionAndBoundLaunch() = runBlocking {
         val fixture = Fixture()
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         val graphRequest = io.mockk.slot<AcceptedInputGraphWriter.Request>()
         coEvery { fixture.graphWriter.commit(capture(graphRequest), any()) } coAnswers {
@@ -132,7 +133,7 @@ class DirectAcceptedInputEffectExecutorTest {
     @Test
     fun uncommittedFailureReturnsNullAndDoesNotLaunchProvider() = runBlocking {
         val fixture = Fixture()
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         coEvery { fixture.graphWriter.commit(any(), any()) } throws
             IllegalStateException("Room unavailable")
@@ -148,11 +149,20 @@ class DirectAcceptedInputEffectExecutorTest {
             )
         } just Runs
 
-        val execution = fixture.executor.launch(fixture.request(effect), state)
+        val execution = fixture.executor.launch(
+            fixture.request(
+                effect,
+                wasNewChat = true,
+                newConversation = ChatEntity(CONVERSATION_ID, "New chat"),
+                generationSnapshot = fixture.snapshot.copy(titleGenerationEnabled = true),
+            ),
+            state,
+        )
         assertNull(execution.awaitAcceptance())
         execution.job?.join()
 
         assertTrue(fixture.events.none { it.startsWith("accept") })
+        assertTrue("generate-title" !in fixture.events)
         assertTrue(diagnosticLines.any { "stage=failed previous=commit-message-graph " in it })
         assertTrue(diagnosticLines.last().contains("stage=finished "))
         coVerify(exactly = 0) { fixture.boundLauncher.launch(any(), any()) }
@@ -163,7 +173,7 @@ class DirectAcceptedInputEffectExecutorTest {
     @Test
     fun cancellationAfterDurableCommitReconcilesIdentity() = runBlocking {
         val fixture = Fixture()
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         coEvery { fixture.graphWriter.commit(any(), any()) } coAnswers {
             fixture.events += "room-commit"
@@ -180,6 +190,7 @@ class DirectAcceptedInputEffectExecutorTest {
                 wasNewChat = true,
                 newConversation = ChatEntity(CONVERSATION_ID, "New chat"),
                 newConversationSettings = CAPTURED_SETTINGS,
+                generationSnapshot = fixture.snapshot.copy(titleGenerationEnabled = true),
             ),
             state,
         )
@@ -187,6 +198,7 @@ class DirectAcceptedInputEffectExecutorTest {
         execution.job?.join()
 
         assertEquals(SendAcceptance.Direct(USER_ID, CONVERSATION_ID), accepted)
+        assertEquals(1, fixture.events.count { it == "generate-title" })
         val commitIndex = fixture.events.indexOf("room-commit")
         val transferIndex = fixture.events.indexOf(
             "apply-committed:$CONVERSATION_ID",
@@ -211,7 +223,7 @@ class DirectAcceptedInputEffectExecutorTest {
     @Test
     fun newConversationPublishesOnlyAfterDurableCommit() = runBlocking {
         val fixture = Fixture()
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         val graphRequest = io.mockk.slot<AcceptedInputGraphWriter.Request>()
         coEvery { fixture.graphWriter.commit(capture(graphRequest), any()) } coAnswers {
@@ -251,11 +263,89 @@ class DirectAcceptedInputEffectExecutorTest {
     }
 
     @Test
+    fun newConversationTitleStartsBeforeReplyAndSurvivesReplyFailureOrCancellation() = runBlocking {
+        for (outcome in listOf("success", "failure", "cancelled")) {
+            val fixture = Fixture()
+            val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
+            val effect = claimDirectEffect(state)
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            coEvery { fixture.graphWriter.commit(any(), any()) } coAnswers {
+                fixture.events += "room-commit"
+                fixture.commit
+            }
+            coEvery { fixture.boundLauncher.launch(any(), state) } coAnswers {
+                fixture.events += "bound-launch"
+                entered.complete(Unit)
+                release.await()
+                when (outcome) {
+                    "failure" -> error("Reply failed")
+                    "cancelled" -> throw CancellationException("Reply stopped")
+                }
+                Unit
+            }
+            coEvery {
+                fixture.terminalSettlement.failGenerationSetup(any(), any(), any(), any(), any(), any())
+            } just Runs
+
+            val execution = fixture.executor.launch(
+                fixture.request(
+                    effect,
+                    wasNewChat = true,
+                    newConversation = ChatEntity(CONVERSATION_ID, "New chat"),
+                    generationSnapshot = fixture.snapshot.copy(titleGenerationEnabled = true),
+                ),
+                state,
+            )
+            try {
+                assertEquals(SendAcceptance.Direct(USER_ID, CONVERSATION_ID), execution.awaitAcceptance())
+                entered.await()
+                val titleIndex = fixture.events.indexOf("generate-title")
+                assertTrue(titleIndex > fixture.events.indexOf("room-commit"))
+                assertTrue(titleIndex > fixture.events.indexOf("publish-new:provider:model"))
+                assertTrue(titleIndex < fixture.events.indexOf("bound-launch"))
+                assertTrue(execution.job?.isCompleted == false)
+            } finally {
+                release.complete(Unit)
+                execution.job?.join()
+                state.dispose()
+            }
+            assertEquals(1, fixture.events.count { it == "generate-title" })
+            coVerify(exactly = 0) { fixture.conversations.getMessage(MODEL_ID) }
+        }
+    }
+
+    @Test
+    fun existingConversationsAndDisabledNewChatsDoNotAutoGenerateTitles() = runBlocking {
+        for (wasNewChat in listOf(false, true)) {
+            val fixture = Fixture()
+            val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
+            val effect = claimDirectEffect(state)
+            coEvery { fixture.graphWriter.commit(any(), any()) } returns fixture.commit
+            coEvery { fixture.boundLauncher.launch(any(), state) } just Runs
+
+            val execution = fixture.executor.launch(
+                fixture.request(
+                    effect,
+                    wasNewChat = wasNewChat,
+                    newConversation = ChatEntity(CONVERSATION_ID, "New chat").takeIf { wasNewChat },
+                    generationSnapshot = fixture.snapshot.copy(titleGenerationEnabled = !wasNewChat),
+                ),
+                state,
+            )
+            assertNotNull(execution.awaitAcceptance())
+            execution.job?.join()
+            assertTrue("generate-title" !in fixture.events)
+            state.dispose()
+        }
+    }
+
+    @Test
     fun outboxTransferFailureDoesNotRejectTheDurableSend() = runBlocking {
         val fixture = Fixture(
             applyCommittedError = IllegalStateException("DataStore unavailable"),
         )
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         coEvery { fixture.graphWriter.commit(any(), any()) } coAnswers {
             fixture.events += "room-commit"
@@ -293,7 +383,7 @@ class DirectAcceptedInputEffectExecutorTest {
     @Test
     fun frozenAdmissionSnapshotIsUsedWithoutRecapturingMutableSettings() = runBlocking {
         val fixture = Fixture()
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         coEvery { fixture.graphWriter.commit(any(), any()) } returns fixture.commit
         coEvery { fixture.boundLauncher.launch(any(), state) } just Runs
@@ -324,7 +414,7 @@ class DirectAcceptedInputEffectExecutorTest {
             selectNewConversation = false,
             conversationOpen = false,
         )
-        val state = ConversationGenerationState(CONVERSATION_ID)
+        val state = ConversationGenerationState(CONVERSATION_ID, reclaimQueuedAttachments = {})
         val effect = claimDirectEffect(state)
         coEvery { fixture.graphWriter.commit(any(), any()) } returns fixture.commit
         coEvery { fixture.boundLauncher.launch(any(), state) } just Runs
@@ -374,6 +464,8 @@ class DirectAcceptedInputEffectExecutorTest {
         )
         private val ids = ArrayDeque(listOf(USER_ID, MODEL_ID))
         val executor: DirectAcceptedInputEffectExecutor
+        val client = FakeChatClient(open = CONVERSATION_ID.takeIf { conversationOpen })
+        val clients = ChatClients()
 
         init {
             coEvery { settings.incrementMessagesSent() } just Runs
@@ -388,32 +480,31 @@ class DirectAcceptedInputEffectExecutorTest {
             coEvery { conversations.getMessage(MODEL_ID) } returns
                 MODEL_ENTITY.copy(status = MessageStatus.SUCCESS)
 
+            client.onAccepted = { _, messageId -> events += "accept-event:$messageId" }
+            client.onApplyCommittedNewConversationState = { conversationId ->
+                events += "apply-committed:$conversationId"
+                applyCommittedError?.let { throw it }
+            }
+            client.onPublishAcceptedNewConversation = { _, modelId, _ ->
+                events += "publish-new:$modelId"
+                selectNewConversation
+            }
+            clients.attach(client)
             executor = DirectAcceptedInputEffectExecutor(
                 conversations = conversations,
                 settings = settings,
                 executionCoordinator = ConversationExecutionCoordinator(),
                 graphWriter = graphWriter,
-                renderStore = ConversationRenderStore(),
+                clients = clients,
                 requestBuilder = requestBuilder,
                 terminalSettlement = terminalSettlement,
                 boundRunGenerationLauncher = boundLauncher,
-                acceptanceNotifier = SendAcceptanceNotifier { _, messageId ->
-                    events += "accept-event:$messageId"
-                },
+                acceptanceNotifier = SendAcceptanceNotifier(clients),
                 toUiMessage = ::toUiMessage,
-                isConversationOpen = { conversationOpen },
-                applyCommittedNewConversationState = { conversationId ->
-                    events += "apply-committed:$conversationId"
-                    applyCommittedError?.let { throw it }
-                },
-                publishNewConversation = { _, modelId, _ ->
-                    events += "publish-new:$modelId"
-                    selectNewConversation
-                },
                 onUserMessagePersisted = { messageId, _ ->
                     events += "persist-user:$messageId"
                 },
-                onGenerateTitle = { events += "generate-title" },
+                onGenerateTitle = { _, _ -> events += "generate-title" },
                 idFactory = ids::removeFirst,
                 clock = { 100L },
             )
@@ -439,6 +530,7 @@ class DirectAcceptedInputEffectExecutorTest {
             newConversationSettings = newConversationSettings,
             newChatPersistSnapshot = newChatPersistSnapshot,
             alreadyHoldsLock = false,
+            origin = client,
             requestScroll = { _, messageId -> events += "scroll:$messageId" },
             onAccepted = { events += "accept-callback:${it.messageId}" },
             onModelMessageCreated = null,

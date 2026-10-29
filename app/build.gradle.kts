@@ -18,6 +18,9 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.newoether.agora"
     testOptions.unitTests.isIncludeAndroidResources = true
+    // Robolectric installs Conscrypt as the first security provider for the whole test JVM;
+    // on JDK 17+ its TLS server needs reflective access to java.net (InetAddress.holder).
+    testOptions.unitTests.all { it.jvmArgs("--add-opens=java.base/java.net=ALL-UNNAMED") }
     compileSdk {
         version = release(36)
     }
@@ -72,7 +75,8 @@ android {
         }
         release {
             signingConfig = releaseSigning
-            isMinifyEnabled = false
+            // R8 shrinks and optimizes release code; keep rules live in proguard-rules.pro.
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -114,6 +118,10 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+        }
+        resources {
+            // bcprov, bcutil and bcpkix each ship the same BouncyCastle (MIT) license text.
+            pickFirsts += "META-INF/LICENSE.md"
         }
     }
 
@@ -194,6 +202,13 @@ dependencies {
     implementation(libs.work.runtime.ktx)
     implementation(libs.jsch)
     implementation(libs.commons.compress)
+    // WebUI server (stage 2): embedded HTTP with the pure-Kotlin CIO engine.
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
+    // Builds the WebUI's self-signed TLS certificate.
+    implementation(libs.bouncycastle.pkix)
+    testImplementation(libs.ktor.server.test.host)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Unit tests

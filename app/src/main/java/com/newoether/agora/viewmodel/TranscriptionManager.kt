@@ -141,7 +141,7 @@ class TranscriptionManager(
     }
 
     /**
-     * Describes one tool-result image (view_image) with the same provider resolution, prompt,
+     * Describes one tool-result image (file_view_image) with the same provider resolution, prompt,
      * config, and streaming loop as [transcribe] — but for a single image and without any
      * attachment-metadata persistence (tool images have no attachment row).
      *
@@ -222,6 +222,11 @@ class TranscriptionManager(
                         transcription.append(event.text)
                         onProgress(transcription.toString())
                     }
+                    is StreamEvent.Retrying -> if (event.resetCurrentAttempt) {
+                        transcription.setLength(0)
+                        streamError = null
+                        onProgress(context.getString(R.string.transcription_ellipsis_single))
+                    }
                     is StreamEvent.Error -> streamError = event
                     else -> {}
                 }
@@ -230,11 +235,12 @@ class TranscriptionManager(
                 }
             }
         }
-        if (streamError != null) {
+        val finalStreamError = streamError
+        if (finalStreamError != null) {
             onProgress(
                 context.getString(
                     R.string.generation_error_transcription,
-                    localizedGenerationError(context, streamError.error),
+                    localizedGenerationError(context, finalStreamError.error),
                 ),
             )
             return null
@@ -361,6 +367,17 @@ class TranscriptionManager(
                                 // Trailing empty answer segment keeps the timeline renderer active during
                                 // transcription (it keys on the presence of an "answer" segment), so the
                                 // block morphs in place into the thought block instead of disappearing.
+                                segments = transcriptionSegments.toList() + MessageSegment(type = "answer"),
+                            ))
+                        }
+                        is StreamEvent.Retrying -> if (event.resetCurrentAttempt) {
+                            transcription.setLength(0)
+                            streamError = null
+                            transcriptionSegments[transcriptionSegments.lastIndex] = currentSegment
+                            onProgress(ChatMessage(
+                                id = modelMessageId, parentId = parentId, text = "",
+                                participant = Participant.MODEL, status = MessageStatus.TRANSCRIBING, timestamp = startTime,
+                                thoughtTitle = context.getString(R.string.transcription_label),
                                 segments = transcriptionSegments.toList() + MessageSegment(type = "answer"),
                             ))
                         }

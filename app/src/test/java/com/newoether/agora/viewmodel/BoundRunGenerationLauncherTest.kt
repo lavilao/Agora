@@ -216,7 +216,7 @@ class BoundRunGenerationLauncherTest {
         val terminalSettlement = mockk<GenerationTerminalSettlementController>()
         val continuationRequests = mutableListOf<AutomaticCompactContinuationRequest>()
         val continuationStates = mutableListOf<ConversationGenerationState>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val uiToken = requireNotNull(state.acquireForSend())
         val snapshot = testGenerationAdmissionSnapshot(
             conversationId = "conversation",

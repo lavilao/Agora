@@ -1,6 +1,5 @@
 package com.newoether.agora.ui.chat
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
 import com.newoether.agora.data.ConversationSettings
 import com.newoether.agora.model.ContextBudget
+import com.newoether.agora.ui.components.optionClickable
 import java.util.Locale
 
 @Composable
@@ -21,10 +21,9 @@ fun AdvancedSettingsDialog(
     overrides: ConversationSettings,
     globalDefaults: ConversationSettings,
     onSave: (ConversationSettings) -> Unit,
-    onResetToDefaults: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var contextWindow by remember { mutableStateOf(overrides.contextWindow) }
+    var contextWindow by remember { mutableStateOf(overrides.contextWindow?.let(ContextBudget::normalize)) }
     var temperature by remember { mutableStateOf(overrides.temperature) }
     var maxTokens by remember { mutableStateOf(overrides.maxTokens) }
     var topP by remember { mutableStateOf(overrides.topP) }
@@ -72,13 +71,11 @@ fun AdvancedSettingsDialog(
                     onReset = { temperature = null }
                 )
                 // Max Tokens
-                val maxTokensPresets =
-                    intArrayOf(256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072)
                 AdvancedParamRow(
                     label = stringResource(R.string.gen_max_tokens),
                     value = maxTokens,
                     defaultVal = gDefaults.maxTokens,
-                    presets = maxTokensPresets,
+                    presets = advancedMaxTokensPresets,
                     format = { it.toString() },
                     onChange = { maxTokens = it },
                     onReset = { maxTokens = null }
@@ -118,7 +115,6 @@ fun AdvancedSettingsDialog(
         confirmButton = {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = {
-                    onResetToDefaults()
                     contextWindow = null; temperature = null; maxTokens = null
                     topP = null; frequencyPenalty = null; presencePenalty = null
                 }) { Text(stringResource(R.string.gen_reset)) }
@@ -126,7 +122,7 @@ fun AdvancedSettingsDialog(
                     TextButton(onClick = onDismiss) {
                         Text(stringResource(R.string.provider_cancel))
                     }
-                    TextButton(onClick = { onSave(currentSettings()) }) {
+                    TextButton(enabled = validGenerationParameters(currentSettings()), onClick = { onSave(currentSettings()) }) {
                         Text(stringResource(R.string.provider_save))
                     }
                 }
@@ -179,7 +175,7 @@ private fun AdvancedParamRow(
                     text = stringResource(R.string.gen_reset),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                    modifier = Modifier.clickable(onClick = onReset)
+                    modifier = Modifier.optionClickable(onClick = onReset)
                 )
             } else if (hasDefault) {
                 Text(
@@ -245,7 +241,7 @@ private fun AdvancedParamRow(
                     text = stringResource(R.string.gen_reset),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                    modifier = Modifier.clickable(onClick = onReset)
+                    modifier = Modifier.optionClickable(onClick = onReset)
                 )
             } else if (hasDefault) {
                 Text(

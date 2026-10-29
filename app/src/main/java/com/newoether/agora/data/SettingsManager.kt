@@ -25,6 +25,8 @@ class SettingsManager(private val context: Context) {
     internal val modelPreferenceStore = SettingsModelPreferenceStore(context.dataStore, json)
     internal val backupPreferenceStore = SettingsBackupPreferenceStore(context.dataStore)
     internal val engineTuningStore = SettingsEngineTuningStore(context.dataStore)
+    internal val systemPromptStore = SettingsSystemPromptStore(context.dataStore, json)
+    internal val shellDeviceStore = SettingsShellDeviceStore(context.dataStore, json)
 
     companion object {
         const val DEFAULT_PROXY_HOST = "127.0.0.1"
@@ -51,12 +53,8 @@ class SettingsManager(private val context: Context) {
     val apiKeys: Flow<List<ApiKeyEntry>> = modelPreferenceStore.apiKeys
     val activeApiKeyIds: Flow<Map<String, String>> = modelPreferenceStore.activeApiKeyIds
 
-    val systemPrompts: Flow<List<SystemPromptEntry>> = context.dataStore.data.map { pref ->
-        val jsonStr = pref[SYSTEM_PROMPTS_JSON] ?: "[]"
-        try { json.decodeFromString<List<SystemPromptEntry>>(jsonStr) } catch (e: Exception) { emptyList() }
-    }
-    
-    val activeSystemPromptId: Flow<String?> = context.dataStore.data.map { it[ACTIVE_SYSTEM_PROMPT_ID] }
+    val systemPrompts: Flow<List<SystemPromptEntry>> = systemPromptStore.systemPrompts
+    val activeSystemPromptId: Flow<String?> = systemPromptStore.activeSystemPromptId
 
     val maxContextWindow: Flow<Int> = context.dataStore.data.map { preferences ->
         ContextBudget.normalize(
@@ -181,6 +179,25 @@ class SettingsManager(private val context: Context) {
     // Confirm before the model runs state-changing commands on remote shell servers. Default on.
     val shellConfirmEnabled: Flow<Boolean> = context.dataStore.data.map { it[SHELL_CONFIRM_ENABLED] ?: true }
     val askUserEnabled: Flow<Boolean> = context.dataStore.data.map { it[ASK_USER_ENABLED] ?: true }
+    val askUserTimeoutMinutes: Flow<Int> = context.dataStore.data.map { normalizeAskUserTimeoutMinutes(it[ASK_USER_TIMEOUT_MINUTES]) }
+    val todoEnabled: Flow<Boolean> = context.dataStore.data.map { it[TODO_ENABLED] ?: true }
+    val subagentToolsEnabled: Flow<Boolean> = context.dataStore.data.map { it[SUBAGENT_TOOLS_ENABLED] ?: true }
+    val subagentDeleteEnabled: Flow<Boolean> = context.dataStore.data.map { it[SUBAGENT_DELETE_ENABLED] ?: false }
+    val subagentMaxTotal: Flow<Int> = context.dataStore.data.map { normalizeSubagentMaxTotal(it[SUBAGENT_MAX_TOTAL]) }
+    val subagentMaxConcurrent: Flow<Int> = context.dataStore.data.map {
+        normalizeSubagentMaxConcurrent(it[SUBAGENT_MAX_CONCURRENT], normalizeSubagentMaxTotal(it[SUBAGENT_MAX_TOTAL]))
+    }
+    val subagentCapsuleDisplayMode: Flow<String> = context.dataStore.data.map {
+        SubagentCapsuleDisplayModes.normalize(it[SUBAGENT_CAPSULE_DISPLAY_MODE])
+    }
+    val subagentEnabledModels: Flow<Set<String>?> = modelPreferenceStore.subagentEnabledModels
+    val subagentRecommendedModel: Flow<String?> = modelPreferenceStore.subagentRecommendedModel
+    val subagentModelIds: Flow<Set<String>> = modelPreferenceStore.subagentModelIds
+    suspend fun addSubagentModels(models: Set<String>) = modelPreferenceStore.addSubagentModels(models)
+    suspend fun removeSubagentModel(model: String) = modelPreferenceStore.removeSubagentModel(model)
+    suspend fun saveSubagentEnabledModels(models: Set<String>?, merge: Boolean = false) =
+        modelPreferenceStore.saveSubagentEnabledModels(models, merge)
+    suspend fun saveSubagentRecommendedModel(model: String?) = modelPreferenceStore.saveSubagentRecommendedModel(model)
     val shellDevices: Flow<List<ShellDeviceConfig>> =
         context.dataStore.data.map { preferences -> decodeEncryptedShellDevices(preferences, json) }
     val mcpServers: Flow<List<McpServerConfig>> = context.dataStore.data.map { pref ->
@@ -293,43 +310,13 @@ class SettingsManager(private val context: Context) {
     suspend fun renameApiKeyProvider(oldProvider: String, newProvider: String) =
         modelPreferenceStore.renameApiKeyProvider(oldProvider, newProvider)
 
-    suspend fun saveSystemPrompts(prompts: List<SystemPromptEntry>) { context.dataStore.edit { it[SYSTEM_PROMPTS_JSON] = json.encodeToString(prompts) } }
+    suspend fun saveSystemPrompts(prompts: List<SystemPromptEntry>) = systemPromptStore.save(prompts)
     suspend fun initializeFirstInstallDefaults(
         locale: Locale = Locale.getDefault(),
         now: Long = System.currentTimeMillis()
-    ) {
-        context.dataStore.edit { prefs ->
-            val firstLaunchMissing = prefs[FIRST_LAUNCH_TIME] == null
-            val looksLikeFreshInstall = firstLaunchMissing && prefs[ONBOARDING_COMPLETED] != true
-            if (firstLaunchMissing) {
-                prefs[FIRST_LAUNCH_TIME] = now
-            }
-            val currentPrompts = try {
-                json.decodeFromString<List<SystemPromptEntry>>(prefs[SYSTEM_PROMPTS_JSON] ?: "[]")
-            } catch (_: Exception) {
-                emptyList()
-            }
-            val messageTemplatesMigrated = migrateSystemPromptsOnStartup(currentPrompts, locale)
-            if (messageTemplatesMigrated != currentPrompts) {
-                prefs[SYSTEM_PROMPTS_JSON] = json.encodeToString(messageTemplatesMigrated)
-            }
-            if (looksLikeFreshInstall) {
-                if (messageTemplatesMigrated.isEmpty()) {
-                    val defaultPrompt = DefaultSystemPrompt.create(locale)
-                    prefs[SYSTEM_PROMPTS_JSON] = json.encodeToString(listOf(defaultPrompt))
-                    if (prefs[ACTIVE_SYSTEM_PROMPT_ID] == null) {
-                        prefs[ACTIVE_SYSTEM_PROMPT_ID] = defaultPrompt.id
-                    }
-                }
-            }
-        }
-    }
+    ) = systemPromptStore.initialize(locale, now)
 
-    suspend fun setActiveSystemPromptId(id: String?) {
-        context.dataStore.edit { 
-            if (id == null) it.remove(ACTIVE_SYSTEM_PROMPT_ID) else it[ACTIVE_SYSTEM_PROMPT_ID] = id 
-        }
-    }
+    suspend fun setActiveSystemPromptId(id: String?) = systemPromptStore.setActive(id)
     suspend fun saveMaxContextWindow(window: Int) {
         context.dataStore.edit {
             it[CONTEXT_TOKEN_BUDGET] = ContextBudget.normalize(window).toString()
@@ -430,10 +417,9 @@ class SettingsManager(private val context: Context) {
     ): Map<String, ConversationSettings> {
         var updated: Map<String, ConversationSettings> = emptyMap()
         context.dataStore.edit { prefs ->
-            val current = prefs[CONVERSATION_SETTINGS_JSON] ?: "{}"
-            val map = try { json.decodeFromString<MutableMap<String, ConversationSettings>>(current) } catch (e: Exception) { mutableMapOf() }
+            val map = decodeConversationSettings(prefs, json).toMutableMap()
             if (settings == null || settings.isAllNull()) map.remove(conversationId)
-            else map[conversationId] = settings
+            else map[conversationId] = settings.normalizedServiceTier()
             updated = map.toMap()
             prefs[CONVERSATION_SETTINGS_JSON] = json.encodeToString(map)
         }
@@ -441,6 +427,7 @@ class SettingsManager(private val context: Context) {
     }
     suspend fun saveConversationSettingsMap(settings: Map<String, ConversationSettings>) {
         val nonEmpty = settings.filterValues { !it.isAllNull() }
+            .mapValues { (_, value) -> value.normalizedServiceTier() }
         context.dataStore.edit { prefs ->
             if (nonEmpty.isEmpty()) {
                 prefs.remove(CONVERSATION_SETTINGS_JSON)
@@ -571,9 +558,39 @@ class SettingsManager(private val context: Context) {
     suspend fun saveProxyPassword(pass: String) { context.dataStore.edit { it[PROXY_PASSWORD] = pass } }
     suspend fun saveProxyBypass(bypass: String) { context.dataStore.edit { it[PROXY_BYPASS] = bypass } }
 
-    suspend fun saveShellConfirmEnabled(enabled: Boolean) { context.dataStore.edit { it[SHELL_CONFIRM_ENABLED] = enabled } }
-    suspend fun saveAskUserEnabled(enabled: Boolean) { context.dataStore.edit { it[ASK_USER_ENABLED] = enabled } }
-    suspend fun saveShellDevices(devices: List<ShellDeviceConfig>) { context.dataStore.edit { it[SHELL_DEVICES_JSON] = com.newoether.agora.util.SecretCrypto.encrypt(json.encodeToString(devices)) } }
+    suspend fun saveShellConfirmEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[SHELL_CONFIRM_ENABLED] = enabled }
+    }
+    suspend fun saveAskUserEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[ASK_USER_ENABLED] = enabled }
+    }
+    suspend fun saveAskUserTimeoutMinutes(minutes: Int) {
+        context.dataStore.edit { it[ASK_USER_TIMEOUT_MINUTES] = normalizeAskUserTimeoutMinutes(minutes) }
+    }
+    suspend fun saveTodoEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[TODO_ENABLED] = enabled }
+    }
+    suspend fun saveSubagentMaxTotal(value: Int) = saveSubagentLimits(maxTotal = value)
+    suspend fun saveSubagentMaxConcurrent(value: Int) = saveSubagentLimits(maxConcurrent = value)
+    internal suspend fun saveSubagentLimits(maxTotal: Int? = null, maxConcurrent: Int? = null) {
+        context.dataStore.edit { prefs ->
+            val previousTotal = normalizeSubagentMaxTotal(prefs[SUBAGENT_MAX_TOTAL])
+            val total = normalizeSubagentMaxTotal(maxTotal ?: previousTotal)
+            val concurrent = maxConcurrent ?: normalizeSubagentMaxConcurrent(prefs[SUBAGENT_MAX_CONCURRENT], previousTotal)
+            prefs[SUBAGENT_MAX_TOTAL] = total
+            prefs[SUBAGENT_MAX_CONCURRENT] = normalizeSubagentMaxConcurrent(concurrent, total)
+        }
+    }
+    suspend fun saveSubagentCapsuleDisplayMode(mode: String) {
+        context.dataStore.edit { it[SUBAGENT_CAPSULE_DISPLAY_MODE] = SubagentCapsuleDisplayModes.normalize(mode) }
+    }
+    suspend fun saveSubagentToolsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[SUBAGENT_TOOLS_ENABLED] = enabled }
+    }
+    suspend fun saveSubagentDeleteEnabled(enabled: Boolean) { context.dataStore.edit { it[SUBAGENT_DELETE_ENABLED] = enabled } }
+    suspend fun saveShellDevices(devices: List<ShellDeviceConfig>) {
+        context.dataStore.edit { it[SHELL_DEVICES_JSON] = encryptShellDevices(devices, json) }
+    }
     suspend fun saveMcpServers(servers: List<McpServerConfig>) {
         context.dataStore.edit {
             it[MCP_SERVERS_JSON] =

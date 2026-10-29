@@ -242,7 +242,8 @@ class LatexRendererTest {
         assertTrue(component.contains("DisplayLatexBlock(link, latexSource, model.typography.paragraph)"))
         assertTrue(source.contains("displayLatexParagraphLink(model.content, model.node)"))
         assertEquals(1, Regex("MarkdownImage\\(model.content, model.node\\)").findAll(component).count())
-        assertTrue(block.contains(".fillMaxWidth().horizontalScroll(scrollState)"))
+        // A formula that fits leaves horizontal swipes unclaimed so they reach the drawer.
+        assertTrue(block.contains(".fillMaxWidth().horizontalScroll(scrollState, enabled = scrollState.maxValue > 0)"))
         assertTrue(block.contains("TrackStreamingHorizontalScroll(scrollState)"))
         assertTrue(tracker.contains("horizontalScrollState.isScrollInProgress"))
         assertTrue(source.contains("inlineImage = { model -> ChatMarkdownInlineImage(model) }"))

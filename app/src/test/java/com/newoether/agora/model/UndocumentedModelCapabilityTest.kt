@@ -33,6 +33,31 @@ class UndocumentedModelCapabilityTest {
     }
 
     @Test
+    fun gpt6OfficialThinkingChoicesAndOffBehaviorMatchRequests() {
+        val astra = ModelThinkingCapabilities.forModel(ThinkingProviderFamily.OPENAI, "gpt-6-astra")
+        assertFalse(astra.canDisableThinking)
+        assertEquals(listOf("low", "medium", "high", "xhigh", "max"), astra.supportedEfforts)
+        assertEquals("low", astra.nearestEffort("minimal"))
+        val forced = ThinkingResolution.resolve(astra, false, "max", false, 4096)
+        assertTrue(forced.enabled)
+        assertEquals("low", forced.effort)
+
+        listOf("gpt-6-sol", "gpt-6-luna").forEach { id ->
+            val capability = ModelThinkingCapabilities.forModel(ThinkingProviderFamily.OPENAI, id)
+            assertTrue(capability.canDisableThinking)
+            assertEquals(listOf("none", "low", "medium", "high", "xhigh", "max"),
+                capability.supportedEfforts)
+            assertEquals("low", capability.nearestEffort("minimal"))
+        }
+        assertEquals(ThinkingLevels.effortValues,
+            ModelThinkingCapabilities.forModel(ThinkingProviderFamily.OPENAI, "future-gpt")
+                .supportedEfforts)
+        assertEquals(ThinkingLevels.effortValues,
+            ModelThinkingCapabilities.forModel(ThinkingProviderFamily.OPENAI_COMPATIBLE, "gpt-6-astra")
+                .supportedEfforts)
+    }
+
+    @Test
     fun documentedIdsKeepTheirDocumentedShape() {
         val legacy = ModelThinkingCapabilities.forModel(ThinkingProviderFamily.ANTHROPIC, "claude-3-5-sonnet-20240620")
         assertTrue(legacy.supportedEfforts.isEmpty())

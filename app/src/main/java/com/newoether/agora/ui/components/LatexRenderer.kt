@@ -47,8 +47,12 @@ import kotlinx.coroutines.launch
 import org.scilab.forge.jlatexmath.DefaultTeXFont
 import org.scilab.forge.jlatexmath.TeXConstants
 import ru.noties.jlatexmath.JLatexMathDrawable
+import com.newoether.agora.util.DebugLog
 import kotlin.io.encoding.Base64
 import kotlin.math.roundToInt
+
+// The log tag for this file's own diagnostics.
+private const val TAG = "LatexRenderer"
 
 /**
  * One parsed piece of message text. A LaTeX span also keeps [source]: its exact original slice,
@@ -99,7 +103,7 @@ private const val LATEX_URL_INLINE = "inline/"
 private const val LATEX_URL_DISPLAY = "display/"
 private val LATEX_BASE64 = Base64.UrlSafe
 
-private data class LatexImageRequest(
+internal data class LatexImageRequest(
     val latex: String,
     val display: Boolean,
     val source: String,
@@ -424,12 +428,17 @@ fun renderLatexToBitmap(
         // (where fraction bars and the minus sign sit) is the bitmap's vertical center.
         val padding = if (ih > 0) mathAxisCenteringPadding(drawable, textSize, h) else AxisPadding(0, 0)
         val bmp = Bitmap.createBitmap(w, h + padding.top + padding.bottom, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
+        val canvas = FilledTextCanvas(bmp)
         canvas.translate(0f, padding.top.toFloat())
         drawable.setBounds(0, 0, w, h)
         drawable.draw(canvas)
         bmp
     } catch (e: Exception) {
+        // A swallowed exception here is what turns a formula back into its own source text, so the
+        // failure has to reach the log or it is invisible: the caller only ever sees a null and
+        // silently paints the raw LaTeX. Only the exception type and stack are logged, never the
+        // formula itself.
+        DebugLog.w(TAG, "latex render failed size=$textSize", e)
         null
     }
 }
@@ -500,6 +509,22 @@ internal fun isDisplayLatexLink(link: String?): Boolean {
 
 /** The original text a rendered formula stands for, or null when [link] is not a LaTeX link. */
 internal fun latexSourceForLink(link: String): String? = decodeLatexLink(link)?.source
+
+/**
+ * The formula an image stands for, from its latex:// URL or from its source text. The markdown
+ * renderer hands an inline image's alternate text, not its URL, to the image transformer, and a
+ * formula's alternate text is its source (so copying it reproduces the original). The source
+ * holds exactly one formula, so parsing it gives the same request its URL encodes.
+ */
+internal fun latexImageRequest(linkOrSource: String): LatexImageRequest? =
+    decodeLatexLink(linkOrSource) ?: latexRequestForSource(restoreFormulaLineBreaks(linkOrSource))
+
+private fun latexRequestForSource(source: String): LatexImageRequest? {
+    val spans = parseLatexSpans(source, parseInlineDollarMath = true)
+    val formula = spans.singleOrNull { it.isLatex } ?: return null
+    if (spans.any { !it.isLatex && it.content.isNotBlank() }) return null
+    return LatexImageRequest(formula.content, formula.display, source)
+}
 
 fun latexToMarkdown(latexContent: String, display: Boolean, source: String): String {
     val image = "![latex]($LATEX_URL_PREFIX${encodeLatexUrl(latexContent, display, source)})"
@@ -647,7 +672,7 @@ class LatexImageTransformer(
      * before. Reading it in composition recomposes when the bitmap finishes. Null for other links.
      */
     fun formulaSize(link: String): Size? {
-        val request = decodeLatexLink(link) ?: return null
+        val request = latexImageRequest(link) ?: return null
         val key = LatexRenderKey(request.latex, textSize, color)
         return LatexBitmapCache.observedSize(key)
             ?: estimateLatexPlaceholderSize(request.latex, textSize, request.display)
@@ -670,7 +695,7 @@ class LatexImageTransformer(
             // height can be smaller than the actual thumbnail on Android.
             return ImageData(painter = viewport)
         }
-        val request = decodeLatexLink(link) ?: return null
+        val request = latexImageRequest(link) ?: return null
         val key = LatexRenderKey(request.latex, textSize, color)
         var bitmap by remember(key) { mutableStateOf(LatexBitmapCache.get(key)) }
         val fade = remember(key) { Animatable(if (bitmap != null) 1f else 0f) }
@@ -731,7 +756,7 @@ class LatexImageTransformer(
             }
             return PlaceholderConfig(Size(side, side + 16f))
         }
-        val request = decodeLatexLink(link) ?: return super.placeholderConfig(
+        val request = latexImageRequest(link) ?: return super.placeholderConfig(
             link, density, containerSize, imageWidth, imageSize, imageSizeChanged
         )
         val key = LatexRenderKey(request.latex, textSize, color)

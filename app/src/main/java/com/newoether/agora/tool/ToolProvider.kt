@@ -14,7 +14,7 @@ sealed interface ToolExecutionEvent {
     data class OutputSnapshot(val text: String) : ToolExecutionEvent
 
     /** The concrete device selected after resolving optional tool arguments. */
-    data class TargetResolved(val target: String) : ToolExecutionEvent
+    data class TargetResolved(val target: String, val displayName: String? = null) : ToolExecutionEvent
 
     /** A low-volume lifecycle update. It is not command output. */
     data class Progress(val message: String) : ToolExecutionEvent
@@ -38,7 +38,7 @@ data class ToolExecutionResult(
     val displayText: String? = null,
     val isError: Boolean = false,
     /**
-     * Declares that [images] are INPUT the model must understand (e.g. view_image), so the tool
+     * Declares that [images] are INPUT the model must understand (e.g. file_view_image), so the tool
      * batch executor runs the per-generation image transcription flow over them and appends the
      * description to [text]. Output images (image generation) never set this.
      */
@@ -65,6 +65,13 @@ interface ToolProvider {
      *  Returns the result string (usually JSON). */
     suspend fun execute(name: String, arguments: String, ctx: GenerationContext): String
 
+    /** One-shot result metadata; arbitrary successful text must not imply an error. */
+    suspend fun executeOneShotResult(
+        name: String,
+        arguments: String,
+        ctx: GenerationContext,
+    ): ToolExecutionResult = ToolExecutionResult(execute(name, arguments, ctx))
+
     /**
      * Streaming execution contract. One-shot providers inherit the adapter; streaming providers
      * emit progress/deltas and finish with exactly one [ToolExecutionEvent.Completed].
@@ -74,15 +81,16 @@ interface ToolProvider {
         arguments: String,
         ctx: GenerationContext,
     ): Flow<ToolExecutionEvent> = flow {
-        emit(ToolExecutionEvent.Completed(ToolExecutionResult(execute(name, arguments, ctx))))
+        emit(ToolExecutionEvent.Completed(executeOneShotResult(name, arguments, ctx)))
     }
 
     /** Whether this provider can execute the given tool name. */
     fun handles(name: String): Boolean
 
     /**
-     * Resolve stable UI metadata as soon as a streamed tool name is complete. The default keeps
-     * built-in tools on their localized presentation path.
+     * Resolve stable UI metadata from the protocol name and optional raw arguments. Streaming
+     * callers may supply an unfinished JSON prefix; providers must bound that inspection.
+     * Built-in tools keep their localized presentation path by default.
      */
-    fun presentationMetadata(name: String): ToolPresentationMetadata? = null
+    fun presentationMetadata(name: String, arguments: String? = null): ToolPresentationMetadata? = null
 }

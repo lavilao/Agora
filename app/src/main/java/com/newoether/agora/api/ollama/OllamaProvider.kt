@@ -312,6 +312,8 @@ class OllamaProvider : LlmProvider {
                                 handle.readLine()
                             } catch (e: java.net.SocketTimeoutException) {
                                 if (!currentCoroutineContext().isActive) break
+                                streamError = e.asRetryableResponseBodyReadError()
+                                if (streamError != null) break
                                 if (++consecutiveReadTimeouts >= 3) {
                                     timedOut = true
                                     break
@@ -435,7 +437,14 @@ class OllamaProvider : LlmProvider {
                         )
                         DebugLog.d("AgoraSSE", "[Ollama] ${termination.describe()}")
                         if (termination.isRetryable && attempt < maxAttempts) {
-                            emit(StreamEvent.Retrying(attempt, ProviderRetryPolicy.MAX_RETRIES))
+                            emit(
+                                StreamEvent.Retrying(
+                                    attempt,
+                                    ProviderRetryPolicy.MAX_RETRIES,
+                                    resetCurrentAttempt = termination.producedContent ||
+                                        ProviderRetryPolicy.requiresResponseReadRetry(termination.streamError),
+                                ),
+                            )
                             delay(ProviderRetryPolicy.delayMillis(attempt))
                         } else {
                             termination.toError("Ollama")?.let { emit(StreamEvent.Error(it)) }
@@ -457,7 +466,7 @@ class OllamaProvider : LlmProvider {
                             ) && attempt < maxAttempts
                         ) {
                             emit(StreamEvent.Retrying(attempt, ProviderRetryPolicy.MAX_RETRIES))
-                            delay(ProviderRetryPolicy.delayMillis(attempt))
+                            delay(ProviderRetryPolicy.delayMillis(attempt, handle.retryAfter))
                         } else {
                             val genError = providerHttpError(handle.code, errorRaw)
                             emit(StreamEvent.Error(genError))

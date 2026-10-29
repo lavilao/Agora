@@ -28,6 +28,8 @@ internal data class ConversationEditRequest(
     val newText: String,
     val modelId: String,
     val visiblePath: List<ChatMessage>,
+    /** Client that issued the edit; it plays the branch transition and projects the new path. */
+    val origin: ChatClient,
 )
 
 /** Owns attachment-safe cloning for the user-input side of an edited Run. */
@@ -110,7 +112,6 @@ internal class ConversationEditService(
     private val conversations: ConversationRepository,
     private val requestBuilder: GenerationRequestBuilder,
     private val executionCoordinator: ConversationExecutionCoordinator,
-    private val transitions: BranchReplacementTransitionCoordinator,
     private val inputCloner: EditedRunInputCloner,
     private val terminalSettlement: GenerationTerminalSettlementController,
     private val boundRunGenerationLauncher: BoundRunGenerationLauncher,
@@ -123,7 +124,6 @@ internal class ConversationEditService(
         selectedChildren: Map<String?, String>,
         streamingMessage: ChatMessage,
     ) -> Unit,
-    private val awaitProjectedPath: suspend (conversationId: String, messageId: String) -> Unit,
     private val onUserMessagePersisted: (messageId: String, text: String) -> Unit,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
 ) {
@@ -136,9 +136,11 @@ internal class ConversationEditService(
             request.visiblePath,
             request.messageId,
         ) ?: return false
-        if (boundary.input?.id != request.messageId) return false
+        val input = boundary.input ?: return false
+        if (input.id != request.messageId || input.source != null) return false
 
         val uiToken = state.tryAcquireForReplacement() ?: return false
+        val transitions = request.origin.branchTransitions
         val transition = transitions.begin(
             conversationId = request.conversationId,
             oldMessageId = boundary.firstAssistant?.id,
@@ -158,6 +160,7 @@ internal class ConversationEditService(
             var runBound = false
             var stopFinalizationClaimed = false
             try {
+                if (!state.acquireGenerationAdmission(uiToken, executionCoordinator)) return@generation
                 if (!transitions.awaitFade(transition.id)) return@generation
                 if (!state.isCurrentToken(uiToken) || !transitions.isAnimating(transition.id)) {
                     return@generation
@@ -169,7 +172,8 @@ internal class ConversationEditService(
                     }
                     val persistedSource = conversations.getMessage(request.messageId)
                         ?: return@lock
-                    if (!MessageGenerationBoundaryResolver.isRealUser(toUiMessage(persistedSource))) {
+                    if (com.newoether.agora.model.MessageSource.decode(persistedSource.sourceJson) != null ||
+                        !MessageGenerationBoundaryResolver.isRealUser(toUiMessage(persistedSource))) {
                         return@lock
                     }
                     val parentRunId = persistedSource.parentId
@@ -263,7 +267,7 @@ internal class ConversationEditService(
                         )
                     }
                     if (isConversationOpen(request.conversationId)) {
-                        awaitProjectedPath(request.conversationId, newUser.id)
+                        request.origin.awaitProjectedPath(request.conversationId, newUser.id)
                     }
                     committed.complete(true)
                     boundRunGenerationLauncher.launch(

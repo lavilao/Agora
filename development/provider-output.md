@@ -1,21 +1,88 @@
 # Provider Output and Controls Contract
 
 This is a binding part of the [message generation contract](message-generation.md).
-It preserves the requirements of section 8.9; scope and authority are unchanged.
+It preserves the requirements of section 8.10; scope and authority are unchanged.
+
+## Complete forwarding and explicit unsupported evidence (2026-09-08)
+
+The owner's following requirements are binding acceptance criteria, not a claim that the current
+implementation already satisfies them:
+
+```text
+帮我全面核查所有provider，不得有任何一个遗漏，不得有任何一个字段遗漏。每一个provider我必须看到所有字段的完整透传，且必须在最终api request内出现，还必须有效
+```
+
+```text
+对于不支持的字段，每一个都必须明确标出不支持的source，里面必须看到不支持的声明。如果没有source且没有支持该结论的声明，视为不合格。其他情况，必须透传，不得有任何遗漏借口。
+```
+
+1. Inventory every Provider, transport branch, configuration field and final request field. Include
+   built-in, custom and synthetic/local paths, nested message/tool fields, and every generation
+   caller. No Provider, field or branch may disappear from the audit because it is inconvenient,
+   untested, unknown, previously classified as not applicable, or inherited from another adapter.
+2. Trace every configured field to the final dispatched API request and show its exact location,
+   value, encoding and any transformation. Configuration objects, helper output and UI state alone
+   are not wire evidence. Body, headers and URL are distinct request locations; client-local
+   controls must show their final request effect rather than being silently excluded. A Local or
+   synthetic path must identify its real execution boundary and must not fabricate an HTTP request.
+3. Every field must be effective as well as forwarded. Distinguish final production-request capture,
+   upstream semantic evidence and actual behavior verification. HTTP success, compilation, a passed
+   test count or mere field presence cannot prove effectiveness. Sent-but-ignored, rejected,
+   incorrectly transformed and unverified fields must not receive an effective-forwarding pass.
+4. Every unsupported-field conclusion requires a directly inspectable source and the exact statement
+   in that source establishing non-support, with its Provider, protocol, model/version and operating
+   mode scope and retrieval date. Cite each field individually, even when several share a source.
+   Documentation silence, absence from a schema or SDK, legacy code, old contracts and previous
+   audit conclusions are not an explicit unsupported statement.
+5. A missing source or a source without a statement supporting that exact conclusion fails
+   acceptance. Mark it evidence-insufficient and unresolved, never supported, unsupported, N/A or
+   passed by assumption. It cannot authorize dropping a configured field. Apart from explicitly
+   evidenced non-support, complete forwarding remains mandatory; no silent omission, field-removal
+   retry, hidden default substitution or display-only setting may replace it.
+6. Deliver the complete Provider-by-field report to the owner with no blank/unaccounted cells.
+   Record the final request path, actual value/mapping, effectiveness evidence and verification
+   status for each field. Negative claims must include their source statement. Any missing field,
+   unproven exemption or unverified effect prevents an all-Providers/all-fields completion claim.
+
+This evidence gate takes precedence over earlier applicability, omission and N/A assertions in
+[message-generation.md](message-generation.md) and this contract, including the provider-specific
+prose below. Those assertions do not themselves establish upstream non-support and must be revalidated
+field by field. Persisting this contract does not grant authorization for production/test edits,
+credentials, paid requests, Git mutations or deployment.
+
+The owner's repair-scope clarification on 2026-09-08 is:
+
+```text
+我让你修provider字段问题！
+```
+
+Repair Provider field forwarding, encoding, validation, decoding and continuation replay within the
+existing product. Do not turn this work into a new parameter-editor feature, Skill permission
+migration or backup-policy redesign. Those unrelated choices are not prerequisites for Provider
+field repair. Keep every Provider and unresolved field accounted for; a bounded completed batch
+does not establish completion of the full audit or model-side effectiveness.
+
+## Provider controls and output
 
 An official OpenAI Provider or a custom Provider selected as OpenAI-compatible, together with
 Responses API enabled, is sufficient to expose both `OpenAI Search` and `Service Tier` in the
-conversation UI. No model-name allowlist, capability-discovery request, local capability registry,
-or extra relay declaration may suppress those controls. This is a positive availability rule; it
-does not redefine any separately supported Service Tier surface outside Responses.
+conversation UI. No model-name allowlist, capability-discovery request, or extra relay declaration
+may suppress those controls. In local chat, the tier choices shown inside the available control
+follow the built-in official model support table; an unlisted official model or a custom relay's
+model offers all five choices for server-side validation. This is a positive control-availability
+rule; it does not redefine any separately supported Service Tier surface outside Responses.
 
 The immutable generation snapshot freezes both choices. When OpenAI Search is enabled, the existing
 OpenAI-compatible Responses request includes the native `web_search` tool. When Service Tier is
-enabled, that same request includes the normalized selected `service_tier` value. Recognized values
-are `auto`, `default`, `flex`, `scale`, `priority`, `fast`, and `ultrafast`; normalization must
-preserve each spelling rather than collapse a recognized tier to `auto`. Chat Completions omits this
-Responses-only field. The ordinary Provider owns request serialization; UI visibility must not
-create a second request path.
+enabled, that same request includes the selected model's mapped `service_tier` value. The five
+normalized values are `auto`, `default`, `flex`, `fast`, and `ultrafast`. Historical `scale` is
+normalized to `default`; historical `priority` is normalized to `fast` on read, save, import and
+request capture. Changing models never rewrites the stored choice. `auto` and `default` stay as
+selected; unsupported `flex` maps to `default`; unsupported `fast` or `ultrafast` maps to a
+supported accelerated tier if present, otherwise `default`. Only documented official models have
+restricted choices. Offering `ultrafast` for a model does not establish account access: the UI
+warns that permission may be required. Chat Completions omits this Responses-only field. The
+ordinary Provider owns request serialization; UI visibility must not create a second request path.
 
 Every OpenAI-compatible Chat request forwards a captured non-null `temperature`, `max_tokens`,
 `top_p`, `frequency_penalty`, and `presence_penalty` without model-family remapping. Thinking is a
@@ -76,7 +143,7 @@ text-recovery batch follows the same publication rule even though no earlier str
 The batch executor's later per-call running updates do not own creation visibility. UI placeholders,
 delays, retries, or shadow Tool state must not substitute for this overlay publication boundary.
 
-`generate_image` alone uses a 600,000 ms outer execution budget and the same 600,000 ms budget for
+`image_generate` alone uses a 600,000 ms outer execution budget and the same 600,000 ms budget for
 its generation request and returned-image download. Every other Tool keeps its ordinary configured
 execution timeout. A successful image is persisted through `ToolImageStore` and returned in the
 owning `ToolExecutionResult.images`; the overlay copies it to that exact Tool call and
@@ -85,7 +152,7 @@ message-level generated-image tail may own current output. Existing `ChatMessage
 read-compatible and retain their legacy full-width renderer, but new generated images never enter
 that path.
 
-The visible `generate_image` segment is a hard ordered presentation boundary in Compact, Grouped
+The visible `image_generate` segment is a hard ordered presentation boundary in Compact, Grouped
 Timeline, ordinary Timeline, and the Compact/Grouped Bottom Sheet presentation mode. Its current
 information card ends immediately after that call. The fixed left-aligned `300 x 300 dp` slot is
 rendered next, and every later image call, Tool, Thought, Transcription, or Answer starts after that
@@ -125,7 +192,7 @@ Remote `view_image` previews retain this exact presentation but admit their imag
 the Tool preview is expanded. The square viewport exists before the request starts and remains fixed
 through download and decode; the decoded image fades in without changing surrounding geometry.
 
-In the Tool detail Bottom Sheet, a `generate_image` result keeps the same `24 dp` outer horizontal
+In the Tool detail Bottom Sheet, an `image_generate` result keeps the same `24 dp` outer horizontal
 content padding as ordinary Tool text. Its rounded preview is centered and fills that padded content
 width as a `width x width` square. `ContentScale.Crop` center-crops only the source bitmap inside the
 square; it does not remove container margins or cap the square by sheet height. Arguments, labels,
@@ -136,7 +203,7 @@ Local Sandbox and Conch share one shell-tool baseline: foreground command/workdi
 bounded retained output and cancellation propagation; bounded typed `file_read`; 1MB UTF-8
 `file_write`; backend-native `file_edit`; and home-default glob/grep with the documented caps,
 truncation metadata, regex failures, and line-content bounds. Conch durable background jobs,
-foreground continuation after the client wait budget, and `view_image` are explicit extensions rather
+foreground continuation after the client wait budget, and `file_view_image` are explicit extensions rather
 than baseline behavior that Local must imitate. SSH may implement the transport-neutral interfaces,
 but it is not the authority for the Local/Conch baseline.
 

@@ -172,6 +172,9 @@
 
     <!-- Drawer -->
     <string name="conversations">Unterhaltungen</string>
+    <string name="pinned_conversations">Angeheftet</string>
+    <string name="pin_conversation">Anheften</string>
+    <string name="unpin_conversation">Loslösen</string>
     <string name="conversation_unread_generation">Ungelesene generierte Antwort</string>
     <string name="new_chat">Neuer Chat</string>
 
@@ -198,6 +201,22 @@
     <string name="embedding_custom_model_desc">Beliebigen vom Anbieter unterstützten Modellnamen eingeben</string>
     <string name="embedding_batch_size">Stapelgröße</string>
     <string name="embedding_batch_size_desc">Nachrichten, die pro Anfrage zwischengespeichert werden (1-100)</string>
+    <string name="embedding_add_model">Modell hinzufügen</string>
+    <string name="embedding_edit_model">Modell bearbeiten</string>
+    <string name="embedding_choose_type">Modelltyp wählen</string>
+    <string name="embedding_type_remote_desc">Eine Embedding-API wie OpenAI, Voyage AI oder Ollama nutzen.</string>
+    <string name="embedding_type_local_desc">Ein GGUF-Embedding-Modell auf diesem Gerät ausführen.</string>
+    <string name="embedding_provider_custom">Benutzerdefiniert</string>
+    <string name="embedding_connection">Verbindung</string>
+    <string name="embedding_general">Allgemein</string>
+    <string name="embedding_cache_status">Cache</string>
+    <string name="embedding_use_saved_key">Gespeicherten %1$s-Schlüssel verwenden</string>
+    <string name="embedding_use_saved_key_desc">Aus den Chat-Anbietereinstellungen</string>
+    <string name="embedding_model_id_hint">Modell-ID, z. B. text-embedding-3-small</string>
+    <string name="embedding_model_locked_desc">Zwischengespeicherte Embeddings gehören zu diesem Modell. Für einen Wechsel ein neues Modell hinzufügen.</string>
+    <string name="embedding_model_file">Modelldatei</string>
+    <string name="embedding_replace_file">Ersetzen</string>
+    <string name="embedding_test_failed">Verbindungstest fehlgeschlagen: %1$s</string>
     <string name="local_model_ready">Modell importiert.</string>
     <string name="import_model">Modell importieren (.gguf)</string>
     <string name="importing_model">Importieren...</string>
@@ -541,8 +560,8 @@
     <string name="onboarding_no_models">Keine Modelle geladen.</string>
     <string name="onboarding_invalid_gguf_title">Ungültige GGUF-Datei</string>
     <string name="onboarding_invalid_gguf_desc">Die ausgewählte Datei scheint kein gültiges GGUF-Modell zu sein.</string>
-    <string name="onboarding_hide_key">Schlüssel verbergen</string>
-    <string name="onboarding_show_key">Schlüssel anzeigen</string>
+    <string name="secret_hide">Wert verbergen</string>
+    <string name="secret_show">Wert anzeigen</string>
     <!-- ── Auto Backup ── -->
     <string name="auto_backup_title">Automatische Sicherung</string>
     <string name="auto_backup_subtitle">Daten automatisch nach Zeitplan exportieren</string>
@@ -574,7 +593,7 @@
     <!-- SSH host-key pinning -->
     <string name="shell_ssh_verify_host_key">Hostschlüssel prüfen und anheften</string>
     <string name="shell_ssh_host_key_pinned">Hostschlüssel angeheftet</string>
-    <string name="shell_ssh_host_key_not_pinned">Hostschlüssel nicht angeheftet — anfällig für Abhören</string>
+    <string name="shell_ssh_host_key_not_pinned">Hostschlüssel nicht angeheftet; anfällig für Abhören</string>
     <string name="shell_ssh_verify_title">SSH-Hostschlüssel prüfen</string>
     <string name="shell_ssh_verify_message">Bestätige, dass dieser Fingerabdruck mit deinem Server übereinstimmt, bevor du ihm vertraust. Das Anheften schützt vor Man-in-the-Middle-Angriffen.</string>
     <string name="shell_ssh_trust">Vertrauen und anheften</string>
@@ -620,6 +639,7 @@
     <string name="conversation_search_hint">Suchen…</string>
     <string name="conversation_share">Teilen</string>
     <string name="conversation_share_failed">Unterhaltung konnte nicht geteilt werden: %1$s</string>
+    <string name="conversation_deleted_elsewhere">Diese Unterhaltung wurde auf einem anderen Gerät gelöscht.</string>
     <string name="custom_provider_protocol_label">API-Format</string>
     <string name="file_path_unknown">Unbekannte Datei</string>
     <string name="import_file_too_large">Datei zu groß (%1$d MB). Bitte wähle eine kleinere Exportdatei.</string>
@@ -697,6 +717,7 @@
     <string name="context_part_messages">Nachrichten</string>
     <string name="context_part_free">Frei</string>
     <string name="context_part_reserved">Reserviert</string>
+    <string name="context_part_used">Verwendet</string>
     <string name="context_compact_streaming">Kontext wird komprimiert…</string>
     <string name="context_compact_error">Komprimierungsfehler</string>
     <string name="context_compact_stopped">Komprimierung gestoppt</string>
@@ -810,6 +831,9 @@
     <string name="tool_edit_skill">Skill bearbeiten</string>
     <string name="tool_delete_skill">Skill löschen</string>
     <string name="tool_read_file_truncated">Teilinhalt angezeigt · bei Byte %1$d fortfahren</string>
+    <string name="tool_read_file_truncated_line">Teilinhalt angezeigt · bei Zeile %1$d fortfahren</string>
+    <string name="tool_edit_count">%1$d Änderungen</string>
+    <string name="tool_edit_replace_all">Alle ersetzen</string>
     <string name="low_context_mode">Modus mit kleinem Kontext</string>
     <string name="low_context_mode_default_desc">Modus mit kleinem Kontext standardmäßig aktivieren</string>
     <string name="learn_more">Mehr erfahren...</string>
@@ -906,4 +930,57 @@
     <string name="local_ubatch_size_title">Physische Batchgröße</string>
     <string name="local_ubatch_size_desc">Physische Stücke, in die der Engine jeden Batch zerlegt. Kleinere Werte senken den Spitzenspeicher beim Prefill. Gilt ab dem nächsten Laden des Modells.</string>
     <string name="local_draft_model_path_label">Entwurfsmodell hinzufügen (spekulative Dekodierung)</string>
+    <string name="message_source_task">Aufgabe</string>
+    <string name="message_source_loop">Schleife</string>
+    <string name="message_source_ask_user">Rückfrage</string>
+    <string name="message_source_unanswered">Nicht beantwortet</string>
+    <string name="settings_todo">Aufgabenliste</string>
+    <string name="settings_todo_desc">Vom Modell verwaltete Aufgabenliste der Unterhaltung</string>
+    <string name="todo_enable">Aufgabenliste aktivieren</string>
+    <string name="todo_enable_desc">Dem Modell erlauben, die Aufgabenliste der Unterhaltung zu lesen und zu aktualisieren. Beim Deaktivieren bleiben vorhandene Listen erhalten.</string>
+    <string name="settings_subagents">Unteragenten</string>
+    <string name="settings_subagents_desc">Arbeit an isolierte Unterhaltungen delegieren</string>
+    <string name="subagents_enable">Unteragenten aktivieren</string>
+    <string name="subagents_enable_desc">Dem Modell erlauben, Arbeit an isolierte Unterhaltungen zu delegieren. Beim Deaktivieren werden vorhandene Unteragenten nicht gestoppt.</string>
+    <string name="local_projector_title">Vision-Projektor</string>
+    <string name="local_projector_desc">Optional: Eine zum Chat-Modell passende mmproj-GGUF-Datei importieren, um Bildeingaben zu unterstützen</string>
+    <string name="local_model_error_id_required">Eine Modell-ID ist erforderlich</string>
+    <string name="local_model_error_id_invalid">Nur a-z, 0-9, Punkte, Unterstriche und Bindestriche verwenden</string>
+    <string name="local_model_error_id_taken">Diese Modell-ID wird bereits verwendet</string>
+    <string name="local_model_error_file_required">Eine GGUF-Modelldatei importieren</string>
+    <string name="local_model_error_context">Die Kontextgröße muss eine positive Ganzzahl sein</string>
+    <string name="local_model_error_temperature">Die Temperatur muss zwischen 0 und 2 liegen</string>
+    <string name="local_model_error_top_p">Top P muss zwischen 0 und 1 liegen</string>
+    <string name="local_model_error_max_tokens">Die maximale Tokenanzahl muss eine positive Ganzzahl sein</string>
+    <string name="local_model_error_output">Die maximale Tokenanzahl darf die Kontextgröße nicht überschreiten</string>
+    <string name="tool_read_todo">Aufgabenliste lesen</string>
+    <string name="tool_update_todo">Aufgabenliste aktualisieren</string>
+    <string name="tool_spawn_agent">Unteragent starten</string>
+    <string name="tool_send_agent_message">Nachricht an Unteragent senden</string>
+    <string name="tool_wait_agents">Auf Unteragenten warten</string>
+    <string name="tool_list_agents">Unteragenten auflisten</string>
+    <string name="tool_stop_agent">Unteragent stoppen</string>
+    <string name="tool_reading_todo">Aufgabenliste wird gelesen…</string>
+    <string name="tool_updating_todo">Aufgabenliste wird aktualisiert…</string>
+    <string name="tool_spawning_agent">Unteragent wird gestartet…</string>
+    <string name="tool_sending_agent_message">Nachricht für Unteragent wird eingereiht…</string>
+    <string name="tool_waiting_agents">Warten auf Unteragenten…</string>
+    <string name="tool_listing_agents">Unteragenten werden aufgelistet…</string>
+    <string name="tool_stopping_agent">Unteragent wird gestoppt…</string>
+    <string name="tool_read_todo_done">Aufgabenliste gelesen</string>
+    <string name="tool_updated_todo">Aufgabenliste aktualisiert</string>
+    <string name="tool_spawned_agent">Unteragent gestartet</string>
+    <string name="tool_queued_agent_message">Nachricht für Unteragent eingereiht</string>
+    <string name="tool_waited_agents">Warten auf Unteragenten beendet</string>
+    <string name="tool_listed_agents">Unteragenten aufgelistet</string>
+    <string name="tool_stopped_agent">Unteragent gestoppt</string>
+    <string name="tool_delete_agent">Unteragent löschen</string>
+    <string name="tool_deleting_agent">Unteragent wird gelöscht…</string>
+    <string name="tool_deleted_agent">Unteragent gelöscht</string>
+    <string name="subagents_allow_delete">Löschen von Unteragenten erlauben</string>
+    <string name="subagents_allow_delete_desc">Der übergeordneten Unterhaltung erlauben, inaktive Unteragenten dauerhaft zu löschen, um Plätze freizugeben. Laufende Unteragenten und nicht zugestellte Ergebnisse werden nie gelöscht.</string>
+    <string name="subagent_deleted_by_parent">Dieser Unteragent wurde von seiner übergeordneten Unterhaltung gelöscht.</string>
+    <string name="tool_todo_empty">Aufgabenliste ist leer</string>
+    <string name="tool_agents_empty">Keine Unteragenten</string>
+    <string name="tool_agent_results_empty">Keine Ergebnisse von Unteragenten zurückgegeben</string>
 </resources>

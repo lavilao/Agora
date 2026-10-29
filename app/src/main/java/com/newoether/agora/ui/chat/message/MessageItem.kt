@@ -44,6 +44,7 @@ import com.newoether.agora.R
 import com.newoether.agora.data.forDisplay
 import com.newoether.agora.data.replaceCustomProviderIdsForDisplay
 import com.newoether.agora.model.ChatMessage
+import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.MessageStatus
 import com.newoether.agora.model.isContextCompact
 import com.newoether.agora.model.Participant
@@ -58,6 +59,8 @@ import com.newoether.agora.ui.components.*
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 import com.mikepenz.markdown.compose.components.markdownComponents
 import kotlinx.coroutines.flow.StateFlow
+import com.newoether.agora.ui.components.AgoraDropdownMenu
+import com.newoether.agora.ui.components.AgoraDropdownMenuItem
 
 
 
@@ -159,11 +162,17 @@ internal fun MessageItem(
     onLayoutMutationSettled: (String) -> Unit = {},
     thoughtExpandedStates: SnapshotStateMap<String, Boolean> = remember { mutableStateMapOf() }
 ) {
-    val displayMessage = remember(message, customProviders) {
-        message.forDisplay(customProviders)
+    val unansweredLabel = stringResource(R.string.message_source_unanswered)
+    val displayMessage = remember(message, customProviders, unansweredLabel) {
+        message.forDisplay(customProviders).withAskUserDisplayText(unansweredLabel)
     }
-    val displayActionCopyText = remember(actionCopyText, customProviders) {
-        actionCopyText?.let { replaceCustomProviderIdsForDisplay(it, customProviders) }
+    val displayActionCopyText = remember(actionCopyText, customProviders, displayMessage) {
+        // An ask_user bubble copies exactly what it shows, including the localized label.
+        if (displayMessage.source?.kind == MessageSource.Kind.ASK_USER) {
+            actionCopyText?.let { displayMessage.text }
+        } else {
+            actionCopyText?.let { replaceCustomProviderIdsForDisplay(it, customProviders) }
+        }
     }
     var showInfoDialog by remember { mutableStateOf(false) }
     var showUserTextSelection by remember(message.id) { mutableStateOf(false) }
@@ -259,7 +268,7 @@ internal fun MessageItem(
     }
 
     val shape = when (message.participant) {
-        // Three matching large corners (27dp, capped at half the bubble's smaller side) and an 8dp tail;
+        // Three matching large corners (27dp, capped at half the bubble's smaller side) and a 6dp tail;
         // a single-line bubble reads as a capsule.
         Participant.USER -> UserBubbleShape()
         Participant.MODEL -> RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 20.dp)
@@ -642,14 +651,13 @@ internal fun ContextCompactPill(
                         modifier = Modifier.size(18.dp),
                     )
                 }
-                DropdownMenu(
+                AgoraDropdownMenu(
                     expanded = actionsExpanded,
                     onDismissRequest = { actionsExpanded = false },
-                    shape = RoundedCornerShape(12.dp),
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     tonalElevation = 16.dp,
                 ) {
-                    DropdownMenuItem(
+                    AgoraDropdownMenuItem(
                         text = {
                             Text(
                                 text = stringResource(com.newoether.agora.R.string.recompact),
@@ -667,7 +675,7 @@ internal fun ContextCompactPill(
                             onRecompact()
                         },
                     )
-                    DropdownMenuItem(
+                    AgoraDropdownMenuItem(
                         text = {
                             Text(
                                 text = stringResource(com.newoether.agora.R.string.delete),

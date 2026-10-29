@@ -218,11 +218,13 @@ class StreamingMarkdownMessageSourceContractTest {
         assertTrue(citation.contains("val unsupported by lazy(LazyThreadSafetyMode.NONE)"))
         assertTrue(citation.contains("boundedTrailingCitationWrapperStart("))
         assertTrue(citation.contains("PlainCitationArtifact.findAll(answerText)"))
-        assertTrue(citation.contains("CitationPolicy.stripPrivateMarkers(projection.markdown)"))
+        assertTrue(citation.contains("CitationPolicy.stripPrivateMarkers(projection.markdown, positions)"))
         val projectionPolicy = citation.substringAfter("internal fun citationMarkdownProjection(")
             .substringBefore("internal fun citationRecordsForAnswerSlice(")
         assertTrue(projectionPolicy.indexOf("if (isStreaming)") <
-            projectionPolicy.indexOf("projectCitationMarkdown(answerText, citations)"))
+            projectionPolicy.indexOf("projectCitationMarkdown(answerText, citations, includeSourcePositions)"))
+        assertTrue(projectionPolicy.contains("projection.sourcePositions.toMutableList()"))
+        assertTrue(projectionPolicy.contains("sourcePositions = positions.orEmpty()"))
         assertTrue(projectionPolicy.contains("markers = emptyList()"))
         assertFalse((citation + presentation).contains("answerText.lastIndexOf(\"([\")"))
     }

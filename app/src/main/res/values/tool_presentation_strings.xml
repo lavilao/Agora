@@ -1,4 +1,9 @@
 <resources>
+    <string name="tool_read_active_memory">Read Active Memory</string>
+    <string name="tool_reading_active_memory">Reading active memory…</string>
+    <string name="tool_read_active_memory_success">Read active memory</string>
+    <string name="tool_read_active_memory_empty">Active memory is empty</string>
+    <string name="tool_read_active_memory_failed">Failed to read active memory</string>
     <string name="tool_no_memories">No saved memories found</string>
     <string name="tool_no_skills">No skills found</string>
     <string name="tool_no_shells">No shells found</string>
@@ -54,4 +59,117 @@
     <string name="tool_list_failed_default">Failed to list items</string>
     <string name="tool_loop_start_failed">Failed to start loop</string>
     <string name="tool_loop_stop_failed">Failed to stop loop</string>
+    <string name="tool_reading_files_count">Reading %1$d files…</string>
+    <string name="tool_read_files_count">Read %1$d files</string>
+    <string name="tool_read_content_empty">No file content returned</string>
+    <string name="tool_read_conversation_empty">No conversation messages returned</string>
+    <string name="tool_ask_user">Ask User</string>
+    <string name="tool_waiting_for_answers">Waiting for answers…</string>
+    <string name="tool_interrupted">Interrupted</string>
+    <string name="tool_renaming_file">Renaming %1$s to %2$s…</string>
+    <string name="tool_renamed_file">Renamed %1$s to %2$s</string>
+    <string name="tool_renaming_file_default">Renaming file…</string>
+    <string name="tool_renamed_file_default">Renamed file</string>
+    <string name="tool_describing_file">Updating description of %1$s…</string>
+    <string name="tool_described_file">Updated description of %1$s</string>
+    <string name="tool_describing_file_default">Updating file description…</string>
+    <string name="tool_described_file_default">Updated file description</string>
+    <plurals name="tool_questions_queued">
+        <item quantity="one">Queued %1$d question</item>
+        <item quantity="other">Queued %1$d questions</item>
+    </plurals>
+    <plurals name="tool_questions_answered">
+        <item quantity="one">Answered %1$d question</item>
+        <item quantity="other">Answered %1$d questions</item>
+    </plurals>
+    <plurals name="tool_questions_skipped">
+        <item quantity="one">Skipped %1$d question</item>
+        <item quantity="other">Skipped %1$d questions</item>
+    </plurals>
+    <plurals name="tool_questions_mixed">
+        <item quantity="one">Answered %1$d of %2$d question</item>
+        <item quantity="other">Answered %1$d of %2$d questions</item>
+    </plurals>
+    <string name="tool_questions_asked">Asked questions</string>
+    <string name="tool_loop_already_stopped">Loop already stopped</string>
+    <string name="tool_ask_user_failed">Failed to ask user</string>
+    <plurals name="tool_lookup_count">
+        <item quantity="one">Looked through %1$d saved memory</item>
+        <item quantity="other">Looked through %1$d saved memories</item>
+    </plurals>
+    <plurals name="tool_listed_skills">
+        <item quantity="one">Listed %1$d skill</item>
+        <item quantity="other">Listed %1$d skills</item>
+    </plurals>
+    <plurals name="tool_web_search_done">
+        <item quantity="one">Found %1$d result for \"%2$s\"</item>
+        <item quantity="other">Found %1$d results for \"%2$s\"</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_default">
+        <item quantity="one">Found %1$d conversation</item>
+        <item quantity="other">Found %1$d conversations</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_for">
+        <item quantity="one">Found %1$d conversation for \"%2$s\"</item>
+        <item quantity="other">Found %1$d conversations for \"%2$s\"</item>
+    </plurals>
+    <plurals name="tool_listed_conversations">
+        <item quantity="one">Listed %1$d conversation</item>
+        <item quantity="other">Listed %1$d conversations</item>
+    </plurals>
+    <plurals name="tool_shell_list_count">
+        <item quantity="one">Listed %1$d shell</item>
+        <item quantity="other">Listed %1$d shells</item>
+    </plurals>
+    <plurals name="tool_shell_job_count">
+        <item quantity="one">Listed %1$d shell job</item>
+        <item quantity="other">Listed %1$d shell jobs</item>
+    </plurals>
+    <plurals name="tool_found_files">
+        <item quantity="one">Found %1$d file</item>
+        <item quantity="other">Found %1$d files</item>
+    </plurals>
+    <plurals name="tool_searched_file">
+        <item quantity="one">Found %1$d match</item>
+        <item quantity="other">Found %1$d matches</item>
+    </plurals>
+    <plurals name="tool_listed_task_count">
+        <item quantity="one">Listed %1$d task</item>
+        <item quantity="other">Listed %1$d tasks</item>
+    </plurals>
+    <plurals name="tool_reading_files_count">
+        <item quantity="one">Reading %1$d file…</item>
+        <item quantity="other">Reading %1$d files…</item>
+    </plurals>
+    <plurals name="tool_read_files_count">
+        <item quantity="one">Read %1$d file</item>
+        <item quantity="other">Read %1$d files</item>
+    </plurals>
+    <plurals name="tool_web_search_result_count">
+        <item quantity="one">Found %1$d result</item>
+        <item quantity="other">Found %1$d results</item>
+    </plurals>
+    <string name="tool_json_empty_container">No content</string>
+    <string name="tool_search_mcp_tools">Search MCP Tools</string>
+    <string name="tool_searching_mcp_tools">Searching MCP tools…</string>
+    <string name="tool_searching_mcp_tools_for">Searching MCP tools for %1$s…</string>
+    <string name="tool_searched_mcp_tools">Searched MCP tools</string>
+    <string name="tool_no_mcp_tools">No matching MCP tools found</string>
+    <plurals name="tool_found_mcp_tools">
+        <item quantity="one">Found %1$d MCP tool</item>
+        <item quantity="other">Found %1$d MCP tools</item>
+    </plurals>
+    <string name="tool_list_mcp_servers">List MCP Servers</string>
+    <string name="tool_listing_mcp_servers">Listing MCP servers…</string>
+    <string name="tool_listed_mcp_servers_default">Listed MCP servers</string>
+    <string name="tool_no_mcp_servers_returned">No MCP servers returned</string>
+    <string name="tool_list_mcp_servers_failed">Failed to list MCP servers</string>
+    <plurals name="tool_listed_mcp_servers">
+        <item quantity="one">Listed %1$d MCP server</item>
+        <item quantity="other">Listed %1$d MCP servers</item>
+    </plurals>
+    <string name="tool_edit_operation_update">Update</string>
+    <string name="tool_edit_operation_add">Add</string>
+    <string name="tool_edit_operation_delete">Delete</string>
+    <string name="tool_edit_operation_move">Move</string>
 </resources>

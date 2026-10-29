@@ -15,6 +15,18 @@ data class GenerationPromptTemplate(
     val systemItems: List<PromptTemplateItem>,
     val userItems: List<PromptTemplateItem>,
     val assistantItems: List<PromptTemplateItem>,
+    /**
+     * Active memory read once when the template is captured, so every Provider pass of one Run
+     * (initial request, tool continuations, retries) sees the same text and keeps the prompt
+     * cache stable. Mid-Run edits become visible through active_memory_read and land next Run.
+     */
+    val activeMemory: String = "",
+    /**
+     * Skill catalog frozen with the template for the same reason as [activeMemory]: mid-Run
+     * skill edits must not rewrite the system prompt between Provider passes. Empty when skill
+     * access was off at capture time. Edits land next Run.
+     */
+    val skillCatalog: String = "",
 )
 
 data class GenerationConfig(
@@ -35,6 +47,8 @@ data class GenerationConfig(
     val responsesApiEnabled: Boolean = false,
     val anthropicCacheEnabled: Boolean = true,
     val anthropicCacheTtl: String = "1h",
+    /** Send the conversation ID as prompt_cache_key on OpenAI-protocol requests. */
+    val promptCacheKeyEnabled: Boolean = false,
     val openAiWebSearchEnabled: Boolean = false,
     val baseUrl: String?,
     val userPrepend: String? = null,
@@ -55,6 +69,16 @@ data class GenerationConfig(
 
 data class GenerationContext(
     val conversationId: String? = null,
+    val subagentToolsEnabled: Boolean = false,
+    /** Exposes agent_delete; effective only together with [subagentToolsEnabled]. */
+    val subagentDeleteEnabled: Boolean = false,
+    val enabledModelIds: List<String> = emptyList(),
+    /** Null and empty both allow no new subagents; global enabled IDs are not a fallback. */
+    val subagentModelIds: List<String>? = null,
+    val subagentRecommendedModel: String? = null,
+    val todoEnabled: Boolean = true,
+    /** Supplied only by the authorized executor, never by Provider arguments. */
+    val toolEffectIdentity: RunEffectIdentity? = null,
     val accessSavedMemories: Boolean = true,
     val accessActiveMemory: Boolean = true,
     val skillReadAccess: Boolean = true,
@@ -74,6 +98,7 @@ data class GenerationContext(
     val webSearchBaseUrl: String = "",
     val imageGenEnabled: Boolean = false,
     val askUserEnabled: Boolean = false,
+    val askUserTimeoutMinutes: Int = com.newoether.agora.data.DEFAULT_ASK_USER_TIMEOUT_MINUTES,
     val imageGenApiKey: String = "",
     val imageGenBaseUrl: String = "",
     val imageGenModel: String = "gpt-image-1",

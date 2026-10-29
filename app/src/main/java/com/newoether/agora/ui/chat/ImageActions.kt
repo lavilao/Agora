@@ -44,6 +44,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import com.newoether.agora.R
 import com.newoether.agora.api.HttpClient
+import com.newoether.agora.util.executeWithNetworkRetry
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 import com.newoether.agora.ui.motion.MotionAwareModalBottomSheet as ModalBottomSheet
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.IOException
 import java.util.Locale
+import com.newoether.agora.ui.components.sheetOptionClickable
 
 private fun directImageFile(url: String): File? {
     val path = if (url.startsWith("file://", ignoreCase = true)) {
@@ -86,19 +88,28 @@ private fun openImageSource(context: Context, url: String): OpenedImageSource? {
     if (url.startsWith("http://", ignoreCase = true) ||
         url.startsWith("https://", ignoreCase = true)
     ) {
-        val response = HttpClient.client.newCall(
-            Request.Builder().url(url).get().build(),
-        ).execute()
-        if (!response.isSuccessful) {
-            response.close()
-            return null
+        val temporary = File.createTempFile("image-download-", ".tmp", context.cacheDir)
+        try {
+            val downloaded = HttpClient.client.executeWithNetworkRetry(
+                Request.Builder().url(url).get().build(),
+            ) { response ->
+                if (!response.isSuccessful) false else {
+                    temporary.outputStream().use { output ->
+                        response.body.byteStream().use { it.copyTo(output) }
+                    }
+                    true
+                }
+            }
+            if (!downloaded) { temporary.delete(); return null }
+            return OpenedImageSource(
+                input = temporary.inputStream(),
+                sizeBytes = temporary.length(),
+                closeSource = { temporary.delete() },
+            )
+        } catch (failure: Exception) {
+            temporary.delete()
+            throw failure
         }
-        val body = response.body
-        return OpenedImageSource(
-            input = body.byteStream(),
-            sizeBytes = body.contentLength().takeIf { it >= 0L },
-            closeSource = response::close,
-        )
     }
 
     val uri = Uri.parse(url)
@@ -446,7 +457,7 @@ private fun StableImageInfoDialog(
 @Composable
 private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
+        modifier = Modifier.fillMaxWidth().sheetOptionClickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface)

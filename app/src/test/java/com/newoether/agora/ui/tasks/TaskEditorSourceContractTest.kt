@@ -13,7 +13,11 @@ class TaskEditorSourceContractTest {
             .substringAfter("internal fun TaskDetailPage(")
             .substringBefore("internal fun formatDateTime(")
 
-        assertTrue(detail.contains("BackHandler(enabled = backHandlingEnabled) { onBack() }"))
+        // Back (system and top bar) goes through the unsaved-changes guard; Save leaves directly.
+        assertTrue(detail.contains("rememberUnsavedChangesBack("))
+        assertTrue(detail.contains("hasUnsavedChanges = editorSession.hasUnsavedChanges"))
+        assertTrue(detail.contains("BackHandler(enabled = backHandlingEnabled) { guardedBack() }"))
+        assertTrue(detail.contains("onBack = guardedBack,"))
         assertFalse(detail.contains("BackHandler { onBack() }"))
         assertFalse(detail.contains("fun leave()"))
         assertTrue(detail.contains("viewModel.saveTask(current())\n                    onBack()"))
@@ -46,7 +50,7 @@ class TaskEditorSourceContractTest {
         assertTrue(listCall.contains("backHandlingEnabled = backHandlingEnabled"))
         assertTrue(detailCall.contains("backHandlingEnabled = backHandlingEnabled"))
         assertTrue(tasks.contains("BackHandler(enabled = backHandlingEnabled) { onBack() }"))
-        assertTrue(detail.contains("BackHandler(enabled = backHandlingEnabled) { onBack() }"))
+        assertTrue(detail.contains("BackHandler(enabled = backHandlingEnabled) { guardedBack() }"))
         assertFalse(tasks.contains("BackHandler { onBack() }"))
         assertFalse(detail.contains("BackHandler { onBack() }"))
     }

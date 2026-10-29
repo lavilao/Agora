@@ -1,11 +1,50 @@
 package com.newoether.agora.diagnostics
 
+import java.time.Instant
+import java.time.ZoneId
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DiagnosticBundleExporterTest {
+    @Test
+    fun `export names use local date time with milliseconds for both formats`() {
+        val generatedAtMillis = Instant.parse("2026-10-08T11:50:00.123Z").toEpochMilli()
+        val zoneId = ZoneId.of("Asia/Shanghai")
+
+        assertEquals(
+            "agora-diagnostics-redacted-json-2026-10-08_19-50-00-123.json",
+            DiagnosticBundleExporter.fileName(DiagnosticExportFormat.REDACTED_JSON, generatedAtMillis, zoneId),
+        )
+        assertEquals(
+            "agora-diagnostics-summary-text-2026-10-08_19-50-00-123.txt",
+            DiagnosticBundleExporter.fileName(DiagnosticExportFormat.SUMMARY_TEXT, generatedAtMillis, zoneId),
+        )
+        assertEquals(
+            "agora-diagnostics-redacted-json-2026-10-08_04-50-00-123.json",
+            DiagnosticBundleExporter.fileName(
+                DiagnosticExportFormat.REDACTED_JSON,
+                generatedAtMillis,
+                ZoneId.of("America/Los_Angeles"),
+            ),
+        )
+        val jsonExport = DiagnosticBundleExporter.export(
+            DiagnosticSnapshot(), DiagnosticExportFormat.REDACTED_JSON, generatedAtMillis,
+        )
+        assertEquals(
+            generatedAtMillis.toString(),
+            kotlinx.serialization.json.Json.parseToJsonElement(jsonExport)
+                .jsonObject.getValue("generatedAtMillis").jsonPrimitive.content,
+        )
+        val textExport = DiagnosticBundleExporter.export(
+            DiagnosticSnapshot(), DiagnosticExportFormat.SUMMARY_TEXT, generatedAtMillis,
+        )
+        assertTrue(textExport.contains("generatedAtMillis=$generatedAtMillis"))
+    }
+
     @Test
     fun `redacted json keeps message content and masks only credentials while summary stays content free`() {
         val providerId = "custom-provider-00000000-0000-4000-8000-000000000001"

@@ -8,6 +8,7 @@ import com.newoether.agora.data.local.NewChatPersistEntity
 import com.newoether.agora.data.repository.ConversationRepository
 import com.newoether.agora.data.repository.SettingsRepository
 import com.newoether.agora.model.ChatMessage
+import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.MessageStatus
 import com.newoether.agora.model.RunEffect
 import com.newoether.agora.util.DebugLog
@@ -15,7 +16,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,6 +34,8 @@ internal data class DirectAcceptedInputRequest(
     val newConversationSettings: ConversationSettings? = null,
     val newChatPersistSnapshot: NewChatPersistEntity? = null,
     val alreadyHoldsLock: Boolean,
+    /** Client that issued this Send; null for automatic sends (queue drain, Loop cycle). */
+    val origin: ChatClient?,
     val requestScroll: (conversationId: String, messageId: String) -> Unit,
     val onAccepted: suspend (SendAcceptance) -> Unit,
     val onModelMessageCreated: ((String) -> Unit)?,
@@ -52,6 +54,8 @@ internal data class DirectAcceptedInputRequest(
         require(wasNewChat == (newConversation != null))
         require(wasNewChat == (originNewChatEntryId != null))
         require(wasNewChat || newChatPersistSnapshot == null)
+        // A New Chat belongs to the client that sent it; only that client can open the result.
+        require(!wasNewChat || origin != null)
         generationSnapshot?.let { snapshot ->
             require(snapshot.conversationId == conversationId)
             require(snapshot.runId == runId)
@@ -84,17 +88,15 @@ internal class DirectAcceptedInputEffectExecutor(
     private val settings: SettingsRepository,
     private val executionCoordinator: ConversationExecutionCoordinator,
     private val graphWriter: AcceptedInputGraphWriter,
-    private val renderStore: ConversationRenderStore,
+    private val clients: ChatClients,
     private val requestBuilder: GenerationRequestBuilder,
     private val terminalSettlement: GenerationTerminalSettlementController,
     private val boundRunGenerationLauncher: BoundRunGenerationLauncher,
     private val acceptanceNotifier: SendAcceptanceNotifier,
     private val toUiMessage: (MessageEntity) -> ChatMessage,
-    private val isConversationOpen: (String) -> Boolean,
-    private val applyCommittedNewConversationState: suspend (String) -> Unit,
-    private val publishNewConversation: suspend (String, String, Long) -> Boolean,
     private val onUserMessagePersisted: (messageId: String, text: String) -> Unit,
-    private val onGenerateTitle: (String) -> Unit,
+    /** Title generation for a New Chat send; its notices go to the send's origin client. */
+    private val onGenerateTitle: (conversationId: String, origin: ChatClient?) -> Unit,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -141,19 +143,22 @@ internal class DirectAcceptedInputEffectExecutor(
         var bindingOutcome: ConversationGenerationState.RunBindingOutcome =
             ConversationGenerationState.RunBindingOutcome.Rejected
         var inputGraphCommitted = false
+        var titleGenerationEnabled = request.generationSnapshot?.titleGenerationEnabled == true
+        var titleGenerationStarted = false
         var newConversationTransferAttempted = false
         var newConversationSelectionAttempted = false
         var newConversationSelected = false
         var newConversationPresentationPublished = false
         val userMessageId = idFactory()
         val modelMessageId = idFactory()
-        var roomProjectionFence: RoomMessageProjectionFence? = null
+        var roomProjectionFences: ChatClientRoomFences? = null
 
         suspend fun applyCommittedNewConversationStateIfNeeded() {
             if (request.wasNewChat && !newConversationTransferAttempted) {
                 newConversationTransferAttempted = true
                 try {
-                    applyCommittedNewConversationState(request.conversationId)
+                    checkNotNull(request.origin)
+                        .applyCommittedNewConversationState(request.conversationId)
                 } catch (error: Exception) {
                     runCatching {
                         DebugLog.w(
@@ -168,7 +173,7 @@ internal class DirectAcceptedInputEffectExecutor(
         suspend fun publishNewChatIfNeeded(acceptance: SendAcceptance.Direct): Boolean {
             if (!request.wasNewChat) return false
             if (!newConversationSelectionAttempted) {
-                newConversationSelected = publishNewConversation(
+                newConversationSelected = checkNotNull(request.origin).publishAcceptedNewConversation(
                     request.conversationId,
                     request.modelId,
                     checkNotNull(request.originNewChatEntryId),
@@ -176,10 +181,17 @@ internal class DirectAcceptedInputEffectExecutor(
                 newConversationSelectionAttempted = true
             }
             if (newConversationSelected && !newConversationPresentationPublished) {
-                acceptanceNotifier.publish(acceptance)
+                acceptanceNotifier.publish(acceptance, request.origin)
                 newConversationPresentationPublished = true
             }
             return newConversationSelected
+        }
+
+        fun generateNewConversationTitleIfNeeded() {
+            if (request.wasNewChat && titleGenerationEnabled && !titleGenerationStarted) {
+                titleGenerationStarted = true
+                onGenerateTitle(request.conversationId, request.origin)
+            }
         }
 
         suspend fun reconcileCommittedInput(): Boolean = withContext(NonCancellable) {
@@ -197,18 +209,21 @@ internal class DirectAcceptedInputEffectExecutor(
                 acceptanceNotifier.notify(
                     accepted,
                     request.onAccepted,
+                    origin = request.origin,
                     publishEvent = !request.wasNewChat,
                 )
                 durableAcceptance.complete(accepted)
                 runCatching { request.onModelMessageCreated?.invoke(modelMessageId) }
             }
             publishNewChatIfNeeded(SendAcceptance.Direct(userMessageId, request.conversationId))
+            generateNewConversationTitleIfNeeded()
             true
         }
 
         try {
             markStage(if (request.alreadyHoldsLock) "lock-already-owned" else "await-conversation-lock")
             withOptionalLock(request.conversationId, request.alreadyHoldsLock) generationLock@ {
+                if (!state.acquireGenerationAdmission(request.uiToken, executionCoordinator)) return@generationLock
                 markStage("resolve-generation-snapshot")
                 val generationSnapshot = request.generationSnapshot
                     ?: requestBuilder.captureAdmissionSnapshot(
@@ -218,6 +233,7 @@ internal class DirectAcceptedInputEffectExecutor(
                         conversationOverride = request.newConversation,
                         conversationSettingsOverride = request.newConversationSettings,
                     )
+                titleGenerationEnabled = generationSnapshot.titleGenerationEnabled
                 markStage("commit-message-graph")
                 val graphCommit = graphWriter.commit(
                     request = AcceptedInputGraphWriter.Request(
@@ -234,10 +250,12 @@ internal class DirectAcceptedInputEffectExecutor(
                         newConversation = request.newConversation,
                         newConversationSettings = request.newConversationSettings,
                         newChatPersistSnapshot = request.newChatPersistSnapshot,
+                        source = MessageSource.forAutomationRequestKind(request.requestKind),
                     ),
                     beforeRoomCommit = {
-                        if (!request.wasNewChat && isConversationOpen(request.conversationId)) {
-                            roomProjectionFence = renderStore.beginRoomMessageProjectionFence()
+                        if (!request.wasNewChat) {
+                            roomProjectionFences =
+                                clients.beginRoomProjectionFences(request.conversationId)
                         }
                     },
                 )
@@ -260,6 +278,7 @@ internal class DirectAcceptedInputEffectExecutor(
                     acceptanceNotifier.notify(
                         accepted,
                         request.onAccepted,
+                        origin = request.origin,
                         publishEvent = !request.wasNewChat,
                     )
                     durableAcceptance.complete(accepted)
@@ -287,11 +306,12 @@ internal class DirectAcceptedInputEffectExecutor(
                         state.loadingChange(request.uiToken, true)
                         state.streamUpdate(request.uiToken, placeholder)
                     }
-                    if (isConversationOpen(request.conversationId)) {
+                    if (clients.isConversationOpen(request.conversationId)) {
                         if (!request.wasNewChat) {
                             request.requestScroll(request.conversationId, userMessageId)
                         }
-                        renderStore.commitGraph(
+                        clients.commitGraph(
+                            conversationId = request.conversationId,
                             committedMessages = listOf(
                                 toUiMessage(userEntity),
                                 if (runBound) placeholder
@@ -299,12 +319,13 @@ internal class DirectAcceptedInputEffectExecutor(
                             ),
                             selectedChildren = graphCommit.messageSelections,
                             streamingMessage = if (runBound) placeholder else null,
-                            roomProjectionFence = roomProjectionFence,
+                            fences = roomProjectionFences,
                         )
-                        roomProjectionFence = null
+                        roomProjectionFences = null
                     }
-                    roomProjectionFence?.let(renderStore::releaseRoomMessageProjectionFence)
-                    roomProjectionFence = null
+                    roomProjectionFences?.let(clients::releaseRoomProjectionFences)
+                    roomProjectionFences = null
+                    generateNewConversationTitleIfNeeded()
                 }
 
                 if (!runBound) {
@@ -336,15 +357,6 @@ internal class DirectAcceptedInputEffectExecutor(
                     state,
                 )
                 markStage("generation-returned")
-                val lastMessage = conversations.getMessage(modelMessageId)
-                if (
-                    request.wasNewChat &&
-                    generationSnapshot.titleGenerationEnabled &&
-                    kotlinx.coroutines.currentCoroutineContext().isActive &&
-                    lastMessage?.status != MessageStatus.ERROR
-                ) {
-                    onGenerateTitle(request.conversationId)
-                }
             }
         } catch (error: CancellationException) {
             markStage("cancelled")
@@ -391,7 +403,7 @@ internal class DirectAcceptedInputEffectExecutor(
             )
         } finally {
             markStage("release-input")
-            roomProjectionFence?.let(renderStore::releaseRoomMessageProjectionFence)
+            roomProjectionFences?.let(clients::releaseRoomProjectionFences)
             if (!durableAcceptance.isCompleted) durableAcceptance.complete(null)
             markStage("finished")
         }

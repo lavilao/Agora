@@ -118,9 +118,24 @@ class NativeBackupV5BaselineTest {
         try {
             writeBaseline(
                 file,
-                """{"agora_export_version":5,"app_version":"1.0","exported_at":"2026-09-27T05:14:46Z",""" +
+                """{"agora_export_version":${NativeBackupFormat.CURRENT_VERSION},"app_version":"1.0","exported_at":"2026-09-27T05:14:46Z",""" +
                     """"categories":["conversations"],"has_api_keys":false}""",
             )
+            assertNull(NativeBackupV5Baseline.openOrNull(file))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+    @Test
+    fun olderFormatBackupIsNotUsedAsBaseline() {
+        // Items written by an older format lack newer message fields, so they must be rebuilt.
+        val directory = Files.createTempDirectory("agora-older-format").toFile()
+        val file = File(directory, "old.agora")
+        try {
+            writeBaseline(file, MARKED_MANIFEST.replace(
+                "\"agora_export_version\":${NativeBackupFormat.CURRENT_VERSION}",
+                "\"agora_export_version\":${NativeBackupFormat.CURRENT_VERSION - 1}",
+            ))
             assertNull(NativeBackupV5Baseline.openOrNull(file))
         } finally {
             directory.deleteRecursively()
@@ -166,7 +181,7 @@ class NativeBackupV5BaselineTest {
         const val MEDIA_ENTRY = "media/images/same.png"
         // Shaped like a real export manifest, including keys the baseline does not read.
         val MARKED_MANIFEST =
-            """{"agora_export_version":5,"app_version":"1.0","exported_at":"2026-09-27T05:14:46Z",""" +
+            """{"agora_export_version":${NativeBackupFormat.CURRENT_VERSION},"app_version":"1.0","exported_at":"2026-09-27T05:14:46Z",""" +
                 """"categories":["conversations"],"has_api_keys":false,""" +
                 """"incremental_baseline":${NativeBackupFormat.INCREMENTAL_BASELINE_REVISION}}"""
     }

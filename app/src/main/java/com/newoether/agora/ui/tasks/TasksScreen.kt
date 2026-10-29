@@ -28,8 +28,6 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import com.newoether.agora.ui.motion.MotionAwareCircularProgressIndicator as CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +67,8 @@ import com.newoether.agora.viewmodel.tasks
 import kotlinx.coroutines.delay
 import java.util.Locale
 import java.util.UUID
+import com.newoether.agora.ui.components.AgoraDropdownMenu
+import com.newoether.agora.ui.components.AgoraDropdownMenuItem
 
 /**
  * Tasks feature root: a saved prompt + model you can run on demand or on a schedule.
@@ -448,18 +448,17 @@ private fun TaskCard(
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = null)
                     }
-                    DropdownMenu(
+                    AgoraDropdownMenu(
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false },
                         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        shape = RoundedCornerShape(12.dp),
                     ) {
-                        DropdownMenuItem(
+                        AgoraDropdownMenuItem(
                             text = { Text(stringResource(R.string.task_run_now)) },
                             leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
                             onClick = { menuOpen = false; onRun() },
                         )
-                        DropdownMenuItem(
+                        AgoraDropdownMenuItem(
                             text = { Text(stringResource(R.string.task_delete), color = MaterialTheme.colorScheme.error) },
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                             onClick = { menuOpen = false; onDelete() },

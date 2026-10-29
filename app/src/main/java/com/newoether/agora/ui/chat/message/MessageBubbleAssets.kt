@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import com.newoether.agora.ui.components.latexSourceForLink
 import com.newoether.agora.ui.chat.caseInsensitiveMatchRanges
 import com.newoether.agora.ui.chat.visibleMarkdownMatchRanges
 import com.newoether.agora.ui.theme.ChatType
+import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownDimens
 import com.mikepenz.markdown.compose.LocalMarkdownPadding
 import com.mikepenz.markdown.m3.markdownColor
@@ -485,8 +487,24 @@ internal fun rememberChatMarkdownAssets(
  * This renders raw code directly rather than synthesizing a Markdown fence, so commands that
  * contain backticks can never terminate or corrupt the surrounding block.
  */
+/**
+ * MarkdownTable draws the GFM delimiter row as a MarkdownDivider using dividerColor. A 0dp
+ * thickness would still render as a hairline, so the divider is made transparent instead.
+ * Table cells only hold inline content, so no other divider lives inside this scope.
+ */
 @Composable
-private fun OverflowFriendlyMarkdownTable(model: MarkdownComponentModel) {
+private fun WithoutTableHeaderDivider(content: @Composable () -> Unit) {
+    val base = LocalMarkdownColors.current
+    val colors = remember(base) {
+        object : MarkdownColors by base {
+            override val dividerColor: Color = Color.Transparent
+        }
+    }
+    CompositionLocalProvider(LocalMarkdownColors provides colors, content = content)
+}
+
+@Composable
+private fun OverflowFriendlyMarkdownTable(model: MarkdownComponentModel) = WithoutTableHeaderDivider {
     MarkdownTable(
         content = model.content,
         node = model.node,
@@ -520,7 +538,7 @@ internal fun SearchHighlightedMarkdownTable(
     spec: SearchHighlightSpec? = null,
     highlightColor: Color = SearchHighlightBackground,
     activeHighlightColor: Color = ActiveSearchHighlightBackground,
-) {
+) = WithoutTableHeaderDivider {
     MarkdownTable(
         content = model.content,
         node = model.node,

@@ -198,7 +198,7 @@ class OpenAiNativeSearchWiringTest {
         assertTrue("title host must own only the remaining width", ".weight(1f)" in normalBar)
         assertTrue(
             "visible title width must retain its existing adaptive maximum",
-            "val targetTitleCapsuleWidth = minOf(" in normalBar &&
+            "val targetTitleCapsuleWidth = if (isNewChatMode) 52.dp else minOf(" in normalBar &&
                 "TITLE_CAPSULE_MAX_WIDTH_DP.dp" in normalBar,
         )
         assertTrue("title capsule must remain start anchored", "Alignment.CenterStart" in normalBar)

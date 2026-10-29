@@ -69,6 +69,11 @@ internal fun ChatMarkdownCodeBlock(
     code: String,
     autoWrap: Boolean,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
+    language: String? = null,
+    copyEnabled: Boolean = true,
+    canCopy: () -> Boolean = { true },
+    copyModifier: Modifier = Modifier,
 ) {
     val assets = rememberChatMarkdownAssets(MaterialTheme.colorScheme.onSurface)
     CompositionLocalProvider(
@@ -86,7 +91,13 @@ internal fun ChatMarkdownCodeBlock(
             code = code,
         ) {
             Column {
-                ChatCodeBlockHeader(language = null, code = code)
+                if (showHeader) ChatCodeBlockHeader(
+                    language = language,
+                    code = code,
+                    enabled = copyEnabled,
+                    canCopy = canCopy,
+                    copyModifier = copyModifier,
+                )
                 val codeStyle = assets.renderContext.typography.code.copy(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -289,7 +300,13 @@ private fun SearchHighlightedMarkdownCodeText(
  * content slot while its built-in header stays disabled.
  */
 @Composable
-private fun ChatCodeBlockHeader(language: String?, code: String) {
+private fun ChatCodeBlockHeader(
+    language: String?,
+    code: String,
+    enabled: Boolean = true,
+    canCopy: () -> Boolean = { true },
+    copyModifier: Modifier = Modifier,
+) {
     val clipboardManager = LocalClipboardManager.current
     val textColor = LocalMarkdownColors.current.text
     val copyLabel = stringResource(R.string.copy)
@@ -311,12 +328,12 @@ private fun ChatCodeBlockHeader(language: String?, code: String) {
             )
         }
         Box(
-            modifier = Modifier
+            modifier = copyModifier
                 .size(24.dp)
                 .clip(CircleShape)
                 .semantics { role = Role.Button }
-                .clickable(onClickLabel = copyLabel) {
-                    clipboardManager.setText(AnnotatedString(code))
+                .clickable(enabled = enabled, onClickLabel = copyLabel) {
+                    if (canCopy()) clipboardManager.setText(AnnotatedString(code))
                 },
             contentAlignment = Alignment.Center,
         ) {

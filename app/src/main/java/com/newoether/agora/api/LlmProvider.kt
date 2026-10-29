@@ -75,8 +75,13 @@ sealed class StreamEvent {
     ) : StreamEvent()
     data class ToolCallsRequest(val calls: List<ToolCallRequest>) : StreamEvent()
     /** Emitted before one provider retry. [attempt] is the 1-based retry number, while
-     *  [maxAttempts] is the retry budget and excludes the initial request. */
-    data class Retrying(val attempt: Int, val maxAttempts: Int) : StreamEvent()
+     *  [maxAttempts] is the retry budget and excludes the initial request.
+     *  [resetCurrentAttempt] replaces only this request's failed partial output. */
+    data class Retrying(
+        val attempt: Int,
+        val maxAttempts: Int,
+        val resetCurrentAttempt: Boolean = false,
+    ) : StreamEvent()
 }
 
 data class ProviderRequestInput(
@@ -91,8 +96,8 @@ fun interface ProviderRequestResolver {
     ): ProviderRequestInput
 }
 
-suspend fun ProviderConfig.resolveRequest(messages: List<ChatMessage>): ProviderRequestInput =
-    requestResolver?.resolve(messages, this)
+suspend fun ProviderConfig.resolveRequest(messages: List<ChatMessage>): ProviderRequestInput {
+    val resolved = requestResolver?.resolve(messages, this)
         ?: ProviderRequestInput(
             messages = prepareMessages(
                 messages,
@@ -104,6 +109,9 @@ suspend fun ProviderConfig.resolveRequest(messages: List<ChatMessage>): Provider
             ),
             systemPrompt = systemPrompt,
         )
+    // Custom request resolvers must obey the same wire-name compatibility boundary.
+    return resolved.copy(messages = com.newoether.agora.api.util.canonicalToolNames(resolved.messages))
+}
 
 data class ProviderConfig(
     val apiKey: String,
@@ -372,6 +380,8 @@ data class OpenAiMessage(
     /** Provider-scoped raw Responses output items restored only by the Responses transport. */
     @Transient val responseOutputItems: List<JsonObject>? = null,
     @Transient val responseOutputItemProvider: String? = null,
+    /** Model that produced [responseOutputItems]; another model cannot read them back. */
+    @Transient val responseOutputItemModel: String? = null,
 )
 
 @Serializable

@@ -2,10 +2,13 @@ package com.newoether.agora.viewmodel
 
 import android.content.Context
 import com.newoether.agora.data.repository.ConversationRepository
+import com.newoether.agora.data.repository.observeMessagesByIds
+import com.newoether.agora.data.repository.loadReferencedToolRounds
 import com.newoether.agora.model.ChatMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 internal class ConversationMessagePayloadHydration(
@@ -18,11 +21,24 @@ internal class ConversationMessagePayloadHydration(
     fun observeMessage(
         messageId: String,
         transform: (ChatMessage) -> ChatMessage = { it },
-    ): Flow<ChatMessage?> = conversations.observeMessage(messageId).map { entity ->
+    ): Flow<ChatMessage?> = conversations.observeMessage(messageId).distinctUntilChanged().map { entity ->
         entity?.takeIf { it.id == messageId }?.let { row ->
-            projector.project { transform(row.toUiChatMessage(appContext)) }
+            projector.project {
+                transform(row.toUiChatMessage(appContext, conversations.loadReferencedToolRounds(row)))
+            }
         }
     }
+
+    fun observeMessages(
+        conversationId: String,
+        messageIds: List<String>,
+        transform: (ChatMessage) -> ChatMessage = { it },
+    ): Flow<List<ChatMessage>> = conversations.observeMessagesByIds(conversationId, messageIds)
+        .distinctUntilChanged().map { entities ->
+            projector.projectAll(entities) { entity ->
+                transform(entity.toUiChatMessage(appContext, conversations.loadReferencedToolRounds(entity)))
+            }
+        }
 
     suspend fun loadMessages(
         conversationId: String,
@@ -35,7 +51,7 @@ internal class ConversationMessagePayloadHydration(
             .associateBy { entity -> entity.id }
         val orderedEntities = requestedIds.mapNotNull(entitiesById::get)
         return projector.projectAll(orderedEntities) { entity ->
-            transform(entity.toUiChatMessage(appContext))
+            transform(entity.toUiChatMessage(appContext, conversations.loadReferencedToolRounds(entity)))
         }
     }
 }

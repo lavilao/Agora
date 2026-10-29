@@ -54,6 +54,46 @@ class SystemPromptMigrationTest {
         assertEquals(migrated, coldStart(migrated))
     }
 
+    @Test
+    fun everyHistoricalDefaultUpgradesButAnyCustomizedWrapperOrTextRemains() {
+        val versions = listOf(
+            DefaultSystemPrompt.previousVersionForMigration(Locale.ENGLISH),
+            DefaultSystemPrompt.versionBeforeMathRuleForMigration(Locale.ENGLISH),
+            DefaultSystemPrompt.versionBeforeToolRenameForMigration(Locale.ENGLISH),
+            DefaultSystemPrompt.versionBeforeToolGuidesForMigration(Locale.ENGLISH),
+            DefaultSystemPrompt.versionWithToolGuidesForMigration(Locale.ENGLISH),
+        )
+        val current = DefaultSystemPrompt.create(Locale.ENGLISH)
+        versions.forEachIndexed { index, original ->
+            val version = original.copy(id = "historic-$index")
+            val migrated = coldStart(version)
+            assertEquals(version.id, migrated.id)
+            assertEquals(version.title, migrated.title)
+            assertEquals(current.resolvedSystemItems.map { it.type to it.value },
+                migrated.resolvedSystemItems.map { it.type to it.value })
+            assertEquals(version.resolvedUserItems.map { it.type to it.value },
+                migrated.resolvedUserItems.map { it.type to it.value })
+            assertEquals(version.resolvedAssistantItems.map { it.type to it.value },
+                migrated.resolvedAssistantItems.map { it.type to it.value })
+            assertEquals(migrated, coldStart(migrated))
+            listOf(
+                version.copy(systemItems = version.resolvedSystemItems + text(" ")),
+                version.copy(userItems = listOf(text("Custom prefix")) + version.resolvedUserItems),
+                version.copy(assistantItems = version.resolvedAssistantItems + text("Custom suffix")),
+                version.copy(title = "My Default"),
+            ).forEach { customized ->
+                val restored = coldStart(customized)
+                assertEquals(customized.resolvedSystemItems.map { it.type to it.value },
+                    restored.resolvedSystemItems.map { it.type to it.value })
+                assertEquals(customized.resolvedUserItems.map { it.type to it.value },
+                    restored.resolvedUserItems.map { it.type to it.value })
+                assertEquals(customized.resolvedAssistantItems.map { it.type to it.value },
+                    restored.resolvedAssistantItems.map { it.type to it.value })
+                assertEquals(restored, coldStart(restored))
+            }
+        }
+    }
+
     private fun coldStart(entry: SystemPromptEntry): SystemPromptEntry {
         val persisted = Json.encodeToString(listOf(entry))
         return migrateSystemPromptsOnStartup(

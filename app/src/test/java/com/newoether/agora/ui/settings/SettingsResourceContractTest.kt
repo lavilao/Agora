@@ -10,9 +10,30 @@ import org.w3c.dom.Element
 
 class SettingsResourceContractTest {
     @Test
+    fun retiredPromptGuideLabelsAreAbsentAndUnknownRowsKeepTheExistingFallback() {
+        val resources = locateResourceDirectory()
+        val localePattern = Regex("""values(?:-[a-z]{2,3}(?:-r[A-Z]{2})?)?""")
+        val locales = resources.listFiles().orEmpty().filter {
+            it.isDirectory && localePattern.matches(it.name)
+        }
+        assertEquals(12, locales.size)
+        locales.forEach { locale ->
+            val values = readStringValues(locale)
+            assertFalse(locale.name, values.keys.any { it.startsWith("template_variable_tool_guide_") })
+            assertTrue(locale.name, !values["unknown"].isNullOrBlank())
+            assertTrue(locale.name, !values["prompts_template_default_desc"].isNullOrBlank())
+        }
+        val editor = readSettingsSource("SystemPromptEditorPage.kt")
+        assertFalse(editor.contains("TOOL_GUIDE_"))
+        assertTrue(editor.contains("else -> stringResource(R.string.unknown)"))
+        assertTrue(editor.contains("onDelete = if (isPrompt) null"))
+        assertTrue(editor.contains("PredefinedVariables.EXAMPLE_VALUES"))
+    }
+
+    @Test
     fun anthropicCacheControlsFollowProviderScopeAndAppearanceInteractions() {
         val detail = readSettingsSource("SettingsProviderDetailPage.kt")
-        val gate = "if (isAnthropicProtocolProvider(currentName, customProviders))"
+        val gate = "if (supportsPromptCacheSetting(currentName, customProviders))"
         val apiKeys = readSettingsSource("ProviderApiKeysSettings.kt")
         val keysPosition = detail.indexOf("ProviderApiKeysSettings(")
         assertTrue(keysPosition >= 0 && detail.indexOf(gate) > keysPosition)
@@ -23,7 +44,12 @@ class SettingsResourceContractTest {
         assertTrue(controls.contains("Switch(checked = cacheEnabled, onCheckedChange = null)"))
         assertTrue(controls.contains("role = Role.Switch"))
         assertTrue(controls.contains("setAnthropicCacheEnabled(providerId, it)"))
-        assertTrue(controls.indexOf("if (cacheEnabled)") < controls.indexOf("R.string.provider_cache_duration"))
+        // OpenAI endpoints share the switch; only Anthropic exposes the TTL picker.
+        assertTrue(controls.contains("val cacheTtlSupported = isAnthropicProtocolProvider(currentName, customProviders)"))
+        assertTrue(
+            controls.indexOf("if (cacheEnabled && cacheTtlSupported)") in
+                0 until controls.indexOf("R.string.provider_cache_duration"),
+        )
         assertTrue(controls.contains("listOf(\"5m\", \"1h\")"))
         assertTrue(controls.contains("setAnthropicCacheTtl(providerId, ttl)"))
         assertTrue(controls.contains("Modifier.clickable { expanded = true }"))
@@ -31,7 +57,7 @@ class SettingsResourceContractTest {
         assertTrue(controls.contains("Icons.Default.Check"))
         assertTrue(controls.contains("MaterialTheme.colorScheme.surfaceContainer"))
         assertTrue(controls.contains("tonalElevation = 16.dp"))
-        assertTrue(controls.contains("RoundedCornerShape(12.dp)"))
+        assertTrue(controls.contains("AgoraDropdownMenu("))
         assertFalse(controls.contains("R.string.save"))
         val resources = locateResourceDirectory()
         val defaults = readStringValues(File(resources, "values"))
@@ -64,6 +90,41 @@ class SettingsResourceContractTest {
                 missingKeys.isEmpty(),
             )
         }
+    }
+
+    @Test
+    fun sshKeyAndRemoteEmptyStateCopyIsLocalizedWithExpectedEnglishCasing() {
+        val resources = locateResourceDirectory()
+        val expected = linkedMapOf(
+            "shell_authentication" to "Authentication",
+            "shell_ssh_host_key" to "Host Key",
+            "shell_ssh_auth_method" to "Authentication method",
+            "shell_ssh_auth_private_key" to "Private Key",
+            "shell_ssh_import_private_key" to "Import Private Key",
+            "shell_ssh_private_key_desc" to "Import an SSH private key up to 256 KiB.",
+            "shell_ssh_private_key_passphrase" to "Key passphrase",
+            "shell_ssh_private_key_invalid" to "Invalid or unsupported SSH private key",
+            "shell_ssh_private_key_too_large" to "Private key exceeds 256 KiB",
+            "shell_ssh_private_key_read_failed" to "Could not read private key",
+            "shell_ssh_private_key_passphrase_invalid" to "Incorrect key passphrase",
+            "remote_new_chat_hint" to "Start a Conversation",
+            "remote_empty_connecting_hint" to "Connecting to Codex",
+            "remote_empty_offline_hint" to "Codex Is Offline",
+            "remote_empty_retry_hint" to "Unable to Load Conversation",
+            "remote_empty_conversation_hint" to "No Messages Yet",
+        )
+        val defaults = readStringValues(File(resources, "values"))
+        expected.forEach { (key, value) -> assertEquals(key, value, defaults[key]) }
+        val localePattern = Regex("""values-[a-z]{2,3}(?:-r[A-Z]{2})?""")
+        resources.listFiles().orEmpty()
+            .filter { it.isDirectory && localePattern.matches(it.name) }
+            .forEach { locale ->
+                val values = readStringValues(locale)
+                expected.forEach { (key, english) ->
+                    assertTrue("${locale.name}: $key", !values[key].isNullOrBlank())
+                    assertFalse("${locale.name}: $key must be translated", values[key] == english)
+                }
+            }
     }
 
     @Test
@@ -114,8 +175,8 @@ class SettingsResourceContractTest {
         val values = readStringValues(File(locateResourceDirectory(), "values"))
         val expected = linkedMapOf(
             "mcp_delete_header" to "Delete Header",
-            "mcp_show_header_value" to "Show Header Value",
-            "mcp_hide_header_value" to "Hide Header Value",
+            "secret_show" to "Show Value",
+            "secret_hide" to "Hide Value",
             "task_model_default" to "App Default",
             "task_run_now" to "Run Now",
             "task_delete" to "Delete Task",

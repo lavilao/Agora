@@ -529,8 +529,8 @@ internal class ApplicationUiSourceContractTest : UiSourceContractFixture() {
         val appearance = sourceFile(
             "app/src/main/java/com/newoether/agora/ui/settings/SettingsAppearancePage.kt",
         )
-        val assistant = sourceFile(
-            "app/src/main/java/com/newoether/agora/ui/chat/message/AssistantMessageContent.kt",
+        val presentation = sourceFile(
+            "app/src/main/java/com/newoether/agora/ui/chat/message/AssistantMessagePresentation.kt",
         )
         val messageItem = sourceFile(
             "app/src/main/java/com/newoether/agora/ui/chat/message/MessageItem.kt",
@@ -555,7 +555,7 @@ internal class ApplicationUiSourceContractTest : UiSourceContractFixture() {
         assertTrue(toolBlocksIndex >= 0)
         assertTrue(thinkingSegmentIndex > toolBlocksIndex)
         assertTrue(autoExpandIndex > thinkingSegmentIndex)
-        assertTrue(assistant.contains("ThinkingSegmentDisplayModes.effectiveMode("))
+        assertTrue(presentation.contains("ThinkingSegmentDisplayModes.effectiveMode("))
         assertTrue(messageItem.contains("ThinkingSegmentDisplayModes.allowsAutoExpand("))
     }
 

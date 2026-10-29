@@ -55,6 +55,7 @@ internal class DeferredAskUserAnswerDelivery(
                     modelId = modelId,
                     attachments = emptyList(),
                     runId = UUID.randomUUID().toString(),
+                    source = answer.source,
                 ),
             )
         }

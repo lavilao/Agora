@@ -72,7 +72,15 @@ class DataExporter(
         val id: String,
         val title: String,
         val lastUpdated: Long,
+        val createdAt: Long? = null,
         val dataChangedAt: Long = 0L,
+        val isPinned: Boolean = false,
+        val parentConversationId: String? = null,
+        val subagentResultJson: String? = null,
+        val subagentResultId: String? = null,
+        val subagentResultStatus: String? = null,
+        val subagentDeliveredResultId: String? = null,
+        val todoJson: String? = null,
         val selectedBranchesJson: String? = null,
         val systemPromptId: String? = null,
         val modelId: String? = null,
@@ -154,6 +162,8 @@ class DataExporter(
         val runId: String,
         val runSequence: Long,
         val consumedAtPass: Int? = null,
+        /** Added in backup v6; absent in older archives. */
+        val sourceJson: String? = null,
     )
 
     data class ExportResult(
@@ -260,7 +270,15 @@ class DataExporter(
                                         id = conversation.id,
                                         title = conversation.title,
                                         lastUpdated = conversation.lastUpdated,
+                                        createdAt = conversation.createdAt,
                                         dataChangedAt = conversation.dataChangedAt,
+                                        isPinned = conversation.isPinned,
+                                        parentConversationId = conversation.parentConversationId,
+                                        subagentResultJson = conversation.subagentResultJson,
+                                        subagentResultId = conversation.subagentResultId,
+                                        subagentResultStatus = conversation.subagentResultStatus,
+                                        subagentDeliveredResultId = conversation.subagentDeliveredResultId,
+                                        todoJson = conversation.todoJson,
                                         selectedBranchesJson = conversation.selectedBranchesJson,
                                         systemPromptId = conversation.systemPromptId,
                                         modelId = conversation.modelId,
@@ -328,6 +346,7 @@ class DataExporter(
                                         runId = message.runId,
                                         runSequence = message.runSequence,
                                         consumedAtPass = message.consumedAtPass,
+                                        sourceJson = message.sourceJson,
                                     ),
                                 ),
                             )

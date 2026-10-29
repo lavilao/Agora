@@ -317,7 +317,7 @@ internal fun SmoothBottomSheet(
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+                    shape = BOTTOM_SHEET_SHAPE,
                     shadowElevation = 8.dp,
                     color = MaterialTheme.colorScheme.surfaceContainer,
                 ) {

@@ -22,5 +22,32 @@
 -keep class com.jcraft.jsch.** { *; }
 -dontwarn com.jcraft.jsch.**
 
+# JLaTeXMath creates environment macro handlers and resolves executeMacro by name.
+-keep class org.scilab.forge.jlatexmath.NewCommandMacro {
+    public <init>();
+    public java.lang.String executeMacro(org.scilab.forge.jlatexmath.TeXParser, java.lang.String[]);
+}
+
 # Compose
 -dontwarn androidx.compose.**
+
+# JNI (llama): native code reads these classes' fields and constructors, and calls the
+# callback methods, by name.
+-keep class com.newoether.agora.api.NativeChatCallback { *; }
+-keep class * implements com.newoether.agora.api.NativeChatCallback { *; }
+# JNI (cactus): the native bridge resolves onToken via GetMethodID by exact name.
+-keep interface com.newoether.agora.api.CactusTokenStream { *; }
+-keep class * implements com.newoether.agora.api.CactusTokenStream { *; }
+-keep class com.newoether.agora.api.ChatTemplateToolCall { *; }
+-keep class com.newoether.agora.api.ChatTemplateMessage { *; }
+-keep class com.newoether.agora.api.ChatTemplateTool { *; }
+-keep class com.newoether.agora.api.LlamaChatTemplateRequest { *; }
+-keep class com.newoether.agora.api.ChatTemplateGrammarTrigger { *; }
+-keep class com.newoether.agora.api.LlamaChatTemplateResult { *; }
+-keepclasseswithmembernames class com.newoether.agora.** { native <methods>; }
+# Reflection: flavor sandbox factories (AppContainer) and the screenshot fixture (MainActivity).
+-keep class com.newoether.agora.sandbox.FdroidSandboxManagerFactory { <init>(...); }
+-keep class com.newoether.agora.sandbox.PlaySandboxManagerFactory { <init>(...); }
+-keep class com.newoether.agora.screenshot.ScreenshotFixture { *; }# Ktor server: JVM-only debug detection (DevelopmentMode), absent on Android.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean

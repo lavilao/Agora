@@ -384,16 +384,16 @@ class GenerationApiPathBuilderTest {
         )
         val message = message("user", null, 0, Participant.USER)
 
-        val official = builder.build(
+        val enabled = builder.build(
             GenerationApiPathRequest(
                 parentId = message.id,
                 conversationId = "conversation",
-                config = generationConfig(Constants.PROVIDER_OPENAI),
+                config = generationConfig("OpenAI Compatible").copy(promptCacheKeyEnabled = true),
                 context = GenerationContext(),
                 loadedMessages = listOf(message),
             ),
         )
-        val compatible = builder.build(
+        val disabled = builder.build(
             GenerationApiPathRequest(
                 parentId = message.id,
                 conversationId = "conversation",
@@ -403,8 +403,8 @@ class GenerationApiPathBuilderTest {
             ),
         )
 
-        assertEquals("conversation", official.providerConfig.promptCacheKey)
-        assertEquals(null, compatible.providerConfig.promptCacheKey)
+        assertEquals("conversation", enabled.providerConfig.promptCacheKey)
+        assertEquals(null, disabled.providerConfig.promptCacheKey)
     }
 
     private fun generationConfig(providerName: String = "provider") = GenerationConfig(

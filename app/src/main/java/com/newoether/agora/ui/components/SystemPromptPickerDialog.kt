@@ -79,7 +79,7 @@ internal fun SystemPromptPickerDialog(
                 item {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { selectedPromptId = null }.padding(8.dp)
+                        modifier = Modifier.fillMaxWidth().optionClickable { selectedPromptId = null }.padding(8.dp)
                     ) {
                         RadioButton(
                             selected = selectedPromptId == null,
@@ -92,7 +92,7 @@ internal fun SystemPromptPickerDialog(
                 items(systemPrompts, key = { it.id }) { prompt ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { selectedPromptId = prompt.id }.padding(8.dp)
+                        modifier = Modifier.fillMaxWidth().optionClickable { selectedPromptId = prompt.id }.padding(8.dp)
                     ) {
                         RadioButton(
                             selected = selectedPromptId == prompt.id,

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,8 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
@@ -66,6 +71,7 @@ fun ThinkingControlPanel(
     allowDisable: Boolean = true,
     showBudgetControls: Boolean = true,
     settingsRevision: Long = 0,
+    knownSelection: Boolean = true,
 ) {
     val normalizedEffort = if (availableEfforts == null) ThinkingLevels.normalize(level) else level
     // A caller that knows the selected model passes that model's accepted efforts. Without one
@@ -88,6 +94,8 @@ fun ThinkingControlPanel(
     LaunchedEffect(normalizedEffort, effortGate) {
         effortGate.reconcile(normalizedEffort)
     }
+    var choosingEffort by remember(knownSelection, normalizedEffort, availableEfforts, settingsRevision) { mutableStateOf(false) }
+    val showSelection = knownSelection || choosingEffort
     val sliderPosition = effortGate.displayed
     var showAdvanced by rememberSaveable { mutableStateOf(budgetEnabled) }
     val sliderEnabled = (enabled || !showEnabledToggle) && !budgetEnabled && controlsEnabled && availableEfforts?.isEmpty() != true
@@ -150,7 +158,7 @@ fun ThinkingControlPanel(
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = effortLabel(effortAt(sliderPosition.roundToInt())),
+                        text = if (showSelection) effortLabel(effortAt(sliderPosition.roundToInt())) else "",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -164,10 +172,15 @@ fun ThinkingControlPanel(
                 )
                 Slider(
                     value = sliderPosition,
-                    onValueChange = { if (sliderEnabled) effortGate.updateFromGesture(it) },
+                    onValueChange = {
+                        if (sliderEnabled) {
+                            choosingEffort = true
+                            effortGate.updateFromGesture(it.coerceIn(providerRange.first.toFloat(), maxIndex.toFloat()))
+                        }
+                    },
                     onValueChangeFinished = {
                         if (sliderEnabled) {
-                            val idx = sliderPosition.roundToInt().coerceIn(providerRange)
+                            val idx = effortGate.displayed.roundToInt().coerceIn(providerRange)
                             val effort = effortAt(idx)
                             if (effort == normalizedEffort) {
                                 effortGate.settleWithoutWrite(normalizedEffort, idx.toFloat())
@@ -175,13 +188,20 @@ fun ThinkingControlPanel(
                                 effortGate.expectPersisted(effort, idx.toFloat())
                             }
                             if (availableEfforts == null) onEnabledChange(true)
-                            onLevelChange(effort)
+                            if (effort != normalizedEffort || !knownSelection) onLevelChange(effort)
                         }
                     },
                     valueRange = 0f..maxIndex.coerceAtLeast(1).toFloat(),
                     steps = if (maxIndex > 0) maxIndex - 1 else 0,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    enabled = sliderEnabled && maxIndex > 0
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).semantics {
+                        if (!showSelection) progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                    },
+                    colors = if (showSelection) SliderDefaults.colors() else SliderDefaults.colors(
+                        thumbColor = Color.Transparent, disabledThumbColor = Color.Transparent,
+                        activeTrackColor = MaterialTheme.colorScheme.secondaryContainer,
+                        activeTickColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+                    enabled = sliderEnabled && (maxIndex > 0 || !knownSelection)
                 )
             }
         }
@@ -392,5 +412,6 @@ internal fun effortLabel(effort: String): String = when (effort) {
     "high" -> stringResource(R.string.gen_thinking_level_high)
     "xhigh" -> stringResource(R.string.gen_thinking_level_xhigh)
     "max" -> stringResource(R.string.gen_thinking_level_max)
+    "ultra" -> "Ultra"
     else -> effort
 }

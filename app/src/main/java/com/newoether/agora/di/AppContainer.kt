@@ -29,12 +29,18 @@ import com.newoether.agora.service.MaintenanceDebtWorker
 import com.newoether.agora.service.AskUserNotifier
 import com.newoether.agora.service.ShellConfirmationNotifier
 import com.newoether.agora.service.TaskWorker
+import com.newoether.agora.viewmodel.ChatRuntime
 import com.newoether.agora.viewmodel.ChatViewModel
 import com.newoether.agora.viewmodel.ChatViewModelFactory
 import com.newoether.agora.viewmodel.ConversationStateRegistry
 import com.newoether.agora.viewmodel.ProviderRegistry
 import com.newoether.agora.viewmodel.ShellConfirmationController
+import com.newoether.agora.data.dataStore
+import com.newoether.agora.webui.WebUiController
+import com.newoether.agora.webui.WebUiSettingsStore
+import com.newoether.agora.util.appLanguageResources
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -89,6 +95,12 @@ class AppContainer(
         ConversationRepository(
             chatDao = chatDao,
             database = database,
+            subagentGenerationIds = conversationExecutionCoordinator.admittedGenerationIds,
+            generationErrorFormatter = { raw ->
+                com.newoether.agora.viewmodel.normalizePersistedGenerationErrorText(
+                    appContext, raw.ifBlank { appContext.getString(com.newoether.agora.R.string.failed_to_generate) },
+                )
+            },
             semanticModelSnapshotProvider = {
                 settingsRepository.awaitInitialLoad()
                 semanticModelSnapshot(
@@ -191,12 +203,23 @@ class AppContainer(
 
     /** Serializes every foreground/background generation touching the same conversation. */
     val conversationExecutionCoordinator: ConversationExecutionCoordinator by lazy {
-        ConversationExecutionCoordinator()
+        ConversationExecutionCoordinator(
+            parentConversationId = { id ->
+                chatDao.observeParentConversationId(id).first()?.also {
+                    settingsRepository.awaitInitialLoad()
+                }
+            },
+            subagentMaxConcurrent = settingsRepository.subagentMaxConcurrent,
+        )
     }
 
     /** Foreground generation slots survive Activity/ViewModel recreation within this process. */
     val conversationStateRegistry: ConversationStateRegistry by lazy {
-        ConversationStateRegistry()
+        ConversationStateRegistry { attachments ->
+            appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                conversationRepository.deleteUnreferencedDraftAttachmentFiles(attachments)
+            }
+        }
     }
 
     val mcpRegistry: McpRegistry by lazy {
@@ -264,7 +287,39 @@ class AppContainer(
             askUser = askUserController,
             generationRegistry = conversationStateRegistry,
             pauseConversationLoop = { conversationId -> loopManager.stopLoop(conversationId) },
+            additionalTools = { listOf(automationToolProvider, subagentToolProvider) },
         )
+    }
+
+    internal val subagentCompletionDelivery by lazy {
+        com.newoether.agora.viewmodel.SubagentCompletionQueueDelivery(
+            conversationRepository, conversationStateRegistry,
+            fallbackModelId = { settingsRepository.selectedModel.value },
+        )
+    }
+
+    val subagentManager: com.newoether.agora.automation.SubagentManager by lazy {
+        com.newoether.agora.automation.SubagentManager(
+            conversations = conversationRepository,
+            settings = settingsRepository,
+            transfers = conversationSettingsTransfers,
+            engine = taskExecutionEngine,
+            registry = conversationStateRegistry,
+            coordinator = conversationExecutionCoordinator,
+            gate = automationExecutionGate,
+            scope = appScope,
+            enqueueCompletions = { parentId ->
+                // Evaluated only on a completion/open event, after AppContainer lazy creation.
+                chatRuntime
+                subagentCompletionDelivery.deliver(parentId)
+            },
+            enqueueMessage = { id, text, context -> chatRuntime.enqueueSubagentMessage(id, text, context) },
+            stopLoop = { loopManager.stopLoop(it) },
+            deleteIdleChild = { id, parentId -> chatRuntime.deleteIdleSubagent(id, parentId) },
+        )
+    }
+    val subagentToolProvider: com.newoether.agora.tool.SubagentToolProvider by lazy {
+        com.newoether.agora.tool.SubagentToolProvider(subagentManager)
     }
 
     val taskManager: TaskManager by lazy {
@@ -301,7 +356,7 @@ class AppContainer(
         )
     }
 
-    /** Foreground-only provider: headless automation cannot recursively create automation. */
+    /** Scheduled contexts disable this provider; delegated contexts inherit the parent's switch. */
     val automationToolProvider: AutomationToolProvider by lazy {
         AutomationToolProvider(taskManager, loopManager, { settingsManager.systemPrompts.first() }) {
             settingsManager.automationToolsEnabled.first()
@@ -318,16 +373,173 @@ class AppContainer(
         AutoBackupManager(appContext, settingsManager, memoryManager, skillManager)
     }
 
+    // Process-scoped chat runtime shared by every client (phone UI now, WebUI later).
+    val chatRuntime: ChatRuntime by lazy {
+        ChatRuntime(
+            application = application,
+            appContext = appContext,
+            conversations = conversationRepository,
+            settings = settingsRepository,
+            memoryManager = memoryManager,
+            skillManager = skillManager,
+            sandboxFactory = sandboxManagerFactory,
+            automationToolProvider = automationToolProvider,
+            subagentToolProvider = subagentToolProvider,
+            subagentManager = subagentManager,
+            mcpToolProvider = mcpToolProvider,
+            askUser = askUserController,
+            shellConfirmation = shellConfirmationController,
+            registry = conversationStateRegistry,
+            providerRegistry = providerRegistry,
+            localProvider = localProvider,
+            executionCoordinator = conversationExecutionCoordinator,
+            loopManager = loopManager,
+            taskExecutionEngine = taskExecutionEngine,
+            scope = appScope,
+        )
+    }
+    // WebUI remote control: settings, authentication and the embedded server.
+    internal val webUi: WebUiController by lazy {
+        WebUiController(
+            appContext = appContext,
+            store = WebUiSettingsStore(appContext.dataStore),
+            scope = appScope,
+            // No-backup storage: the TLS key never leaves the device.
+            certificates = com.newoether.agora.webui.WebUiCertificateStore(
+                directory = java.io.File(appContext.noBackupFilesDir, "webui"),
+                seal = com.newoether.agora.util.SecretCrypto::encrypt,
+                unseal = com.newoether.agora.util.SecretCrypto::decrypt,
+                addresses = WebUiController::interfaceAddresses,
+            ),
+            syncSession = { login, incoming, send -> webUiSync.serve(login, incoming, send) },
+            upload = { login, id, seq, name, mime, type, size, input -> webUiSync.upload(login, id, seq, name, mime, type, size, input) },
+            previewAttachment = { login, connection, seq, id, kind, index, consume ->
+                webUiSync.previewAttachment(login, connection, seq, id, kind, index, consume)
+            },
+            toolImages = com.newoether.agora.webui.WebUiToolImages(
+                directory = java.io.File(appContext.filesDir, "tool-media"),
+                attachmentDirectory = appContext.filesDir,
+                loadMessage = { conversationId, messageId ->
+                    com.newoether.agora.viewmodel.ConversationMessagePayloadHydration(
+                        conversations = conversationRepository,
+                        appContext = appContext,
+                    ).loadMessages(conversationId, listOf(messageId)).singleOrNull()
+                },
+            ),
+        )
+    }
+    // Built on the first browser connection, so app start never touches conversation data here.
+    private val webUiSync: com.newoether.agora.webui.WebUiSync by lazy {
+        com.newoether.agora.webui.WebUiSync(
+            conversations = conversationRepository,
+            registry = conversationStateRegistry,
+            executionCoordinator = conversationExecutionCoordinator,
+            hydration = com.newoether.agora.viewmodel.ConversationMessagePayloadHydration(
+                conversations = conversationRepository,
+                appContext = appContext,
+            ),
+            customProviders = settingsRepository.customProviders,
+            openChatSession = { scope ->
+                com.newoether.agora.webui.WebUiChatSession(
+                    generation = chatRuntime.messageGeneration,
+                    generationStop = chatRuntime.generationStop,
+                    clients = chatRuntime.clients,
+                    conversations = conversationRepository,
+                    registry = conversationStateRegistry,
+                    executionCoordinator = conversationExecutionCoordinator,
+                    settings = settingsRepository,
+                    transfers = conversationSettingsTransfers,
+                    attachmentProcessor = com.newoether.agora.viewmodel.AttachmentImportProcessor(application),
+                    scope = scope,
+                    uploadDirectory = appContext.filesDir,
+                    compactFailureMessage = { com.newoether.agora.viewmodel.compactFailureMessage(appContext, it) },
+                    onConversationOpened = chatRuntime.onConversationOpened,
+                    allowLocalSandbox = { sandboxManagerFactory?.isAvailable() == true && settingsRepository.sandboxEnabled.value },
+                    sandboxHomeDir = { sandboxManagerFactory?.takeIf { it.isAvailable() }?.let { java.io.File(appContext.filesDir, "sandbox-home") } },
+                )
+            },
+            forkShare = chatRuntime.conversationForkShare,
+            conversationLifecycle = chatRuntime.conversationLifecycle,
+            generation = chatRuntime.messageGeneration,
+            askUser = askUserController,
+            shellConfirmation = shellConfirmationController,
+            contextAccounting = com.newoether.agora.webui.WebUiContextAccounting(
+                conversations = conversationRepository,
+                requestBuilder = chatRuntime.requestBuilder,
+                generationManager = { chatRuntime.generationManager },
+                generationErrorFormatter = { raw ->
+                    com.newoether.agora.viewmodel.normalizePersistedGenerationErrorText(appContext, raw)
+                },
+                compactThresholdPercent = settingsRepository.contextCompactThresholdPercent,
+                compactEnabled = settingsRepository.contextCompactEnabled,
+            ),
+            search = { query ->
+                if (settingsRepository.manualSearchMethod.value == com.newoether.agora.util.Constants.SEARCH_METHOD_RAG) {
+                    com.newoether.agora.viewmodel.SemanticSearchService(
+                        settings = settingsRepository,
+                        activeEmbeddingConfig = { chatRuntime.ragManager.activeEmbeddingModel.value },
+                        resolveEmbeddingApiKey = chatRuntime.ragManager::resolveEmbeddingApiKey,
+                        search = chatRuntime.generationManager::semanticSearch,
+                    ).search(query, 20)
+                } else conversationRepository.searchMessages(query, 20).map { it to 0f }
+            },
+            display = kotlinx.coroutines.flow.combine(
+                settingsRepository.appLanguage,
+                settingsRepository.toolCallDisplayMode,
+                settingsRepository.thinkingSegmentDisplayMode,
+                settingsRepository.autoExpandActiveGroup,
+                // combine takes at most five typed flows, so the two Markdown switches travel as a pair.
+                kotlinx.coroutines.flow.combine(
+                    settingsRepository.parseInlineDollarMath,
+                    settingsRepository.autoWrapCodeBlocks,
+                    ::Pair,
+                ),
+            ) { language, toolMode, thinkingMode, autoExpand, (inlineMath, autoWrap) ->
+                com.newoether.agora.webui.WebDisplayContext(
+                    resources = appContext.appLanguageResources(language),
+                    toolCallDisplayMode = toolMode,
+                    thinkingSegmentDisplayMode = thinkingMode,
+                    autoExpandActiveGroup = autoExpand,
+                    parseInlineDollarMath = inlineMath,
+                    autoWrapCodeBlocks = autoWrap,
+                )
+            }.combine(
+                kotlinx.coroutines.flow.combine(
+                    settingsRepository.blurEffectsEnabled,
+                    settingsRepository.reduceMotion,
+                    ::Pair,
+                ),
+            ) { context, (blur, reduceMotion) ->
+                context.copy(blurEffectsEnabled = blur, reduceMotion = reduceMotion)
+            }.combine(
+                kotlinx.coroutines.flow.combine(
+                    settingsRepository.modelAliases,
+                    settingsRepository.modelProviderNames,
+                    ::Pair,
+                ),
+            ) { context, (aliases, providerNames) ->
+                context.copy(modelAliases = aliases, modelProviderNames = providerNames)
+            }.combine(
+                settingsRepository.subagentCapsuleDisplayMode,
+            ) { context, capsuleDisplayMode ->
+                context.copy(subagentCapsuleDisplayMode = capsuleDisplayMode)
+            }.combine(
+                settingsRepository.stickToBottom,
+            ) { context, stickToBottom ->
+                context.copy(stickToBottom = stickToBottom)
+            },
+        )
+    }
     // ── ViewModel Factory ─────────────────────────────────────
 
     fun chatViewModelFactory(): ChatViewModelFactory =
         ChatViewModelFactory(
             application, database, chatDao, settingsManager, memoryManager, skillManager, appContext, sandboxManagerFactory,
             autoBackupManager, conversationRepository, settingsRepository, conversationSettingsTransfers,
-            ::startProcessServices, localProvider, providerRegistry,
-            taskManager, loopManager, automationToolProvider, conversationExecutionCoordinator,
+            ::startProcessServices, providerRegistry,
+            taskManager, loopManager, conversationExecutionCoordinator,
             automationExecutionGate, conversationStateRegistry, shellConfirmationController,
             askUserController,
-            mcpRegistry, mcpToolProvider, taskExecutionEngine,
+            mcpRegistry, chatRuntime,
         )
 }

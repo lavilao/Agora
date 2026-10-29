@@ -55,11 +55,17 @@ internal class ConversationCompactController(
         ).second
     }
 
+    /**
+     * [alreadyHoldsConversationLock] must be true when the caller already owns this conversation's
+     * execution lease (headless Task/Loop runs). The coordinator is non-reentrant, so acquiring it
+     * again would suspend the Compact launch forever after it has claimed the generation slot.
+     */
     suspend fun startAutomaticStandard(
         conversationId: String,
         contextLimit: Int,
         config: AutomaticCompactConfig,
         state: ConversationGenerationState,
+        alreadyHoldsConversationLock: Boolean = false,
     ): StandardCompactLaunch? {
         if (!operation.automaticNeeded(conversationId, contextLimit, config)) return null
         val snapshot = automaticSnapshot(conversationId, config)
@@ -70,6 +76,7 @@ internal class ConversationCompactController(
             state = state,
             awaitCompletion = false,
             touchConversationOnAdmission = false,
+            alreadyHoldsConversationLock = alreadyHoldsConversationLock,
         ).first
     }
 
@@ -114,6 +121,7 @@ internal class ConversationCompactController(
         state: ConversationGenerationState,
         awaitCompletion: Boolean,
         touchConversationOnAdmission: Boolean,
+        alreadyHoldsConversationLock: Boolean = false,
     ): Pair<StandardCompactLaunch?, CompactResult> {
         val topology = conversations.getProviderContextTopologySnapshot(conversationId)
             ?: return null to CompactResult.NotNeeded
@@ -162,7 +170,9 @@ internal class ConversationCompactController(
                 modelMessageId = messageId,
                 replacementMessageId = target?.id,
                 requestKind = "compact",
+                conversationModelId = null,
                 touchConversationOnAdmission = touchConversationOnAdmission,
+                alreadyHoldsConversationLock = alreadyHoldsConversationLock,
                 queueDrainRequiresSuccess = true,
                 transformFinalText = transform,
             ),
@@ -249,6 +259,8 @@ internal class ConversationCompactController(
             thinkingEnabled = false,
         ),
         context = context.copy(
+            todoEnabled = false,
+            subagentToolsEnabled = false,
             accessSavedMemories = false,
             accessActiveMemory = false,
             skillReadAccess = false,

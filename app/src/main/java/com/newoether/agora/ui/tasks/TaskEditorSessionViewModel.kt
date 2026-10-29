@@ -112,6 +112,19 @@ internal class TaskEditorSessionViewModel : ViewModel() {
         )
     }
 
+    /** True when the draft differs from the task it was opened from, i.e. Save would change it. */
+    val hasUnsavedChanges: Boolean
+        get() {
+            val base = baseTask?.takeIf { it.id == activeTaskId } ?: return false
+            return name.trim() != base.name ||
+                prompt != base.prompt ||
+                modelId != base.modelId ||
+                systemPromptId != base.systemPromptId ||
+                cronExpr != base.cronExpr ||
+                runAt != base.runAt ||
+                enabled != base.enabled
+        }
+
     fun updateScroll(index: Int, offset: Int) {
         detailListIndex = index.coerceAtLeast(0)
         detailListOffset = offset.coerceAtLeast(0)

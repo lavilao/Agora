@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="remote_failed">Không thể hoàn tất thao tác từ xa. Hãy xem chi tiết lỗi.</string>
-    <string name="remote_unknown">Chưa xác nhận được việc gửi. Hãy kiểm tra cuộc trò chuyện trong Codex trước khi gửi lại.</string>
+    <string name="remote_unknown">Không thể xác nhận tin nhắn đã được gửi.</string>
     <string name="remote_rejected">Codex không chấp nhận tin nhắn. Hãy xem chi tiết lỗi trước khi thử lại.</string>
     <string name="remote_storage_failed">Agora không thể truy cập dữ liệu Remote cục bộ. Hãy kiểm tra dung lượng trống.</string>
     <string name="remote_network_failed">Không thể kết nối Filo. Hãy kiểm tra máy đích, địa chỉ dịch vụ và mạng.</string>
@@ -14,7 +14,7 @@
     <string name="remote_response_too_large">Phản hồi hoặc tệp đính kèm vượt quá kích thước được hỗ trợ.</string>
     <string name="remote_invalid_request">Filo không thể đọc yêu cầu. Hãy kiểm tra dữ liệu đã nhập.</string>
     <string name="remote_not_found">Mục được yêu cầu không còn khả dụng. Hãy làm mới danh sách.</string>
-    <string name="remote_not_supported">Ứng dụng khách đang kết nối không hỗ trợ thao tác này.</string>
+    <string name="remote_not_supported">Nguồn này không hỗ trợ thao tác này.</string>
     <string name="remote_desktop_unavailable">Filo không thể kết nối Codex Desktop. Hãy mở Codex trên máy đích.</string>
     <string name="remote_session_unavailable">Codex chưa chuẩn bị xong cuộc trò chuyện này. Hãy kiểm tra trên máy đích.</string>
     <string name="remote_helper_unavailable">Filo không thể kết nối tiến trình hỗ trợ người dùng. Hãy kiểm tra dịch vụ Filo trên máy đích.</string>

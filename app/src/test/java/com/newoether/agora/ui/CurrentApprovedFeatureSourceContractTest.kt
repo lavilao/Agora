@@ -137,7 +137,16 @@ class CurrentApprovedFeatureSourceContractTest {
         assertTrue(repository.contains("fun setAutomationWakeLockEnabled"))
         assertEquals(2, Regex("\"automationWakeLockEnabled\"").findAll(portable).count())
         assertTrue(legacy.contains("automationWakeLockEnabled"))
-        assertEquals(2, Regex("automationWakeLockOwner\\.whileHeld").findAll(engine).count())
+        val directEntry = engine.substringAfter("suspend fun runOnce(")
+            .substringBefore("internal suspend fun runOnceWithAutomationGuardsHeld(")
+        val guardedEntry = engine.substringAfter("internal suspend fun runOnceWithAutomationGuardsHeld(")
+            .substringBefore("private suspend fun runOnceLocked(")
+        assertTrue("Direct execution delegates to the shared protected entry",
+            directEntry.contains("runOnceWithAutomationGuardsHeld("))
+        val wakeLock = guardedEntry.indexOf("automationWakeLockOwner.whileHeld")
+        val generation = guardedEntry.indexOf("runOnceLocked(")
+        assertTrue("Shared automation entry holds the wake lock before generation",
+            wakeLock >= 0 && generation > wakeLock)
         assertTrue(owner.contains("return try {"))
         assertTrue(owner.contains("finally {"))
         assertTrue(owner.contains("PowerManager.PARTIAL_WAKE_LOCK"))

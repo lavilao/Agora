@@ -122,7 +122,7 @@
     <string name="tool_file_write">Write File</string>
     <string name="tool_file_edit">Edit File</string>
     <string name="tool_file_glob">Find Files</string>
-    <string name="tool_file_grep">Search Files</string>
+    <string name="tool_file_grep">Search Content</string>
     <!-- Tool in-progress states (doing) -->
     <string name="tool_listing_conversations">Listing conversations…</string>
     <string name="tool_reading_conversation">Reading conversation…</string>
@@ -130,7 +130,7 @@
     <string name="tool_writing_file">Writing %1$s…</string>
     <string name="tool_editing_file">Editing %1$s…</string>
     <string name="tool_finding_files">Finding %1$s…</string>
-    <string name="tool_searching_file">Searching %1$s…</string>
+    <string name="tool_searching_file">Searching content for %1$s…</string>
     <string name="tool_executing_shell">Executing: %1$s…</string>
     <string name="tool_reading_memory">Reading %1$s…</string>
     <string name="tool_saving_memory">Saving %1$s…</string>
@@ -209,6 +209,9 @@
 
     <!-- Drawer -->
     <string name="conversations">Conversations</string>
+    <string name="pinned_conversations">Pinned</string>
+    <string name="pin_conversation">Pin</string>
+    <string name="unpin_conversation">Unpin</string>
     <string name="conversation_unread_generation">Unread generated response</string>
     <string name="new_chat">New Chat</string>
 
@@ -235,6 +238,22 @@
     <string name="embedding_custom_model_desc">Enter any model name supported by the provider</string>
     <string name="embedding_batch_size">Batch Size</string>
     <string name="embedding_batch_size_desc">Messages to cache per request (1-100)</string>
+    <string name="embedding_add_model">Add Model</string>
+    <string name="embedding_edit_model">Edit Model</string>
+    <string name="embedding_choose_type">Choose Model Type</string>
+    <string name="embedding_type_remote_desc">Call an embedding API such as OpenAI, Voyage AI, or Ollama.</string>
+    <string name="embedding_type_local_desc">Run a GGUF embedding model on this device.</string>
+    <string name="embedding_provider_custom">Custom</string>
+    <string name="embedding_connection">Connection</string>
+    <string name="embedding_general">General</string>
+    <string name="embedding_cache_status">Cache</string>
+    <string name="embedding_use_saved_key">Use saved %1$s key</string>
+    <string name="embedding_use_saved_key_desc">Taken from your chat provider settings</string>
+    <string name="embedding_model_id_hint">Model ID, e.g. text-embedding-3-small</string>
+    <string name="embedding_model_locked_desc">Cached embeddings belong to this model. Add a new model to switch.</string>
+    <string name="embedding_model_file">Model File</string>
+    <string name="embedding_replace_file">Replace</string>
+    <string name="embedding_test_failed">Connection test failed: %1$s</string>
     <string name="local_model_ready">Model imported</string>
     <string name="import_model">Import Model (.gguf)</string>
     <string name="importing_model">Importing...</string>
@@ -588,8 +607,8 @@
     <string name="onboarding_no_models">No models loaded.</string>
     <string name="onboarding_invalid_gguf_title">Invalid GGUF File</string>
     <string name="onboarding_invalid_gguf_desc">The selected file does not appear to be a valid GGUF model.</string>
-    <string name="onboarding_hide_key">Hide key</string>
-    <string name="onboarding_show_key">Show key</string>
+    <string name="secret_hide">Hide Value</string>
+    <string name="secret_show">Show Value</string>
     <!-- ── Auto Backup ── -->
     <string name="auto_backup_title">Auto Backup</string>
     <string name="auto_backup_subtitle">Automatically export data on a schedule</string>
@@ -621,7 +640,7 @@
     <!-- SSH host-key pinning -->
     <string name="shell_ssh_verify_host_key">Verify &amp; Pin Host Key</string>
     <string name="shell_ssh_host_key_pinned">Host key pinned</string>
-    <string name="shell_ssh_host_key_not_pinned">Host key not pinned — vulnerable to interception</string>
+    <string name="shell_ssh_host_key_not_pinned">Host key not pinned; vulnerable to interception</string>
     <string name="shell_ssh_verify_title">Verify SSH Host Key</string>
     <string name="shell_ssh_verify_message">Confirm this fingerprint matches your server before trusting it. Pinning protects against man-in-the-middle attacks.</string>
     <string name="shell_ssh_trust">Trust &amp; Pin</string>
@@ -683,6 +702,7 @@
     <string name="context_part_messages">Messages</string>
     <string name="context_part_free">Free</string>
     <string name="context_part_reserved">Reserved</string>
+    <string name="context_part_used">Used</string>
     <string name="context_compact_streaming">Context compacting…</string>
     <string name="context_compact_error">Compact error</string>
     <string name="context_compact_stopped">Compact stopped</string>
@@ -891,4 +911,57 @@
     <string name="local_ubatch_size_title">Physical batch size</string>
     <string name="local_ubatch_size_desc">Physical chunk the engine splits each batch into. Lower values reduce peak memory during prefill. Applies from the next model load.</string>
     <string name="local_draft_model_path_label">Add draft model (speculative decoding)</string>
+    <string name="message_source_task">Task</string>
+    <string name="message_source_loop">Loop</string>
+    <string name="message_source_ask_user">Ask User</string>
+    <string name="message_source_unanswered">Unanswered</string>
+    <string name="settings_todo">Todo List</string>
+    <string name="settings_todo_desc">Model-managed conversation checklist</string>
+    <string name="todo_enable">Enable Todo List</string>
+    <string name="todo_enable_desc">Allow the model to read and update the conversation checklist. Turning this off keeps existing lists.</string>
+    <string name="settings_subagents">Subagents</string>
+    <string name="settings_subagents_desc">Delegate work to isolated conversations</string>
+    <string name="subagents_enable">Enable Subagents</string>
+    <string name="subagents_enable_desc">Allow the model to delegate work to isolated conversations. Turning this off does not stop existing subagents.</string>
+    <string name="local_projector_title">Vision Projector</string>
+    <string name="local_projector_desc">Optional: import a matching mmproj GGUF file to support image input</string>
+    <string name="local_model_error_id_required">Model ID is required</string>
+    <string name="local_model_error_id_invalid">Use only a-z, 0-9, dots, underscores and hyphens</string>
+    <string name="local_model_error_id_taken">This model ID is already in use</string>
+    <string name="local_model_error_file_required">Import a GGUF model file</string>
+    <string name="local_model_error_context">Context size must be a positive integer</string>
+    <string name="local_model_error_temperature">Temperature must be between 0 and 2</string>
+    <string name="local_model_error_top_p">Top P must be between 0 and 1</string>
+    <string name="local_model_error_max_tokens">Max tokens must be a positive integer</string>
+    <string name="local_model_error_output">Max tokens must not exceed context size</string>
+    <string name="tool_read_todo">Read Todo List</string>
+    <string name="tool_update_todo">Update Todo List</string>
+    <string name="tool_spawn_agent">Start Subagent</string>
+    <string name="tool_send_agent_message">Send Message to Subagent</string>
+    <string name="tool_wait_agents">Wait for Subagents</string>
+    <string name="tool_list_agents">List Subagents</string>
+    <string name="tool_stop_agent">Stop Subagent</string>
+    <string name="tool_reading_todo">Reading todo list…</string>
+    <string name="tool_updating_todo">Updating todo list…</string>
+    <string name="tool_spawning_agent">Starting subagent…</string>
+    <string name="tool_sending_agent_message">Queuing message for subagent…</string>
+    <string name="tool_waiting_agents">Waiting for subagents…</string>
+    <string name="tool_listing_agents">Listing subagents…</string>
+    <string name="tool_stopping_agent">Stopping subagent…</string>
+    <string name="tool_read_todo_done">Read todo list</string>
+    <string name="tool_updated_todo">Updated todo list</string>
+    <string name="tool_spawned_agent">Started subagent</string>
+    <string name="tool_queued_agent_message">Queued message for subagent</string>
+    <string name="tool_waited_agents">Finished waiting for subagents</string>
+    <string name="tool_listed_agents">Listed subagents</string>
+    <string name="tool_stopped_agent">Stopped subagent</string>
+    <string name="tool_delete_agent">Delete Subagent</string>
+    <string name="tool_deleting_agent">Deleting subagent…</string>
+    <string name="tool_deleted_agent">Deleted subagent</string>
+    <string name="subagents_allow_delete">Allow Deleting Subagents</string>
+    <string name="subagents_allow_delete_desc">Let the parent conversation permanently delete its idle subagents to free slots. Running subagents and undelivered results are never deleted.</string>
+    <string name="subagent_deleted_by_parent">This subagent was deleted by its parent conversation.</string>
+    <string name="tool_todo_empty">Todo list is empty</string>
+    <string name="tool_agents_empty">No subagents</string>
+    <string name="tool_agent_results_empty">No subagent results returned</string>
 </resources>

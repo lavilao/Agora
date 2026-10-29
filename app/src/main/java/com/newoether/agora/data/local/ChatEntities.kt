@@ -100,7 +100,7 @@ data class ConversationSettingsImportTransferEntity(
     }
 }
 
-@Entity(tableName = "conversations", indices = [Index(value = ["taskId"])])
+@Entity(tableName = "conversations", indices = [Index(value = ["taskId"]), Index(value = ["parentConversationId"])])
 data class ChatEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -126,6 +126,18 @@ data class ChatEntity(
     val selectedRunBranchesJson: String? = null,
     /** True after a completed model generation until this conversation becomes the open target. */
     val hasUnreadGeneration: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val isPinned: Boolean = false,
+    /** Latest conversation-wide Todo list; null means no list. */
+    val todoJson: String? = null,
+    /** Parent ownership is separate from message ancestry; subagents never inherit history. */
+    val parentConversationId: String? = null,
+    /** Stable creation time; ordinary content and status updates preserve it. */
+    @ColumnInfo(defaultValue = "0") val createdAt: Long = lastUpdated,
+    /** Durable completion outbox, not a second generation lifecycle. */
+    val subagentResultJson: String? = null,
+    val subagentResultId: String? = null,
+    val subagentResultStatus: String? = null,
+    val subagentDeliveredResultId: String? = null,
 )
 
 /** A saved automation: a prompt + schedule that fans out a fresh conversation on each run. */
@@ -228,7 +240,9 @@ data class EmbeddingEntity(
     indices = [
         Index(value = ["conversationId"]),
         Index(value = ["runId"]),
+        Index(value = ["parentId"]),
         Index(value = ["id", "images", "attachmentMeta"]),
+        Index(value = ["timestamp", "id"]),
     ],
     foreignKeys = [
         ForeignKey(
@@ -276,6 +290,8 @@ data class MessageEntity(
     val runSequence: Long = UNASSIGNED_RUN_SEQUENCE,
     /** Non-null only for visible user input; null for model/tool/result rows. */
     val consumedAtPass: Int? = null,
+    /** [com.newoether.agora.model.MessageSource] JSON; non-null only for automatic user input. */
+    val sourceJson: String? = null,
 ) {
     companion object {
         const val UNASSIGNED_RUN_SEQUENCE = -1L

@@ -5,19 +5,20 @@ import com.newoether.agora.model.AttachmentMeta
 import com.newoether.agora.model.AttachmentItem
 import com.newoether.agora.model.ChatMessage
 import com.newoether.agora.model.MessageSegment
+import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.TokenUsage
 import com.newoether.agora.model.ToolCallData
 import com.newoether.agora.util.Constants
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** Removes duplicate aggregate tool segments after their durable protocol rows are expanded. */
+/** Removes duplicate client tool segments while retaining provider-native replay segments. */
 internal fun stripAggregatedToolSegments(toolCallJson: String?): String? {
     val raw = toolCallJson ?: return null
     val segments = runCatching {
         Json.decodeFromString<List<MessageSegment>>(raw)
     }.getOrNull() ?: return null
-    val retained = segments.filterNot { it.type == "tool" }
+    val retained = segments.filterNot { it.type == "tool" && !it.isProviderHostedTool }
     return retained.takeIf { it.isNotEmpty() }?.let { Json.encodeToString(it) }
 }
 
@@ -60,6 +61,7 @@ internal fun projectProviderMessages(
                 toolCallId = segment.toolCallId,
                 resultImages = segment.toolImages,
                 displayName = segment.toolDisplayName,
+                target = segment.toolTarget,
                 resultText = segment.toolResultText,
                 structuredResult = segment.toolStructuredResult,
                 responseOutputItems = segment.responseOutputItems,
@@ -118,6 +120,7 @@ internal fun projectProviderMessages(
             runId = entity.runId,
             runSequence = entity.runSequence,
             consumedAtPass = entity.consumedAtPass,
+            source = MessageSource.decode(entity.sourceJson),
         )
     }
 }

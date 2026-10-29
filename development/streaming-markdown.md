@@ -9,6 +9,25 @@ shared streaming Markdown message UI implementation. That implementation owns th
 incremental append-only scan, stable/live block split, off-main parsing, long-document update
 cadence, and stream-to-terminal renderer continuity. A caller must not keep a second streaming
 Markdown algorithm or switch to a different terminal renderer merely because streaming ended.
+The browser Compact detail uses the existing `DetailSheet` and `Markdown`, with authoritative
+running state, thought typography and App Reduced Motion passed into the shared renderer.
+The shared browser Markdown accepts an optional emptyStreamingText input. Compact passes the native
+localized Context compacting... label only for an actively streaming blank body. The label uses
+primary color, the caller's thought typography, 8px top padding and retained 180ms linear fades.
+Nonblank content replaces it; terminal blank content does not retain a status. This is shared
+renderer presentation, not a Compact-specific renderer, always-visible footer or status authority.
+Browser math placeholders expand only in rendered text nodes, never in source attributes,
+link attributes, or code literals. Source mapping stays intact; each occurrence creates exactly
+one formula node and cannot duplicate surrounding prose or emit HTML attribute fragments.
+
+`ChatMarkdownCodeBlock` also renders standalone raw code with the same code background, padding,
+typography and wrapping. Its copy header stays enabled by default. A host that already owns a guarded
+copy action may omit that header without changing other consumers or duplicating the code renderer.
+
+Native release builds must preserve JLaTeXMath's `NewCommandMacro` class, public zero-argument
+constructor and `executeMacro(TeXParser, String[])` method. Environment expansion, including
+`pmatrix`, resolves that handler by reflection; ordinary debug rendering tests do not validate
+R8 retention. The minified release must also pass the reported matrix's parsing check.
 
 Standalone/display LaTeX uses that same shared Markdown component graph. It remains start-aligned and
 renders at its intrinsic formula width inside a message-width horizontal viewport. A formula wider
@@ -18,7 +37,11 @@ formula wider than 80% of its paragraph width, decided at display time from that
 renders as one single-line selectable Text holding one inline placeholder, so a covering selection
 highlights the whole formula. Every formula's alternate text is its exact original source slice,
 delimiters included, carried in its `latex://` link, so selection copies the original text and never
-a URL. Formula bitmaps render at `20 sp` and are padded with transparent rows so the TeX math axis
+a URL. Copied text must equal the original message text. Because a placeholder cannot lay out
+alternate text with line breaks, a source's `\n` and `\r` are stored in the alternate text as
+U+E000 and U+E001; the chat selection host's clipboard (`FormulaSourceClipboard`) restores them on
+copy, and the source parser restores them before resolving the formula. System text actions other
+than copy (for example Translate or Speak) receive the stored marks. Formula bitmaps render at `20 sp` and are padded with transparent rows so the TeX math axis
 sits on the bitmap's vertical center, which `TextCenter` placeholder alignment puts on the text
 center. Other inline LaTeX and ordinary Markdown images retain their existing layout; once a paragraph
 splits for a wide formula, its other images use their block presentation and search positions are
@@ -30,8 +53,11 @@ The implementation is only a parameterized UI variant. Its allowed inputs includ
 content, streaming state, render context, font/size/color, a publication birth-time glyph timeline, and a
 generic animated empty-stream presentation. Every append-growing live text surface uses one
 of two rules: a time-only fade with no character-count cap for ordinary/timeline answer
-Markdown and plain/code leaves, Thinking previews/summaries in Compact/Timeline/detail-sheet modes,
-and equivalent live detail text; active Tool summaries instead fade their last 42 code points in six bands to alpha 0.38.
+Markdown and plain/code leaves and full detail text; one-line Thought, Tool and Transcription
+summaries use the shared muted-tail policy: the last 42 code points in six bands, newest alpha 0.38,
+age gain 2 per second and neutral onSurfaceVariant at 60%. An active Thought preview flattens newlines
+and shows an ellipsis plus the last 60 Unicode code points when longer; terminal previews use full
+text with one-line layout ellipsis. This summary-only rule does not cap full Markdown.
 Static titles, terminal labels, Retry, error text, and citation metadata do not replay this stream
 animation merely because they share typography.
 
@@ -71,7 +97,15 @@ dot, while Thinking and Compact Bottom Sheets omit it without changing text rend
 placeholder differences remain parameterized.
 
 Finalized Thinking Bottom Sheet Markdown is selectable in every rendering branch, including the
-virtualized single-segment long-document path. Selection uses the shared no-auto-scroll selection
+virtualized single-segment long-document path. In the WebUI, ordinary scrolling and unrelated
+streaming, Composer or payload refreshes must not collapse a selection in unchanged composed text.
+Unchanged user/ask_user bodies and unchanged Markdown search projections keep their text nodes;
+active search styling updates cannot rebuild otherwise unchanged selected text. Fix the canonical
+render/update owner rather than capturing and restoring browser ranges after destructive updates.
+Search ranges use the browser's draw-only CSS Highlight registry; search entry, active-hit changes
+and dismissal never wrap, split, move or normalize body text. MessageList reads those same ranges
+for occurrence geometry, and the existing body presenter releases its ranges on update or unmount.
+Selection uses the shared no-auto-scroll selection
 host so dragging handles never repositions the conversation. Active streaming content remains
 non-selectable; terminal selection moves the same composition through movable content instead of
 recreating its Markdown subtree, resetting state, or emitting a zero-height frame.
@@ -85,7 +119,11 @@ persists a display error, one Android-resource-backed presenter resolves app-own
 known transport reasons in the current locale. Authentication, rate limit, server/network wrappers,
 SSE parse, incomplete stream, output truncation, request validation, cancellation, timeout,
 unexpected-error fallback, and tool/transcription/embedding wrappers are resource owned in every
-supported locale. Exact common transport details such as connection closed/refused/reset, unknown
+supported locale. Unknown exceptions resolve the first nonblank localized message along their cause
+chain, with identity-based cycle protection. The outer message takes priority; when no cause has a
+message, the outer exception class name preserves diagnostic identity. API and localized presentation
+consume that same resolved detail, without exposing stack traces or request data. Previously persisted
+generic strings cannot recover a discarded Throwable and remain readable unchanged. Exact common transport details such as connection closed/refused/reset, unknown
 host, and TLS failure are matched case-insensitively and localized. Nonblank Provider/API/server/OS
 diagnostic detail remains verbatim inside the localized wrapper unless it is plain prose whose first
 lowercase Unicode letter can be title-cased safely; codes, URLs, JSON, and identifiers are not
@@ -145,7 +183,9 @@ Generation ERROR and STOPPED render text only: no Surface/background, rounded ou
 icon gap, or inner container padding. Both use the exact Retry label tokens, `ChatType.body` and
 `onSurfaceVariant` at 0.55 alpha, but neither uses Retry's grapheme entrance or active white dot.
 ERROR remains full-line, multiline, and selectable with its nonblank detail; STOPPED remains a
-localized content-width label. Their existing contextual outer vertical separation remains, and
+localized content-width nonselectable label, including inside selectable detail bodies. Browser
+ordinary inline errors, error bars, Compact detail errors and failed Tool/Shell detail text use this
+same selection policy without recreating their text on unrelated refreshes. Their existing contextual outer vertical separation remains, and
 their durable ERROR versus STOPPED semantics stay distinct. When the immediately preceding visible
 Assistant content is a Thinking/Tool/Transcription card, either terminal label receives exactly 12 dp
 of top separation. When answer Markdown is the immediately preceding visible content, the established
@@ -175,7 +215,12 @@ and the answer-tail dot is the sole source from its first frame at the final anc
 localized label, 8 dp gap, measured caret placement, and direct render-layer translation of the same
 dot. The answer-tail dot and terminal controls share the reserved 44 dp bottom action slot without a separate LazyColumn child; direct exit paths retain draw content through zero alpha
 without `AnimatedVisibility`, expand/shrink layout animation, `animateContentSize`, coordinate
-followers, or retained layout height. Their alpha-bearing graphics layers use
+followers, or retained layout height. The fixed action slot remains composed through streaming,
+Stop admission, stopping, and terminal settlement, including pre-answer messages; only its drawing
+and interaction change. When stopping hides an owned pre-output or Retry activity, the existing
+inline presenter retains its 24 dp minimum slot until terminal content takes ownership. WebUI must
+keep these same slots in its existing message presenter without a parallel freeze, extra settlement
+delay, compensating scroll, or duplicate Markdown subtree. Their alpha-bearing graphics layers use
 `CompositingStrategy.ModulateAlpha`, set `clip = false`, and never rasterize a breathing circle into
 tight rectangular bounds. Continuous-motion policy may own breathing; it never owns placement or
 layout geometry.
@@ -200,7 +245,22 @@ discard or displace the right extension. This external-only rule must not change
 content padding. It must not use card-level `animateContentSize`: an explicit
 400 ms width-only transition matches the existing 400 ms vertical expansion/collapse and animates
 between the measured localized header width plus a 6 dp anti-ellipsis allowance and the extended
-parent maximum width with a fast-start, slow-finish `LinearOutSlowInEasing` curve. The collapsed
+parent maximum width with a fast-start, slow-finish `LinearOutSlowInEasing` curve. The bottom-aligned
+WebUI reveal keeps every segment at full measured height; the grid's animated track is aligned at its
+block end, and full-height children remain bottom-aligned within that track. The outer reveal alone
+owns the vertical clip; the inner track keeps visible overflow so fractional sizing cannot cut
+content a second time above the reveal's leading edge. Its inline minimum is zero, so long
+Thought/Tool summaries receive the stable expanded width and truncate in their own one-line
+ellipsis boxes rather than expanding the grid track beyond the reveal. Fractional track sizing
+must not leave unused space below the track while it expands. Flex shrinking must not compete with the
+400 ms clip motion or leave a blank region below the moving content. A segment's appearance scale
+uses the native center origin; the reveal alone owns its existing bottom alignment and clip.
+Resolved Thinking card titles Crossfade over 280ms linear, including live ticks and terminal titles;
+unchanged titles do not replay. Tool summaries use the same 280ms linear transition only for a
+canonical toolState change, never for an incremental same-state summary update. Outgoing draw text
+is inert and accessibility-hidden; Tool tail fade runs only for the current active state outside
+that Crossfade. Reduced Motion retains these fades and drops only appearance scale.
+The collapsed
 target remains capped by the available width. The animated width belongs only to the card shell:
 leading header content and expanded content retain a stable target layout width, remain anchored at
 `Alignment.TopStart`, and are clipped/revealed by the shell instead of being squeezed, reflowed, or
@@ -212,7 +272,10 @@ and Tool rows use the restored exact 10 dp horizontal content padding. The title
 exact 4 dp title-to-arrow gap plus the unchanged 26 dp trailing disclosure reservation. The same single 18 dp
 `KeyboardArrowDown` is a Surface-local overlay, outside the unbounded/clipped content Row, so its
 layout box tracks the visible animated shell's end edge with an exact 8 dp end inset at every width.
-No second disclosure exists. That single vector rotates to -90 degrees for detail-sheet navigation,
+No second disclosure exists. The disclosure belongs to the card's local drawing order: it never
+paints above the message viewport's blur/fade, top-bar gradient or expanded Composer. Browser card
+surfaces keep a persistent local stacking context even when entrance motion ends or the Composer
+removes the viewport mask. That single vector rotates to -90 degrees for detail-sheet navigation,
 0 degrees while inline-collapsed, and 180 degrees while inline-expanded; spatial motion animates the
 rotation and Reduced Motion snaps it. The header icon uses the shared motion-aware 18 dp slot; only
 the loading ring is 16 dp while brain, tool, image, and disclosure icons remain 18 dp. The loading
@@ -247,7 +310,12 @@ editor, and dropdown-menu typography are unchanged.
 A non-editing user bubble owns its action dropdown through long press. The separate action row below
 the bubble is absent; the branch selector remains independently visible. The existing Material menu
 style contains Copy, Edit, Select Text, Info, and Delete in that order and retains current availability
-rules. Selecting Edit enters that user message's existing inline editor and requests focus on its
+rules. For Task, Loop, Ask User and Subagent source-tagged user messages, Edit stays visible and
+disabled; native and WebUI use the same source rule and cannot reopen a stale editor for those rows.
+Subagent completion bodies are omitted from the timeline and remain fully readable through this
+existing Select Text sheet, with Copy retaining the same original text; their compact name/status
+and gray failure detail presentation is owned by application-ui.md section35.
+Selecting Edit on an ordinary unmarked user message enters its existing inline editor and requests focus on its
 TextField once the edit branch is composed, so it is immediately ready for typing. This focus request
 does not select text, redefine cursor placement, force the IME through a second owner, or alter
 composer/search focus policy. Select Text reuses the existing custom Thinking detail-sheet shell with
@@ -323,6 +391,10 @@ Slash-qualified MCP/tool display titles preserve `/` and capitalize the followin
 including Remote names such as `Blender Mcp/execute Code` -> `Blender Mcp/Execute Code`.
 Use the shared title formatter for resolved MCP names and generic Remote tool labels; preserve
 existing interior casing, routing identity, arguments, and other separator formatting.
+MCP router metadata follows tool-presentation.md: inspect at most 4096 argument characters per
+stream update and resolve only complete root IDs. Large reverse-order payloads acquire the exact
+remote title and server target through the ordinary execution event. Persisted metadata supplies
+history display without querying the live registry; protocol tool names and arguments remain intact.
 
 Failed and stopped tool-detail content inside the shared Thinking/Tool bottom-sheet path reuses the
 same neutral gray body-text terminal presentation as ordinary message content. Failed text remains

@@ -62,6 +62,9 @@
 
     <!-- Drawer -->
     <string name="conversations">對話</string>
+    <string name="pinned_conversations">已置頂</string>
+    <string name="pin_conversation">置頂</string>
+    <string name="unpin_conversation">取消置頂</string>
     <string name="conversation_unread_generation">未讀的新回覆</string>
     <string name="new_chat">新對話</string>
     <string name="thinking_ellipsis">思考中…</string>
@@ -115,6 +118,22 @@
     <string name="embedding_custom_model_desc">輸入服務商支援的任意模型名稱</string>
     <string name="embedding_batch_size">批次大小</string>
     <string name="embedding_batch_size_desc">每次請求快取的訊息數（1-100）</string>
+    <string name="embedding_add_model">新增模型</string>
+    <string name="embedding_edit_model">編輯模型</string>
+    <string name="embedding_choose_type">選擇模型類型</string>
+    <string name="embedding_type_remote_desc">呼叫 OpenAI、Voyage AI、Ollama 等嵌入 API。</string>
+    <string name="embedding_type_local_desc">在本機執行 GGUF 嵌入模型。</string>
+    <string name="embedding_provider_custom">自訂</string>
+    <string name="embedding_connection">連線</string>
+    <string name="embedding_general">一般</string>
+    <string name="embedding_cache_status">快取</string>
+    <string name="embedding_use_saved_key">使用已儲存的 %1$s 金鑰</string>
+    <string name="embedding_use_saved_key_desc">來自對話服務商設定</string>
+    <string name="embedding_model_id_hint">模型 ID，例如 text-embedding-3-small</string>
+    <string name="embedding_model_locked_desc">已快取的向量屬於此模型。要換模型請新增一個。</string>
+    <string name="embedding_model_file">模型檔案</string>
+    <string name="embedding_replace_file">取代</string>
+    <string name="embedding_test_failed">連線測試失敗：%1$s</string>
     <string name="local_model_ready">模型已匯入。</string>
     <string name="import_model">匯入模型 (.gguf)</string>
     <string name="importing_model">匯入中…</string>
@@ -204,7 +223,7 @@
     <string name="tool_state_failed">呼叫失敗</string>
     <string name="tool_state_stopped">已停止</string>
     <string name="tool_unknown_device">未知裝置</string>
-    <string name="tool_no_output">(No output)</string>
+    <string name="tool_no_output">（無輸出）</string>
     <string name="tool_background_job_running">背景工作 %1$s 正在執行</string>
     <string name="tool_shell_jobs">列出 Shell 工作</string>
     <string name="tool_shell_job">取得 Shell 工作</string>
@@ -241,15 +260,15 @@
     <string name="tool_file_write">寫入檔案</string>
     <string name="tool_file_edit">編輯檔案</string>
     <string name="tool_file_glob">尋找檔案</string>
-    <string name="tool_file_grep">搜尋檔案</string>
+    <string name="tool_file_grep">搜尋內容</string>
     <!-- Tool in-progress states (doing) -->
     <string name="tool_listing_conversations">列出對話中…</string>
     <string name="tool_reading_conversation">閱讀對話中…</string>
     <string name="tool_reading_file">讀取 %1$s…</string>
     <string name="tool_writing_file">寫入 %1$s…</string>
     <string name="tool_editing_file">編輯 %1$s…</string>
-    <string name="tool_finding_files">尋找 %1$s…</string>
-    <string name="tool_searching_file">搜尋 %1$s…</string>
+    <string name="tool_finding_files">尋找檔案 %1$s…</string>
+    <string name="tool_searching_file">搜尋內容 %1$s…</string>
     <string name="tool_executing_shell">執行中: %1$s…</string>
     <string name="tool_reading_memory">讀取 %1$s…</string>
     <string name="tool_saving_memory">儲存 %1$s…</string>
@@ -583,8 +602,8 @@
     <string name="onboarding_no_models">暫無可用模型。</string>
     <string name="onboarding_invalid_gguf_title">無效的 GGUF 檔案</string>
     <string name="onboarding_invalid_gguf_desc">所選檔案不是有效的 GGUF 模型。</string>
-    <string name="onboarding_hide_key">隱藏金鑰</string>
-    <string name="onboarding_show_key">顯示金鑰</string>
+    <string name="secret_hide">隱藏內容</string>
+    <string name="secret_show">顯示內容</string>
     <!-- ── Auto Backup ── -->
     <string name="auto_backup_title">自動備份</string>
     <string name="auto_backup_subtitle">按計畫自動匯出資料</string>
@@ -616,7 +635,7 @@
     <!-- SSH host-key pinning -->
     <string name="shell_ssh_verify_host_key">驗證並固定主機金鑰</string>
     <string name="shell_ssh_host_key_pinned">已固定主機金鑰</string>
-    <string name="shell_ssh_host_key_not_pinned">未固定主機金鑰 — 易受中間人攻擊</string>
+    <string name="shell_ssh_host_key_not_pinned">未固定主機金鑰，易受中間人攻擊</string>
     <string name="shell_ssh_verify_title">驗證 SSH 主機金鑰</string>
     <string name="shell_ssh_verify_message">信任前請確認此指紋與您的伺服器一致。固定主機金鑰可防範中間人攻擊。</string>
     <string name="shell_ssh_trust">信任並固定</string>
@@ -662,6 +681,7 @@
     <string name="conversation_search_hint">搜尋…</string>
     <string name="conversation_share">分享</string>
     <string name="conversation_share_failed">無法分享對話：%1$s</string>
+    <string name="conversation_deleted_elsewhere">此對話已在另一台裝置上刪除。</string>
     <string name="queue_clear_all">全部清除</string>
     <string name="more">更多</string>
     <string name="delete_message_title">刪除訊息？</string>
@@ -700,6 +720,7 @@
     <string name="context_part_messages">訊息</string>
     <string name="context_part_free">空閒</string>
     <string name="context_part_reserved">預留</string>
+    <string name="context_part_used">已用</string>
     <string name="context_compact_streaming">正在壓縮內容…</string>
     <string name="context_compact_error">壓縮出錯</string>
     <string name="context_compact_stopped">壓縮已停止</string>
@@ -813,6 +834,9 @@
     <string name="tool_edit_skill">編輯技能</string>
     <string name="tool_delete_skill">刪除技能</string>
     <string name="tool_read_file_truncated">已顯示部分內容 · 從位元組 %1$d 繼續</string>
+    <string name="tool_read_file_truncated_line">已顯示部分內容 · 從第 %1$d 行繼續</string>
+    <string name="tool_edit_count">%1$d 處修改</string>
+    <string name="tool_edit_replace_all">全部取代</string>
     <string name="low_context_mode">低上下文模式</string>
     <string name="low_context_mode_default_desc">預設啟用低上下文模式</string>
     <string name="learn_more">瞭解更多...</string>
@@ -909,4 +933,57 @@
     <string name="local_ubatch_size_title">實體批次大小</string>
     <string name="local_ubatch_size_desc">引擎拆分每個批次的實體區塊。更低的值降低預填峰值記憶體。自下次載入模型起生效。</string>
     <string name="local_draft_model_path_label">新增草稿模型（投機解碼）</string>
+    <string name="message_source_task">任務</string>
+    <string name="message_source_loop">循環</string>
+    <string name="message_source_ask_user">詢問</string>
+    <string name="message_source_unanswered">未回答</string>
+    <string name="settings_todo">待辦清單</string>
+    <string name="settings_todo_desc">由模型管理的對話任務清單</string>
+    <string name="todo_enable">啟用待辦清單</string>
+    <string name="todo_enable_desc">允許模型讀取和更新對話中的待辦清單。關閉後保留現有清單。</string>
+    <string name="settings_subagents">子代理</string>
+    <string name="settings_subagents_desc">將工作委派到獨立對話</string>
+    <string name="subagents_enable">啟用子代理</string>
+    <string name="subagents_enable_desc">允許模型將工作委派到獨立對話。關閉後不會停止現有子代理。</string>
+    <string name="local_projector_title">視覺投影器</string>
+    <string name="local_projector_desc">選用：匯入與聊天模型相符的 mmproj GGUF 檔案，以支援影像輸入</string>
+    <string name="local_model_error_id_required">請輸入模型 ID</string>
+    <string name="local_model_error_id_invalid">僅支援 a-z、0-9、點、底線和連字號</string>
+    <string name="local_model_error_id_taken">此模型 ID 已被使用</string>
+    <string name="local_model_error_file_required">請匯入 GGUF 模型檔案</string>
+    <string name="local_model_error_context">上下文大小必須為正整數</string>
+    <string name="local_model_error_temperature">溫度必須介於 0 和 2 之間</string>
+    <string name="local_model_error_top_p">Top P 必須介於 0 和 1 之間</string>
+    <string name="local_model_error_max_tokens">最大輸出 Token 數必須為正整數</string>
+    <string name="local_model_error_output">最大輸出 Token 數不能超過上下文大小</string>
+    <string name="tool_read_todo">讀取待辦清單</string>
+    <string name="tool_update_todo">更新待辦清單</string>
+    <string name="tool_spawn_agent">啟動子代理</string>
+    <string name="tool_send_agent_message">傳送訊息給子代理</string>
+    <string name="tool_wait_agents">等待子代理</string>
+    <string name="tool_list_agents">列出子代理</string>
+    <string name="tool_stop_agent">停止子代理</string>
+    <string name="tool_reading_todo">正在讀取待辦清單…</string>
+    <string name="tool_updating_todo">正在更新待辦清單…</string>
+    <string name="tool_spawning_agent">正在啟動子代理…</string>
+    <string name="tool_sending_agent_message">正在將訊息加入子代理佇列…</string>
+    <string name="tool_waiting_agents">正在等待子代理…</string>
+    <string name="tool_listing_agents">正在列出子代理…</string>
+    <string name="tool_stopping_agent">正在停止子代理…</string>
+    <string name="tool_read_todo_done">已讀取待辦清單</string>
+    <string name="tool_updated_todo">已更新待辦清單</string>
+    <string name="tool_spawned_agent">已啟動子代理</string>
+    <string name="tool_queued_agent_message">訊息已加入子代理佇列</string>
+    <string name="tool_waited_agents">已結束等待子代理</string>
+    <string name="tool_listed_agents">已列出子代理</string>
+    <string name="tool_stopped_agent">已停止子代理</string>
+    <string name="tool_delete_agent">刪除子代理</string>
+    <string name="tool_deleting_agent">正在刪除子代理…</string>
+    <string name="tool_deleted_agent">已刪除子代理</string>
+    <string name="subagents_allow_delete">允許刪除子代理</string>
+    <string name="subagents_allow_delete_desc">允許父對話永久刪除閒置的子代理以釋出名額。執行中的子代理和尚未交付的結果不會被刪除。</string>
+    <string name="subagent_deleted_by_parent">此子代理已被其父對話刪除。</string>
+    <string name="tool_todo_empty">待辦清單為空</string>
+    <string name="tool_agents_empty">目前沒有子代理</string>
+    <string name="tool_agent_results_empty">未傳回子代理結果</string>
 </resources>

@@ -39,6 +39,125 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class GenerationRequestBuilderProviderDisplayTest {
     @Test
+    fun askUserTimeoutIsFrozenForTheAdmittedContextAndChangesForTheNextRun() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        val timeoutMinutes = MutableStateFlow(1)
+        every { fixture.settings.askUserTimeoutMinutes } returns timeoutMinutes
+        val first = fixture.builder.captureAdmissionSnapshot("conversation", "run", fixture.modelId)
+        assertEquals(1, first.context.askUserTimeoutMinutes)
+
+        timeoutMinutes.value = 60
+        val next = fixture.builder.captureAdmissionSnapshot("conversation", "next-run", fixture.modelId)
+
+        assertEquals(60, next.context.askUserTimeoutMinutes)
+        assertEquals(1, first.context.askUserTimeoutMinutes)
+    }
+
+    @Test
+    fun globalTodoAndSubagentPermissionsMatchAdmissionAndProjectionIndependently() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        val todoEnabled = MutableStateFlow(true)
+        val subagentEnabled = MutableStateFlow(true)
+        every { fixture.settings.todoEnabled } returns todoEnabled
+        every { fixture.settings.subagentToolsEnabled } returns subagentEnabled
+        val todoTools = com.newoether.agora.tool.TodoToolProvider(fixture.conversations)
+        val subagentTools = com.newoether.agora.tool.SubagentToolProvider(mockk())
+        for (todo in listOf(false, true)) {
+            for (subagent in listOf(false, true)) {
+                todoEnabled.value = todo
+                subagentEnabled.value = subagent
+                val admitted = fixture.builder.captureAdmissionSnapshot("conversation", "run", fixture.modelId)
+                val projected = fixture.builder.captureContextProjectionSnapshot("conversation", fixture.modelId)
+                for (context in listOf(admitted.context, projected.context)) {
+                    assertEquals(todo, context.todoEnabled)
+                    assertEquals(subagent, context.subagentToolsEnabled)
+                    assertEquals(if (todo) 2 else 0, todoTools.definitions(context).size)
+                    assertEquals(if (subagent) 5 else 0, subagentTools.definitions(context).size)
+                    assertTrue(context.shellEnabled)
+                    assertTrue(context.accessPastConversations)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun globalTodoAndSubagentChangesAffectOnlyNewSnapshots() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        val todoEnabled = MutableStateFlow(true)
+        val subagentEnabled = MutableStateFlow(true)
+        every { fixture.settings.todoEnabled } returns todoEnabled
+        every { fixture.settings.subagentToolsEnabled } returns subagentEnabled
+        val admitted = fixture.builder.captureAdmissionSnapshot("conversation", "run", fixture.modelId)
+        todoEnabled.value = false
+        subagentEnabled.value = false
+        assertTrue(admitted.context.todoEnabled)
+        assertTrue(admitted.context.subagentToolsEnabled)
+        val disabled = fixture.builder.captureAdmissionSnapshot("conversation", "next-run", fixture.modelId)
+        val projected = fixture.builder.captureContextProjectionSnapshot("conversation", fixture.modelId)
+        for (context in listOf(disabled.context, projected.context)) {
+            assertFalse(context.todoEnabled)
+            assertFalse(context.subagentToolsEnabled)
+        }
+        todoEnabled.value = true
+        subagentEnabled.value = true
+        assertFalse(disabled.context.todoEnabled)
+        assertFalse(disabled.context.subagentToolsEnabled)
+    }
+
+    @Test
+    fun childPermissionsRemainRestrictedUnderEveryGlobalToggleCombination() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        val todoEnabled = MutableStateFlow(true)
+        val subagentEnabled = MutableStateFlow(true)
+        every { fixture.settings.todoEnabled } returns todoEnabled
+        every { fixture.settings.subagentToolsEnabled } returns subagentEnabled
+        coEvery { fixture.conversations.getConversation("conversation") } returns
+            ChatEntity("conversation", "Child", parentConversationId = "parent")
+        for (todo in listOf(false, true)) {
+            for (subagent in listOf(false, true)) {
+                todoEnabled.value = todo
+                subagentEnabled.value = subagent
+                val admitted = fixture.builder.captureAdmissionSnapshot("conversation", "run", fixture.modelId)
+                val projected = fixture.builder.captureContextProjectionSnapshot("conversation", fixture.modelId)
+                for (context in listOf(admitted.context, projected.context)) {
+                    assertEquals(todo, context.todoEnabled)
+                    assertFalse(context.subagentToolsEnabled)
+                    assertFalse(context.accessPastConversations)
+                    assertTrue(context.shellEnabled)
+                    assertTrue(context.skillReadAccess)
+                }
+            }
+        }
+        coVerify(exactly = 0) { fixture.conversations.getConversation("parent") }
+    }
+
+    @Test
+    fun subagentAdmissionAndContextProjectionDisableDelegationAndHistoryButKeepOtherTools() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        coEvery { fixture.conversations.getConversation("conversation") } returns
+            ChatEntity("conversation", "Child", parentConversationId = "parent")
+        val admitted = fixture.builder.captureAdmissionSnapshot("conversation", "run", fixture.modelId)
+        val projected = fixture.builder.captureContextProjectionSnapshot("conversation", fixture.modelId)
+        for (context in listOf(admitted.context, projected.context)) {
+            assertFalse(context.subagentToolsEnabled)
+            assertFalse(context.accessPastConversations)
+            assertTrue(context.shellEnabled)
+            assertTrue(context.skillReadAccess)
+            assertEquals(listOf(fixture.modelId), context.enabledModelIds)
+        }
+        coVerify(exactly = 0) { fixture.conversations.getConversation("parent") }
+    }
+    @Test
+    fun enabledModelIdsAreCompleteSortedAndFrozenAtAdmission() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        val models = MutableStateFlow(setOf("Z:last", fixture.modelId, "A:first"))
+        every { fixture.settings.enabledModels } returns models
+        val admitted = fixture.builder.captureAdmissionSnapshot("conversation", "run", fixture.modelId)
+        models.value = emptySet()
+        assertEquals(listOf("A:first", fixture.modelId, "Z:last"), admitted.context.enabledModelIds)
+        assertTrue(admitted.context.subagentToolsEnabled)
+    }
+    @Test
     fun foregroundExistingAdmissionWaitsForSettingsThenUsesCapturedConversation() = runTest {
         val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
         val gate = CompletableDeferred<Unit>()
@@ -49,7 +168,7 @@ class GenerationRequestBuilderProviderDisplayTest {
             "conversation", "conversation", "run", false, null, fixture.modelId,
         )
         val pending = async {
-            fixture.builder.prepareForegroundSend(target, ConversationComposerSnapshot(), fixture.appContext)
+            fixture.builder.prepareForegroundSend(target, ConversationComposerSnapshot(), fixture.appContext, fixture.snackbars::add)
         }
         runCurrent()
         assertFalse(pending.isCompleted)
@@ -81,7 +200,7 @@ class GenerationRequestBuilderProviderDisplayTest {
         )
         val pending = async {
             fixture.builder.prepareForegroundSend(
-                target, ConversationComposerSnapshot(text = "frozen draft"), fixture.appContext,
+                target, ConversationComposerSnapshot(text = "frozen draft"), fixture.appContext, fixture.snackbars::add,
             )
         }
         runCurrent()
@@ -108,7 +227,7 @@ class GenerationRequestBuilderProviderDisplayTest {
             "conversation", "conversation", "run", false, null, fixture.modelId,
         )
         val pending = async {
-            fixture.builder.prepareForegroundSend(target, ConversationComposerSnapshot(), fixture.appContext)
+            fixture.builder.prepareForegroundSend(target, ConversationComposerSnapshot(), fixture.appContext, fixture.snackbars::add)
         }
         runCurrent()
         assertFalse(pending.isCompleted)
@@ -126,9 +245,37 @@ class GenerationRequestBuilderProviderDisplayTest {
         val validationContext = mockk<Context>()
         every { validationContext.getString(R.string.no_model_selected) } returns "Select a model"
         val target = ForegroundSendTarget("conversation", "conversation", "run", false, null, "")
-        assertNull(fixture.builder.prepareForegroundSend(target, ConversationComposerSnapshot(), validationContext))
+        assertNull(fixture.builder.prepareForegroundSend(target, ConversationComposerSnapshot(), validationContext, fixture.snackbars::add))
         assertEquals(listOf("Select a model"), fixture.snackbars)
         coVerify(exactly = 0) { fixture.providerRegistry.awaitInitialSync() }
+    }
+
+    @Test
+    fun serviceTierSnapshotUsesEachActualModelAndKeepsSavedSelection() = runTest {
+        val fixture = RequestBuilderFixture(Constants.PROVIDER_OPENAI, false)
+        val saved = MutableStateFlow("ultrafast")
+        every { fixture.settings.openAiServiceTierEnabled } returns MutableStateFlow(true)
+        every { fixture.settings.openAiServiceTier } returns saved
+        every { fixture.settings.openAiResponsesApiEnabled } returns MutableStateFlow(true)
+        every { fixture.settings.contextCompactModel } returns
+            MutableStateFlow("${Constants.PROVIDER_OPENAI}:gpt-5.6-sol")
+
+        val snapshot = fixture.builder.captureAdmissionSnapshot(
+            "conversation", "run", "${Constants.PROVIDER_OPENAI}:gpt-4o",
+        )
+        assertEquals("gpt-4o", snapshot.config.modelId)
+        assertEquals("gpt-5.6-sol", snapshot.automaticCompact.generationConfig.modelId)
+        assertEquals("ultrafast", saved.value)
+        saved.value = "default"
+        assertEquals("fast", snapshot.config.openAiServiceTier)
+        assertEquals("ultrafast", snapshot.automaticCompact.generationConfig.openAiServiceTier)
+        assertEquals("default", saved.value)
+
+        val disabled = fixture.builder.captureContextProjectionSnapshot(
+            "conversation", "${Constants.PROVIDER_OPENAI}:gpt-4o",
+            conversationSettingsOverride = ConversationSettings(openAiServiceTierEnabled = false),
+        )
+        assertNull(disabled.config.openAiServiceTier)
     }
 
     @Test
@@ -233,6 +380,7 @@ class GenerationRequestBuilderProviderDisplayTest {
         every { settings.webSearchEnabled } returns MutableStateFlow(true)
         every { settings.shellEnabled } returns MutableStateFlow(true)
         every { settings.askUserEnabled } returns MutableStateFlow(true)
+        every { settings.askUserTimeoutMinutes } returns MutableStateFlow(5)
         every { settings.localLowContextModeEnabled } returns MutableStateFlow(true)
         val builder = GenerationRequestBuilder(
             settings = settings,
@@ -242,8 +390,6 @@ class GenerationRequestBuilderProviderDisplayTest {
             providerRegistry = mockk<ProviderRegistry>(),
             ragManager = mockk<RagManager>(),
             appContext = mockk<Context>(),
-            pendingConversationSettings = MutableStateFlow<ConversationSettings?>(null),
-            onSnackbar = {},
         )
 
         val effective = builder.buildEffectiveConversationSettings("conversation")
@@ -252,6 +398,11 @@ class GenerationRequestBuilderProviderDisplayTest {
         assertEquals(false, effective.shellEnabled)
         assertEquals(false, effective.openAiWebSearchEnabled)
         assertEquals(false, effective.lowContextModeEnabled)
+        // A conversation without saved settings uses the app defaults, never a client's New Chat page.
+        val unsaved = builder.buildEffectiveConversationSettings("unsaved-conversation")
+        assertEquals(true, unsaved.webSearchEnabled)
+        assertEquals(true, unsaved.shellEnabled)
+        assertEquals(true, unsaved.lowContextModeEnabled)
     }
 
     @Test
@@ -288,7 +439,7 @@ class GenerationRequestBuilderProviderDisplayTest {
         assertFalse(snapshot.context.skillReadAccess)
         assertFalse(snapshot.context.skillModifyAccess)
         assertEquals("", snapshot.context.skillCatalog)
-        coVerify(exactly = 0) { fixture.conversations.getConversation(any()) }
+        coVerify(exactly = 1) { fixture.conversations.getConversation("conversation") }
         verify(exactly = 0) { fixture.memoryManager.getActiveMemory() }
         verify(exactly = 0) { fixture.skillManager.catalog() }
 
@@ -342,6 +493,27 @@ class GenerationRequestBuilderProviderDisplayTest {
         assertEquals(RequestBuilderFixture.RESOLVED_SYSTEM_PROMPT, snapshot.config.effectiveSystemPrompt)
         assertFalse(snapshot.context.accessActiveMemory)
         verify { fixture.memoryManager.getActiveMemory() }
+    }
+    @Test
+    fun `active memory and skill catalog are frozen for every provider pass of one run`() = runTest {
+        val fixture = RequestBuilderFixture(
+            providerName = Constants.PROVIDER_OPENAI,
+            lowContextModeEnabled = false,
+        )
+        val snapshot = fixture.builder.captureAdmissionSnapshot(
+            conversationId = "conversation",
+            runId = "run",
+            modelId = fixture.modelId,
+        )
+        val resolver = requireNotNull(snapshot.config.requestResolver)
+        // Tool calls edit active memory and skills mid-run; later passes keep the captured text.
+        every { fixture.memoryManager.getActiveMemory() } returns "edited mid-run"
+        every { fixture.skillManager.catalog() } returns "- edited.md: edited mid-run"
+        val config = com.newoether.agora.api.ProviderConfig(apiKey = "key", modelId = "model")
+        val first = resolver.resolve(emptyList(), config)
+        val second = resolver.resolve(emptyList(), config)
+        assertEquals(RequestBuilderFixture.RESOLVED_SYSTEM_PROMPT, first.systemPrompt)
+        assertEquals(first.systemPrompt, second.systemPrompt)
     }
 
     @Test
@@ -398,11 +570,9 @@ class GenerationRequestBuilderProviderDisplayTest {
             providerRegistry = providerRegistry,
             ragManager = mockk<RagManager>(),
             appContext = mockk<Context>(),
-            pendingConversationSettings = MutableStateFlow<ConversationSettings?>(null),
-            onSnackbar = {},
         )
 
-        val result = async { builder.awaitProviderKey(modelId) }
+        val result = async { builder.awaitProviderKey(modelId) {} }
         runCurrent()
 
         assertEquals(listOf("await"), events)
@@ -446,18 +616,16 @@ class GenerationRequestBuilderProviderDisplayTest {
             providerRegistry = providerRegistry,
             ragManager = mockk<RagManager>(),
             appContext = appContext,
-            pendingConversationSettings = MutableStateFlow<ConversationSettings?>(null),
-            onSnackbar = snackbars::add,
         )
 
-        assertNull(builder.resolveProviderKey(modelId))
+        assertNull(builder.resolveProviderKey(modelId, snackbars::add))
         assertEquals(1, snackbars.size)
         assertTrue(snackbars.single().contains(providerAlias))
         assertFalse(snackbars.single().contains(providerId))
     }
 }
 
-private class RequestBuilderFixture(
+internal class RequestBuilderFixture(
     providerName: String,
     lowContextModeEnabled: Boolean,
     compactPreserveSystemPrompt: Boolean = false,
@@ -520,6 +688,9 @@ private class RequestBuilderFixture(
                 )
             )
         )
+        every { settings.enabledModels } returns MutableStateFlow(setOf(modelId))
+        every { settings.subagentEnabledModels } returns MutableStateFlow(setOf(modelId))
+        every { settings.subagentRecommendedModel } returns MutableStateFlow(null)
         every { settings.maxContextWindow } returns MutableStateFlow(32_768)
         every { settings.defaultTemperature } returns MutableStateFlow(null)
         every { settings.defaultMaxTokens } returns MutableStateFlow(null)
@@ -537,6 +708,10 @@ private class RequestBuilderFixture(
         every { settings.webSearchEnabled } returns MutableStateFlow(true)
         every { settings.shellEnabled } returns MutableStateFlow(true)
         every { settings.askUserEnabled } returns MutableStateFlow(true)
+        every { settings.askUserTimeoutMinutes } returns MutableStateFlow(5)
+        every { settings.todoEnabled } returns MutableStateFlow(true)
+        every { settings.subagentToolsEnabled } returns MutableStateFlow(true)
+        every { settings.subagentDeleteEnabled } returns MutableStateFlow(false)
         every { settings.localLowContextModeEnabled } returns MutableStateFlow(false)
         every { settings.contextCompactModel } returns MutableStateFlow(null)
         every { settings.contextCompactPrompt } returns MutableStateFlow(COMPACT_PROMPT)
@@ -603,8 +778,6 @@ private class RequestBuilderFixture(
             providerRegistry = providerRegistry,
             ragManager = ragManager,
             appContext = appContext,
-            pendingConversationSettings = MutableStateFlow(null),
-            onSnackbar = snackbars::add,
         )
     }
 }

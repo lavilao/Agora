@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="remote_failed">No se pudo completar la acción remota. Consulta los detalles del error.</string>
-    <string name="remote_unknown">El envío no está confirmado. Revisa la conversación en Codex antes de volver a enviar.</string>
+    <string name="remote_unknown">No se pudo confirmar que el mensaje se haya enviado.</string>
     <string name="remote_rejected">Codex no aceptó el mensaje. Consulta el error antes de intentarlo de nuevo.</string>
     <string name="remote_storage_failed">Agora no puede acceder a los datos remotos locales. Comprueba el espacio disponible.</string>
     <string name="remote_network_failed">No se puede conectar con Filo. Comprueba el equipo de destino, la dirección y la red.</string>
@@ -14,7 +14,7 @@
     <string name="remote_response_too_large">La respuesta o el archivo adjunto supera el tamaño admitido.</string>
     <string name="remote_invalid_request">Filo no puede leer la solicitud. Comprueba los valores introducidos.</string>
     <string name="remote_not_found">El elemento solicitado ya no está disponible. Actualiza la lista.</string>
-    <string name="remote_not_supported">El cliente conectado no admite esta operación.</string>
+    <string name="remote_not_supported">Esta fuente no admite esta acción.</string>
     <string name="remote_desktop_unavailable">Filo no puede conectar con Codex Desktop. Abre Codex en el equipo de destino.</string>
     <string name="remote_session_unavailable">Codex aún no tiene lista esta conversación. Revísala en el equipo de destino.</string>
     <string name="remote_helper_unavailable">Filo no puede conectar con su proceso auxiliar de usuario. Comprueba el servicio Filo del equipo de destino.</string>

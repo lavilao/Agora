@@ -24,7 +24,9 @@ class ToolResultContentSourceContractTest {
         assertFalse(webSearch.contains(".background("))
         assertTrue(webSearch.contains("val uriHandler = LocalUriHandler.current"))
         assertTrue(webSearch.contains("val resultShape = RoundedCornerShape(12.dp)"))
-        assertTrue(webSearch.contains("val safeUrl = remember(url) { CitationPolicy.safeHttpUrl(url) }"))
+        val model = source(locateMainSourceRoot(), "ToolDetailPresentation.kt")
+        assertTrue(model.contains("safeUrl = CitationPolicy.safeHttpUrl(url)"))
+        assertTrue(webSearch.contains("val safeUrl = item.safeUrl"))
         assertTrue(webSearch.contains("enabled = safeUrl != null"))
         assertTrue(webSearch.contains("runCatching { uriHandler.openUri(destination) }"))
         assertTrue(
@@ -78,8 +80,9 @@ class ToolResultContentSourceContractTest {
     fun `Generated image thumbnail keeps ordered fixed lifecycle presentation`() {
         val root = locateMainSourceRoot()
         val source = source(root, "ToolResultContent.kt")
+        val presentation = source(root, "AssistantMessagePresentation.kt")
         val timeline = source(root, "MessageItemTimeline.kt") +
-            source(root, "TimelineSegmentsContent.kt")
+            source(root, "TimelineSegmentsContent.kt") + presentation
         val assistant = source(root, "AssistantMessageContent.kt")
         val detailSheet = source(root, "SegmentDetailSheet.kt")
         val generatedSource = source(root, "GeneratedImageThumbnail.kt")
@@ -177,7 +180,7 @@ class ToolResultContentSourceContractTest {
         assertTrue(timeline.contains("preserveInitialCompactIdentity"))
         assertTrue(timeline.contains("expansionKey = if (useInitialCompactIdentity)"))
         assertTrue(timeline.contains("compactSegmentBlockAppearanceKey(message.id)"))
-        assertTrue(timeline.contains("collapseForImageBoundary = imageBoundary != null"))
+        assertTrue(timeline.contains("collapseForImageBoundary = block.imageBoundary != null"))
         assertTrue(timeline.contains("GENERATED_IMAGE_BOUNDARY_GAP_DP = 8"))
         assertTrue(timeline.contains("if (collapseForImageBoundary) {"))
         assertTrue(timeline.contains("GENERATED_IMAGE_BOUNDARY_GAP_DP.dp"))
@@ -195,9 +198,9 @@ class ToolResultContentSourceContractTest {
         assertTrue(timeline.contains("(onGroupHeaderClick ?: onSegmentClick)(blockDetailIndices)"))
         assertTrue(timeline.contains("GeneratedImageThumbnail("))
         assertTrue(timeline.contains("onMediaClick = onMediaClick"))
-        assertTrue(assistant.contains("val hasImageGenerationBoundary ="))
-        assertTrue(assistant.contains("hasImageGenerationBoundary &&\n                        mergedSegments.none"))
-        assertTrue(assistant.contains("useTimelineSegments =\n                    hasImageGenerationBoundary ||"))
+        assertTrue(presentation.contains("val hasImageGenerationBoundary ="))
+        assertTrue(presentation.contains("hasImageGenerationBoundary && mergedSegments.none"))
+        assertTrue(presentation.contains("useTimelineSegments = hasImageGenerationBoundary ||"))
         assertTrue(assistant.contains("message.images.isNotEmpty()"))
     }
 
@@ -205,7 +208,7 @@ class ToolResultContentSourceContractTest {
     fun `Completed wait for job keeps its own action summary`() {
         val source = source(locateMainSourceRoot(), "MessageItemToolLabels.kt")
         val completedSummary = source
-            .substringAfter("private fun completedSummary(")
+            .substringAfter("private fun Resources.completedSummary(")
 
         assertTrue(completedSummary.contains("ToolKind.SHELL_JOB_WAIT -> optionalSubjectSummary("))
         assertTrue(completedSummary.contains("R.string.tool_waited_shell_job,"))
@@ -217,11 +220,15 @@ class ToolResultContentSourceContractTest {
     fun `Background summary does not expose the job id`() {
         val source = source(locateMainSourceRoot(), "MessageItemToolLabels.kt")
         val shellSummary = source
-            .substringAfter("internal fun shellToolSummary(")
-            .substringBefore("private fun shellFailureSummary")
+            .substringAfter("internal fun Resources.shellToolSummary(")
+            .substringBefore("private fun Resources.shellFailureSummary")
         assertTrue(shellSummary.contains("R.string.tool_background_job_running_default"))
         assertFalse(shellSummary.contains("status.jobId"))
         assertFalse(shellSummary.contains("tool_background_job_running,"))
+        val generalSummary = source.substringAfter("internal fun Resources.toolSummary(presentation:")
+            .substringBefore("private fun Resources.runningSummary")
+        assertFalse(generalSummary.contains("presentation.jobId"))
+        assertFalse(generalSummary.contains("tool_background_job_running,"))
     }
 
     @Test
@@ -237,6 +244,12 @@ class ToolResultContentSourceContractTest {
             parseStrings(file)
         }
         val defaults = resources.getValue("values")
+        assertTrue(defaults.keys.containsAll(listOf(
+            "tool_read_active_memory", "tool_reading_active_memory", "tool_read_active_memory_success",
+            "tool_read_active_memory_empty", "tool_read_active_memory_failed",
+            "tool_list_mcp_servers", "tool_listing_mcp_servers", "tool_listed_mcp_servers_default",
+            "tool_no_mcp_servers_returned", "tool_list_mcp_servers_failed",
+        )))
         resources.forEach { (directory, values) ->
             assertEquals("$directory keys", defaults.keys, values.keys)
             defaults.forEach { (key, defaultValue) ->
@@ -249,17 +262,51 @@ class ToolResultContentSourceContractTest {
             values.filterKeys { key ->
                 key.startsWith("tool_progress_") ||
                     key.endsWith("ing_skill_subject") ||
-                    key == "tool_listing_skills"
+                    key == "tool_listing_skills" || key == "tool_reading_active_memory" ||
+                    key == "tool_listing_mcp_servers"
             }.forEach { (key, value) ->
                 assertFalse("$directory $key uses ASCII ellipsis", value.contains("..."))
             }
+            val document = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(File(resourceRoot, "$directory/tool_presentation_strings.xml"))
+            val plurals = document.getElementsByTagName("plurals")
+            assertEquals("$directory quantity keys", 20, plurals.length)
+            val quantityKeys = mutableSetOf<String>()
+            repeat(plurals.length) { index ->
+                val node = plurals.item(index)
+                val key = node.attributes.getNamedItem("name").nodeValue
+                assertTrue("$directory duplicate $key", quantityKeys.add(key))
+                val items = node.childNodes
+                var hasOther = false
+                repeat(items.length) { itemIndex ->
+                    val item = items.item(itemIndex)
+                    if (item.nodeName == "item") {
+                        if (item.attributes.getNamedItem("quantity").nodeValue == "other") hasOther = true
+                        assertEquals("$directory $key quantity placeholders",
+                            when (key) {
+                                "tool_web_search_done", "tool_conversation_search_done_for" -> setOf("%1\$d", "%2\$s")
+                                "tool_questions_mixed" -> setOf("%1\$d", "%2\$d")
+                                else -> setOf("%1\$d")
+                            }, placeholders(item.textContent))
+                    }
+                }
+                assertTrue("$directory $key missing other", hasOther)
+            }
+            assertEquals("$directory quantity key parity", setOf(
+                "tool_listed_mcp_servers", "tool_found_mcp_tools",
+                "tool_lookup_count", "tool_listed_skills", "tool_web_search_done", "tool_web_search_result_count",
+                "tool_conversation_search_done_default", "tool_conversation_search_done_for", "tool_listed_conversations",
+                "tool_shell_list_count", "tool_shell_job_count", "tool_found_files", "tool_searched_file",
+                "tool_listed_task_count", "tool_reading_files_count", "tool_read_files_count",
+                "tool_questions_queued", "tool_questions_answered", "tool_questions_skipped", "tool_questions_mixed",
+            ), quantityKeys)
         }
     }
     @Test
     fun `Completed summaries never fabricate unknown counts`() {
         val source = source(locateMainSourceRoot(), "MessageItemToolLabels.kt")
-            .substringAfter("private fun completedSummary(")
-            .substringBefore("private fun failedSummary(")
+            .substringAfter("private fun Resources.completedSummary(")
+            .substringBefore("private fun Resources.failedSummary(")
         assertFalse(source.contains("?: 0"))
         listOf(
             "tool_listed_memories_default",
@@ -271,6 +318,35 @@ class ToolResultContentSourceContractTest {
             "tool_found_matches_default",
         ).forEach { key -> assertTrue("Missing unknown-count fallback $key", source.contains(key)) }
     }
+    @Test
+    fun `Remote file operation labels exist once across each locale directory`() {
+        val root = locateResourceRoot()
+        val keys = listOf("tool_edit_operation_update", "tool_edit_operation_add",
+            "tool_edit_operation_delete", "tool_edit_operation_move")
+        val defaults = parseStrings(File(root, "values/tool_presentation_strings.xml"))
+        val directories = root.listFiles().orEmpty().filter { it.isDirectory &&
+            (it.name == "values" || it.name.matches(Regex("values-[a-z]{2}(-r[A-Z]{2})?"))) }
+        assertEquals(12, directories.size)
+        directories.forEach { directory ->
+            val entries = directory.listFiles().orEmpty().filter { it.extension == "xml" }
+                .flatMap { file ->
+                    val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
+                        .getElementsByTagName("string")
+                    (0 until nodes.length).map { index -> nodes.item(index).let { node ->
+                        node.attributes.getNamedItem("name").nodeValue to node.textContent
+                    } }
+                }.groupBy({ it.first }, { it.second })
+            assertTrue("${directory.name} aggregation was empty", entries.size > 1000)
+            keys.forEach { key ->
+                val values = entries[key].orEmpty()
+                assertEquals("${directory.name} $key missing or duplicated", 1, values.size)
+                assertTrue("${directory.name} $key empty", values.single().isNotBlank())
+                assertEquals(placeholders(defaults.getValue(key)), placeholders(values.single()))
+            }
+        }
+        assertEquals(listOf("Update", "Add", "Delete", "Move"), keys.map { defaults.getValue(it) })
+    }
+
     private fun parseStrings(file: File): Map<String, String> {
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
         val nodes = document.getElementsByTagName("string")

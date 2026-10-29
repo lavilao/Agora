@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="tool_read_active_memory">Đọc bộ nhớ hoạt động</string>
+    <string name="tool_reading_active_memory">Đang đọc bộ nhớ hoạt động…</string>
+    <string name="tool_read_active_memory_success">Đã đọc bộ nhớ hoạt động</string>
+    <string name="tool_read_active_memory_empty">Bộ nhớ hoạt động trống</string>
+    <string name="tool_read_active_memory_failed">Đọc bộ nhớ hoạt động thất bại</string>
     <string name="tool_no_memories">Không tìm thấy bộ nhớ đã lưu</string>
     <string name="tool_no_skills">Không tìm thấy kỹ năng</string>
     <string name="tool_no_shells">Không tìm thấy shell</string>
@@ -52,4 +57,97 @@
     <string name="tool_list_failed_default">Không thể liệt kê mục</string>
     <string name="tool_loop_start_failed">Không thể bắt đầu vòng lặp</string>
     <string name="tool_loop_stop_failed">Không thể dừng vòng lặp</string>
+    <string name="tool_reading_files_count">Đang đọc %1$d tệp…</string>
+    <string name="tool_read_files_count">Đã đọc %1$d tệp</string>
+    <string name="tool_read_content_empty">Không có nội dung tệp được trả về</string>
+    <string name="tool_read_conversation_empty">Không có tin nhắn hội thoại được trả về</string>
+    <string name="tool_ask_user">Hỏi Người Dùng</string>
+    <string name="tool_waiting_for_answers">Đang chờ câu trả lời…</string>
+    <string name="tool_interrupted">Bị gián đoạn</string>
+    <string name="tool_renaming_file">Đang đổi tên %1$s thành %2$s…</string>
+    <string name="tool_renamed_file">Đã đổi tên %1$s thành %2$s</string>
+    <string name="tool_renaming_file_default">Đang đổi tên tệp…</string>
+    <string name="tool_renamed_file_default">Đã đổi tên tệp</string>
+    <string name="tool_describing_file">Đang cập nhật mô tả của %1$s…</string>
+    <string name="tool_described_file">Đã cập nhật mô tả của %1$s</string>
+    <string name="tool_describing_file_default">Đang cập nhật mô tả tệp…</string>
+    <string name="tool_described_file_default">Đã cập nhật mô tả tệp</string>
+    <plurals name="tool_questions_queued">
+        <item quantity="other">Đã xếp hàng %1$d câu hỏi</item>
+    </plurals>
+    <plurals name="tool_questions_answered">
+        <item quantity="other">Đã trả lời %1$d câu hỏi</item>
+    </plurals>
+    <plurals name="tool_questions_skipped">
+        <item quantity="other">Đã bỏ qua %1$d câu hỏi</item>
+    </plurals>
+    <plurals name="tool_questions_mixed">
+        <item quantity="other">Đã trả lời %1$d trên %2$d câu hỏi</item>
+    </plurals>
+    <string name="tool_questions_asked">Đã đặt câu hỏi</string>
+    <string name="tool_loop_already_stopped">Vòng lặp đã dừng trước đó</string>
+    <string name="tool_ask_user_failed">Không thể hỏi người dùng</string>
+    <plurals name="tool_lookup_count">
+        <item quantity="other">Đã tìm qua %1$d ký ức đã lưu</item>
+    </plurals>
+    <plurals name="tool_listed_skills">
+        <item quantity="other">Đã liệt kê %1$d kỹ năng</item>
+    </plurals>
+    <plurals name="tool_web_search_done">
+        <item quantity="other">Tìm thấy %1$d kết quả cho \"%2$s\"</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_default">
+        <item quantity="other">Đã tìm thấy %1$d cuộc trò chuyện</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_for">
+        <item quantity="other">Tìm thấy %1$d cuộc trò chuyện cho \"%2$s\"</item>
+    </plurals>
+    <plurals name="tool_listed_conversations">
+        <item quantity="other">Đã liệt kê %1$d cuộc trò chuyện</item>
+    </plurals>
+    <plurals name="tool_shell_list_count">
+        <item quantity="other">Đã liệt kê %1$d shell</item>
+    </plurals>
+    <plurals name="tool_shell_job_count">
+        <item quantity="other">Đã liệt kê %1$d tác vụ shell</item>
+    </plurals>
+    <plurals name="tool_found_files">
+        <item quantity="other">Tìm thấy %1$d tệp</item>
+    </plurals>
+    <plurals name="tool_searched_file">
+        <item quantity="other">Tìm thấy %1$d kết quả khớp</item>
+    </plurals>
+    <plurals name="tool_listed_task_count">
+        <item quantity="other">Đã liệt kê %1$d tác vụ</item>
+    </plurals>
+    <plurals name="tool_reading_files_count">
+        <item quantity="other">Đang đọc %1$d tệp…</item>
+    </plurals>
+    <plurals name="tool_read_files_count">
+        <item quantity="other">Đã đọc %1$d tệp</item>
+    </plurals>
+    <plurals name="tool_web_search_result_count">
+        <item quantity="other">Đã tìm thấy %1$d kết quả</item>
+    </plurals>
+    <string name="tool_json_empty_container">Không có nội dung</string>
+    <string name="tool_search_mcp_tools">Tìm công cụ MCP</string>
+    <string name="tool_searching_mcp_tools">Đang tìm công cụ MCP…</string>
+    <string name="tool_searching_mcp_tools_for">Đang tìm công cụ MCP cho %1$s…</string>
+    <string name="tool_searched_mcp_tools">Đã tìm kiếm công cụ MCP</string>
+    <string name="tool_no_mcp_tools">Không tìm thấy công cụ MCP phù hợp</string>
+    <plurals name="tool_found_mcp_tools">
+        <item quantity="other">Đã tìm thấy %1$d công cụ MCP</item>
+    </plurals>
+    <string name="tool_list_mcp_servers">Liệt kê máy chủ MCP</string>
+    <string name="tool_listing_mcp_servers">Đang liệt kê máy chủ MCP…</string>
+    <string name="tool_listed_mcp_servers_default">Đã liệt kê máy chủ MCP</string>
+    <string name="tool_no_mcp_servers_returned">Không có máy chủ MCP nào được trả về</string>
+    <string name="tool_list_mcp_servers_failed">Không thể liệt kê máy chủ MCP</string>
+    <plurals name="tool_listed_mcp_servers">
+        <item quantity="other">Đã liệt kê %1$d máy chủ MCP</item>
+    </plurals>
+    <string name="tool_edit_operation_update">Cập nhật</string>
+    <string name="tool_edit_operation_add">Thêm</string>
+    <string name="tool_edit_operation_delete">Xóa</string>
+    <string name="tool_edit_operation_move">Di chuyển</string>
 </resources>

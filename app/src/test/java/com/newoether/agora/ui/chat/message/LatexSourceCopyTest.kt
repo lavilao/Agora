@@ -5,6 +5,8 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import com.mikepenz.markdown.annotator.DefaultAnnotatorSettings
 import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
+import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
+import com.newoether.agora.ui.components.latexImageRequest
 import com.newoether.agora.ui.components.latexSourceForLink
 import com.newoether.agora.ui.components.parseLatexSpans
 import org.intellij.markdown.MarkdownElementTypes
@@ -13,6 +15,7 @@ import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -45,6 +48,22 @@ class LatexSourceCopyTest {
         assertFalse(text.contains("latex://"))
     }
 
+    @Test
+    fun inlineFormulaAlternateTextResolvesToTheSameFormulaAsItsUrl() {
+        // The markdown renderer passes an inline image's alternate text, not its URL, to the
+        // image transformer, so a formula whose alternate text is its source must still resolve.
+        val original = "So \\(a+b\\) and \$c^2\$ end, \\(\\frac{1}{2}\\)."
+        val markdown = original.toRenderableMarkdownText(parseInlineDollarMath = true)
+        val annotated = markdown.buildMarkdownAnnotatedString(paragraphs(markdown).single(), TextStyle(), settings)
+        val images = annotated.getStringAnnotations(0, annotated.length)
+            .filter { it.item.startsWith("${MARKDOWN_TAG_IMAGE_URL}_") }
+        assertEquals(3, images.size)
+        images.forEach { image ->
+            val fromUrl = latexImageRequest(image.item.removePrefix("${MARKDOWN_TAG_IMAGE_URL}_"))
+            assertNotNull(fromUrl)
+            assertEquals(fromUrl, latexImageRequest(annotated.text.substring(image.start, image.end)))
+        }
+    }
     @Test
     fun displayOnlyParagraphsResolveToTheirFormulaSource() {
         val original = "Before\n\n\$\$x^2\$\$\n\n\\[\\frac{a}{b}\\]\n\nAfter \\(y\\)"

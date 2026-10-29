@@ -6,6 +6,7 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -22,9 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -177,9 +181,13 @@ internal fun ChatSwitchingOverlay(
     isTransitioningToNewChat: Boolean,
     topBarHeight: Dp,
     bottomBarHeight: Dp,
+    animateInitialAppearance: Boolean = false,
 ) {
+    val visible = isSwitching && !isTransitioningToNewChat
+    val appearance = remember { MutableTransitionState(visible && !animateInitialAppearance) }
+    SideEffect { appearance.targetState = visible }
     AnimatedVisibility(
-        visible = isSwitching && !isTransitioningToNewChat,
+        visibleState = appearance,
         enter = fadeIn(animationSpec = tween(200)),
         exit = fadeOut(animationSpec = tween(200))
     ) {
@@ -189,6 +197,13 @@ internal fun ChatSwitchingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                // Being the topmost hit target keeps touches away from the covered sibling content.
+                // Events are not consumed, so ancestor gestures such as the drawer swipe still work.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) awaitPointerEvent()
+                    }
+                }
                 .padding(top = topBarHeight, bottom = bottomBarHeight),
             contentAlignment = Alignment.Center
         ) {

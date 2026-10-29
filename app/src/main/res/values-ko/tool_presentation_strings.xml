@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="tool_read_active_memory">활성 메모리 읽기</string>
+    <string name="tool_reading_active_memory">활성 메모리 읽는 중…</string>
+    <string name="tool_read_active_memory_success">활성 메모리를 읽었습니다</string>
+    <string name="tool_read_active_memory_empty">활성 메모리가 비어 있습니다</string>
+    <string name="tool_read_active_memory_failed">활성 메모리 읽기 실패</string>
     <string name="tool_no_memories">저장된 메모리를 찾을 수 없음</string>
     <string name="tool_no_skills">스킬을 찾을 수 없음</string>
     <string name="tool_no_shells">셸을 찾을 수 없음</string>
@@ -52,4 +57,97 @@
     <string name="tool_list_failed_default">항목 나열 실패</string>
     <string name="tool_loop_start_failed">루프 시작 실패</string>
     <string name="tool_loop_stop_failed">루프 중지 실패</string>
+    <string name="tool_reading_files_count">파일 %1$d개 읽는 중…</string>
+    <string name="tool_read_files_count">파일 %1$d개 읽음</string>
+    <string name="tool_read_content_empty">반환된 파일 내용 없음</string>
+    <string name="tool_read_conversation_empty">반환된 대화 메시지 없음</string>
+    <string name="tool_ask_user">사용자에게 질문</string>
+    <string name="tool_waiting_for_answers">답변 대기 중…</string>
+    <string name="tool_interrupted">중단됨</string>
+    <string name="tool_renaming_file">%1$s을(를) %2$s(으)로 이름 변경 중…</string>
+    <string name="tool_renamed_file">%1$s을(를) %2$s(으)로 이름 변경함</string>
+    <string name="tool_renaming_file_default">파일 이름 변경 중…</string>
+    <string name="tool_renamed_file_default">파일 이름 변경함</string>
+    <string name="tool_describing_file">%1$s 설명 업데이트 중…</string>
+    <string name="tool_described_file">%1$s 설명 업데이트함</string>
+    <string name="tool_describing_file_default">파일 설명 업데이트 중…</string>
+    <string name="tool_described_file_default">파일 설명 업데이트함</string>
+    <plurals name="tool_questions_queued">
+        <item quantity="other">질문 %1$d개를 대기열에 추가함</item>
+    </plurals>
+    <plurals name="tool_questions_answered">
+        <item quantity="other">질문 %1$d개에 답변함</item>
+    </plurals>
+    <plurals name="tool_questions_skipped">
+        <item quantity="other">질문 %1$d개를 건너뜀</item>
+    </plurals>
+    <plurals name="tool_questions_mixed">
+        <item quantity="other">질문 %2$d개 중 %1$d개에 답변함</item>
+    </plurals>
+    <string name="tool_questions_asked">질문함</string>
+    <string name="tool_loop_already_stopped">루프가 이미 중지됨</string>
+    <string name="tool_ask_user_failed">사용자에게 질문하지 못함</string>
+    <plurals name="tool_lookup_count">
+        <item quantity="other">저장된 %1$d개의 메모리를 살펴봤습니다</item>
+    </plurals>
+    <plurals name="tool_listed_skills">
+        <item quantity="other">스킬 %1$d개를 나열함</item>
+    </plurals>
+    <plurals name="tool_web_search_done">
+        <item quantity="other">\"%2$s\"에 대해 %1$d개의 결과를 찾았습니다</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_default">
+        <item quantity="other">대화 %1$d개를 찾았습니다</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_for">
+        <item quantity="other">\"%2$s\"에 대해 %1$d개의 대화를 찾았습니다</item>
+    </plurals>
+    <plurals name="tool_listed_conversations">
+        <item quantity="other">대화 %1$d개 나열됨</item>
+    </plurals>
+    <plurals name="tool_shell_list_count">
+        <item quantity="other">%1$d개의 셸 목록 표시됨</item>
+    </plurals>
+    <plurals name="tool_shell_job_count">
+        <item quantity="other">셸 작업 %1$d개를 표시했습니다</item>
+    </plurals>
+    <plurals name="tool_found_files">
+        <item quantity="other">파일 %1$d개 찾음</item>
+    </plurals>
+    <plurals name="tool_searched_file">
+        <item quantity="other">일치 %1$d개 발견</item>
+    </plurals>
+    <plurals name="tool_listed_task_count">
+        <item quantity="other">작업 %1$d개를 나열함</item>
+    </plurals>
+    <plurals name="tool_reading_files_count">
+        <item quantity="other">파일 %1$d개 읽는 중…</item>
+    </plurals>
+    <plurals name="tool_read_files_count">
+        <item quantity="other">파일 %1$d개 읽음</item>
+    </plurals>
+    <plurals name="tool_web_search_result_count">
+        <item quantity="other">결과 %1$d개를 찾음</item>
+    </plurals>
+    <string name="tool_json_empty_container">콘텐츠 없음</string>
+    <string name="tool_search_mcp_tools">MCP 도구 검색</string>
+    <string name="tool_searching_mcp_tools">MCP 도구 검색 중…</string>
+    <string name="tool_searching_mcp_tools_for">%1$s 관련 MCP 도구 검색 중…</string>
+    <string name="tool_searched_mcp_tools">MCP 도구 검색 완료</string>
+    <string name="tool_no_mcp_tools">일치하는 MCP 도구를 찾지 못했습니다</string>
+    <plurals name="tool_found_mcp_tools">
+        <item quantity="other">MCP 도구 %1$d개 찾음</item>
+    </plurals>
+    <string name="tool_list_mcp_servers">MCP 서버 목록 조회</string>
+    <string name="tool_listing_mcp_servers">MCP 서버 목록 조회 중…</string>
+    <string name="tool_listed_mcp_servers_default">MCP 서버 목록 조회 완료</string>
+    <string name="tool_no_mcp_servers_returned">반환된 MCP 서버가 없습니다</string>
+    <string name="tool_list_mcp_servers_failed">MCP 서버 목록 조회 실패</string>
+    <plurals name="tool_listed_mcp_servers">
+        <item quantity="other">MCP 서버 %1$d개 조회 완료</item>
+    </plurals>
+    <string name="tool_edit_operation_update">수정</string>
+    <string name="tool_edit_operation_add">추가</string>
+    <string name="tool_edit_operation_delete">삭제</string>
+    <string name="tool_edit_operation_move">이동</string>
 </resources>

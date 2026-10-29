@@ -172,6 +172,9 @@
 
     <!-- Drawer -->
     <string name="conversations">Беседы</string>
+    <string name="pinned_conversations">Закреплённые</string>
+    <string name="pin_conversation">Закрепить</string>
+    <string name="unpin_conversation">Открепить</string>
     <string name="conversation_unread_generation">Непрочитанный сгенерированный ответ</string>
     <string name="new_chat">Новый чат</string>
 
@@ -198,6 +201,22 @@
     <string name="embedding_custom_model_desc">Введите любое имя модели, поддерживаемое провайдером</string>
     <string name="embedding_batch_size">Размер пакета</string>
     <string name="embedding_batch_size_desc">Сообщений для кэширования за запрос (1-100)</string>
+    <string name="embedding_add_model">Добавить модель</string>
+    <string name="embedding_edit_model">Изменить модель</string>
+    <string name="embedding_choose_type">Выберите тип модели</string>
+    <string name="embedding_type_remote_desc">Использовать API эмбеддингов, например OpenAI, Voyage AI или Ollama.</string>
+    <string name="embedding_type_local_desc">Запускать GGUF-модель эмбеддингов на этом устройстве.</string>
+    <string name="embedding_provider_custom">Своя</string>
+    <string name="embedding_connection">Подключение</string>
+    <string name="embedding_general">Общие</string>
+    <string name="embedding_cache_status">Кэш</string>
+    <string name="embedding_use_saved_key">Использовать сохранённый ключ %1$s</string>
+    <string name="embedding_use_saved_key_desc">Из настроек провайдера чата</string>
+    <string name="embedding_model_id_hint">ID модели, например text-embedding-3-small</string>
+    <string name="embedding_model_locked_desc">Кэшированные эмбеддинги принадлежат этой модели. Чтобы сменить модель, добавьте новую.</string>
+    <string name="embedding_model_file">Файл модели</string>
+    <string name="embedding_replace_file">Заменить</string>
+    <string name="embedding_test_failed">Проверка подключения не удалась: %1$s</string>
     <string name="local_model_ready">Модель импортирована.</string>
     <string name="import_model">Импортировать модель (.gguf)</string>
     <string name="importing_model">Импорт...</string>
@@ -541,8 +560,8 @@
     <string name="onboarding_no_models">Модели не загружены.</string>
     <string name="onboarding_invalid_gguf_title">Недопустимый файл GGUF</string>
     <string name="onboarding_invalid_gguf_desc">Выбранный файл, похоже, не является допустимой моделью GGUF.</string>
-    <string name="onboarding_hide_key">Скрыть ключ</string>
-    <string name="onboarding_show_key">Показать ключ</string>
+    <string name="secret_hide">Скрыть значение</string>
+    <string name="secret_show">Показать значение</string>
     <!-- ── Auto Backup ── -->
     <string name="auto_backup_title">Автоматическое резервное копирование</string>
     <string name="auto_backup_subtitle">Автоматически экспортировать данные по расписанию</string>
@@ -574,7 +593,7 @@
     <!-- SSH host-key pinning -->
     <string name="shell_ssh_verify_host_key">Проверить и закрепить ключ хоста</string>
     <string name="shell_ssh_host_key_pinned">Ключ хоста закреплён</string>
-    <string name="shell_ssh_host_key_not_pinned">Ключ хоста не закреплён — уязвимо для перехвата</string>
+    <string name="shell_ssh_host_key_not_pinned">Ключ хоста не закреплён, уязвимо для перехвата</string>
     <string name="shell_ssh_verify_title">Проверить ключ хоста SSH</string>
     <string name="shell_ssh_verify_message">Прежде чем доверять, убедитесь, что этот отпечаток совпадает с вашим сервером. Закрепление защищает от атак «человек посередине».</string>
     <string name="shell_ssh_trust">Доверять и закрепить</string>
@@ -620,6 +639,7 @@
     <string name="conversation_search_hint">Поиск…</string>
     <string name="conversation_share">Поделиться</string>
     <string name="conversation_share_failed">Не удалось поделиться диалогом: %1$s</string>
+    <string name="conversation_deleted_elsewhere">Этот диалог был удалён на другом устройстве.</string>
     <string name="custom_provider_protocol_label">Формат API</string>
     <string name="file_path_unknown">Неизвестный файл</string>
     <string name="import_file_too_large">Файл слишком большой (%1$d МБ). Выберите файл экспорта меньшего размера.</string>
@@ -697,6 +717,7 @@
     <string name="context_part_messages">Сообщения</string>
     <string name="context_part_free">Свободно</string>
     <string name="context_part_reserved">Резерв</string>
+    <string name="context_part_used">Использовано</string>
     <string name="context_compact_streaming">Сжатие контекста…</string>
     <string name="context_compact_error">Ошибка сжатия</string>
     <string name="context_compact_stopped">Сжатие остановлено</string>
@@ -810,6 +831,9 @@
     <string name="tool_edit_skill">Изменить навык</string>
     <string name="tool_delete_skill">Удалить навык</string>
     <string name="tool_read_file_truncated">Показана часть содержимого · продолжить с байта %1$d</string>
+    <string name="tool_read_file_truncated_line">Показана часть содержимого · продолжить со строки %1$d</string>
+    <string name="tool_edit_count">Изменений: %1$d</string>
+    <string name="tool_edit_replace_all">Заменить все</string>
     <string name="low_context_mode">Режим малого контекста</string>
     <string name="low_context_mode_default_desc">Включать режим малого контекста по умолчанию</string>
     <string name="learn_more">Подробнее...</string>
@@ -906,4 +930,57 @@
     <string name="local_ubatch_size_title">Физический размер батча</string>
     <string name="local_ubatch_size_desc">Физический кусок, на который движок режет каждый батч. Меньшие значения снижают пиковую память при предзаполнении. Применяется со следующей загрузки модели.</string>
     <string name="local_draft_model_path_label">Добавить модель-черновик (спекулятивное декодирование)</string>
+    <string name="message_source_task">Задача</string>
+    <string name="message_source_loop">Цикл</string>
+    <string name="message_source_ask_user">Вопрос</string>
+    <string name="message_source_unanswered">Без ответа</string>
+    <string name="settings_todo">Список задач</string>
+    <string name="settings_todo_desc">Список задач беседы, которым управляет модель</string>
+    <string name="todo_enable">Включить список задач</string>
+    <string name="todo_enable_desc">Разрешить модели читать и обновлять список задач беседы. При отключении существующие списки сохраняются.</string>
+    <string name="settings_subagents">Субагенты</string>
+    <string name="settings_subagents_desc">Делегирование работы в изолированные беседы</string>
+    <string name="subagents_enable">Включить субагентов</string>
+    <string name="subagents_enable_desc">Разрешить модели делегировать работу в изолированные беседы. Отключение не останавливает существующих субагентов.</string>
+    <string name="local_projector_title">Визуальный Проектор</string>
+    <string name="local_projector_desc">Необязательно: импортировать файл mmproj GGUF, совместимый с моделью чата, для ввода изображений</string>
+    <string name="local_model_error_id_required">Укажите ID модели</string>
+    <string name="local_model_error_id_invalid">Допустимы только a-z, 0-9, точки, подчёркивания и дефисы</string>
+    <string name="local_model_error_id_taken">Этот ID модели уже используется</string>
+    <string name="local_model_error_file_required">Импортируйте файл модели GGUF</string>
+    <string name="local_model_error_context">Размер контекста должен быть положительным целым числом</string>
+    <string name="local_model_error_temperature">Температура должна быть от 0 до 2</string>
+    <string name="local_model_error_top_p">Top P должен быть от 0 до 1</string>
+    <string name="local_model_error_max_tokens">Максимум токенов должен быть положительным целым числом</string>
+    <string name="local_model_error_output">Максимум токенов не может превышать размер контекста</string>
+    <string name="tool_read_todo">Прочитать список задач</string>
+    <string name="tool_update_todo">Обновить список задач</string>
+    <string name="tool_spawn_agent">Запустить субагента</string>
+    <string name="tool_send_agent_message">Отправить сообщение субагенту</string>
+    <string name="tool_wait_agents">Дождаться субагентов</string>
+    <string name="tool_list_agents">Показать список субагентов</string>
+    <string name="tool_stop_agent">Остановить субагента</string>
+    <string name="tool_reading_todo">Чтение списка задач…</string>
+    <string name="tool_updating_todo">Обновление списка задач…</string>
+    <string name="tool_spawning_agent">Запуск субагента…</string>
+    <string name="tool_sending_agent_message">Добавление сообщения субагенту в очередь…</string>
+    <string name="tool_waiting_agents">Ожидание субагентов…</string>
+    <string name="tool_listing_agents">Получение списка субагентов…</string>
+    <string name="tool_stopping_agent">Остановка субагента…</string>
+    <string name="tool_read_todo_done">Список задач прочитан</string>
+    <string name="tool_updated_todo">Список задач обновлён</string>
+    <string name="tool_spawned_agent">Субагент запущен</string>
+    <string name="tool_queued_agent_message">Сообщение субагенту добавлено в очередь</string>
+    <string name="tool_waited_agents">Ожидание субагентов завершено</string>
+    <string name="tool_listed_agents">Список субагентов получен</string>
+    <string name="tool_stopped_agent">Субагент остановлен</string>
+    <string name="tool_delete_agent">Удалить субагента</string>
+    <string name="tool_deleting_agent">Удаление субагента…</string>
+    <string name="tool_deleted_agent">Субагент удалён</string>
+    <string name="subagents_allow_delete">Разрешить удаление субагентов</string>
+    <string name="subagents_allow_delete_desc">Разрешить родительской беседе безвозвратно удалять неактивных субагентов, чтобы освободить места. Работающие субагенты и недоставленные результаты никогда не удаляются.</string>
+    <string name="subagent_deleted_by_parent">Этот субагент был удалён родительской беседой.</string>
+    <string name="tool_todo_empty">Список задач пуст</string>
+    <string name="tool_agents_empty">Нет субагентов</string>
+    <string name="tool_agent_results_empty">Результаты субагентов не получены</string>
 </resources>

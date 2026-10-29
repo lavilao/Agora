@@ -10,7 +10,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
- * Gives every tool call of an ended generation a result in the Provider path.
+ * Gives every client tool call of an ended generation a result in the Provider path.
  *
  * A tool round reaches Room as a tool/result row pair only after its tools return. When the user
  * stops a generation, the process dies, or the provider fails while a call is outstanding, that
@@ -80,6 +80,7 @@ internal object InterruptedToolRounds {
         if (!entity.isEndedModelRow()) return emptyList()
         return decodeSegments(entity.toolCallJson).orEmpty().filter { segment ->
             segment.type == TOOL_SEGMENT &&
+                !segment.isProviderHostedTool &&
                 !segment.toolName.isNullOrBlank() &&
                 callKey(segment) !in persistedCalls
         }

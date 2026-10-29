@@ -5,6 +5,7 @@ import com.newoether.agora.api.*
 import com.newoether.agora.util.DebugLog
 import com.newoether.agora.model.ChatMessage
 import com.newoether.agora.model.MessageSegment
+import com.newoether.agora.model.ModelId
 import com.newoether.agora.model.ThinkingProviderFamily
 import com.newoether.agora.api.util.Base64FileRegistry
 import com.newoether.agora.api.util.resolvedThinking
@@ -47,7 +48,15 @@ private fun extractThoughtTitle(content: String): String? =
     THOUGHT_TITLE_BOLD.find(content)?.groupValues?.get(1)
         ?: THOUGHT_TITLE_HEADING.find(content)?.groupValues?.get(1)
 
-private fun ChatMessage.isGeminiToolRoundCompatible(
+/**
+ * A Gemini thought signature is opaque state signed by the model that produced it, so only that
+ * exact model behind that exact provider entry can read it back. The previous rule let any signature
+ * whose provider was Google through and otherwise fell back to a name match on "gemini", so a model
+ * switch inside one conversation replayed a foreign signature. The issuing provider entry and the
+ * issuing model must both match now, and a round whose model is not recorded is not replayed
+ * either. [adaptToolRoundsForProvider] turns a rejected round into inert archived context.
+ */
+internal fun ChatMessage.isGeminiToolRoundCompatible(
     targetModel: String,
     targetProviderName: String,
     signatureRequired: Boolean,
@@ -69,16 +78,15 @@ private fun ChatMessage.isGeminiToolRoundCompatible(
             }.orEmpty()
         }
     if (calls.isEmpty()) return false
+    val storedModel = modelName?.trim()?.takeIf(String::isNotEmpty)?.let(ModelId::parse)
+    val target = targetModel.trim().removePrefix("models/")
     return calls.all { call ->
         if (signatureRequired && call.signature.isNullOrBlank()) return@all false
         if (call.signature.isNullOrBlank()) return@all true
-        call.signatureProvider?.let { provider ->
-            return@all provider.equals(Constants.PROVIDER_GOOGLE, ignoreCase = true) ||
-                provider == targetProviderName
-        }
-        modelName == null ||
-            modelName.equals(targetModel, ignoreCase = true) ||
-            modelName.contains("gemini", ignoreCase = true)
+        val model = storedModel ?: return@all false
+        val issuer = call.signatureProvider?.trim()?.takeIf(String::isNotEmpty) ?: model.providerName
+        issuer.equals(targetProviderName, ignoreCase = true) &&
+            model.modelName.removePrefix("models/").equals(target, ignoreCase = true)
     }
 }
 
@@ -517,6 +525,8 @@ class GeminiProvider(
                                 handle.readLine()
                             } catch (e: java.net.SocketTimeoutException) {
                                 if (!currentCoroutineContext().isActive) break
+                                streamError = e.asRetryableResponseBodyReadError()
+                                if (streamError != null) break
                                 if (++consecutiveReadTimeouts >= 3) {
                                     timedOut = true
                                     break
@@ -698,7 +708,14 @@ class GeminiProvider(
                         }
                         DebugLog.d("AgoraSSE", "[$name] ${termination.describe()}")
                         if (termination.isRetryable && attempt < maxAttempts) {
-                            emit(StreamEvent.Retrying(attempt, ProviderRetryPolicy.MAX_RETRIES))
+                            emit(
+                                StreamEvent.Retrying(
+                                    attempt,
+                                    ProviderRetryPolicy.MAX_RETRIES,
+                                    resetCurrentAttempt = termination.producedContent ||
+                                        ProviderRetryPolicy.requiresResponseReadRetry(termination.streamError),
+                                ),
+                            )
                             delay(ProviderRetryPolicy.delayMillis(attempt))
                         } else {
                             termination.toError(name)?.let { emit(StreamEvent.Error(it)) }
@@ -718,7 +735,7 @@ class GeminiProvider(
                         )
                         if (retryable && attempt < maxAttempts) {
                             emit(StreamEvent.Retrying(attempt, ProviderRetryPolicy.MAX_RETRIES))
-                            delay(ProviderRetryPolicy.delayMillis(attempt))
+                            delay(ProviderRetryPolicy.delayMillis(attempt, handle.retryAfter))
                         } else {
                             val genError = providerHttpError(handle.code, errorRaw)
                             emit(StreamEvent.Error(genError))

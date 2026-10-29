@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
+import com.newoether.agora.util.NoAutoScrollSelectionContainer
 import com.newoether.agora.viewmodel.AskUserController
 
 private const val FieldDurationMs = 180
@@ -231,11 +232,14 @@ private fun QuestionPage(
             .heightIn(max = ScrollableContentMaxHeight)
             .verticalScroll(rememberScrollState()),
     ) {
-        Text(
-            text = request.question,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        // Only the question is selectable (long-press, like message bubbles); options stay tap targets.
+        NoAutoScrollSelectionContainer {
+            Text(
+                text = request.question,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
         if (hasOptions) {
             Spacer(Modifier.height(10.dp))
             request.options.forEach { option ->

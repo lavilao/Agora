@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="tool_read_active_memory">讀取活躍記憶</string>
+    <string name="tool_reading_active_memory">正在讀取活躍記憶…</string>
+    <string name="tool_read_active_memory_success">已讀取活躍記憶</string>
+    <string name="tool_read_active_memory_empty">活躍記憶為空</string>
+    <string name="tool_read_active_memory_failed">讀取活躍記憶失敗</string>
     <string name="tool_no_memories">找不到已儲存的記憶</string>
     <string name="tool_no_skills">找不到技能</string>
     <string name="tool_no_shells">找不到 Shell</string>
@@ -52,4 +57,97 @@
     <string name="tool_list_failed_default">無法列出項目</string>
     <string name="tool_loop_start_failed">無法啟動循環</string>
     <string name="tool_loop_stop_failed">無法停止循環</string>
+    <string name="tool_reading_files_count">正在讀取 %1$d 個檔案…</string>
+    <string name="tool_read_files_count">已讀取 %1$d 個檔案</string>
+    <string name="tool_read_content_empty">未傳回檔案內容</string>
+    <string name="tool_read_conversation_empty">未傳回對話訊息</string>
+    <string name="tool_ask_user">詢問使用者</string>
+    <string name="tool_waiting_for_answers">等待回答…</string>
+    <string name="tool_interrupted">意外中斷</string>
+    <string name="tool_renaming_file">正在將 %1$s 重新命名為 %2$s…</string>
+    <string name="tool_renamed_file">已將 %1$s 重新命名為 %2$s</string>
+    <string name="tool_renaming_file_default">正在重新命名檔案…</string>
+    <string name="tool_renamed_file_default">已重新命名檔案</string>
+    <string name="tool_describing_file">正在更新 %1$s 的描述…</string>
+    <string name="tool_described_file">已更新 %1$s 的描述</string>
+    <string name="tool_describing_file_default">正在更新檔案描述…</string>
+    <string name="tool_described_file_default">已更新檔案描述</string>
+    <plurals name="tool_questions_queued">
+        <item quantity="other">已排隊 %1$d 個問題</item>
+    </plurals>
+    <plurals name="tool_questions_answered">
+        <item quantity="other">已回答 %1$d 個問題</item>
+    </plurals>
+    <plurals name="tool_questions_skipped">
+        <item quantity="other">已略過 %1$d 個問題</item>
+    </plurals>
+    <plurals name="tool_questions_mixed">
+        <item quantity="other">已回答 %1$d 個問題，共 %2$d 個</item>
+    </plurals>
+    <string name="tool_questions_asked">已提問</string>
+    <string name="tool_loop_already_stopped">循環已處於停止狀態</string>
+    <string name="tool_ask_user_failed">詢問使用者失敗</string>
+    <plurals name="tool_lookup_count">
+        <item quantity="other">檢視了 %1$d 筆已儲存的記憶</item>
+    </plurals>
+    <plurals name="tool_listed_skills">
+        <item quantity="other">已列出 %1$d 個技能</item>
+    </plurals>
+    <plurals name="tool_web_search_done">
+        <item quantity="other">搜尋 \"%2$s\" 找到 %1$d 筆結果</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_default">
+        <item quantity="other">找到 %1$d 個對話</item>
+    </plurals>
+    <plurals name="tool_conversation_search_done_for">
+        <item quantity="other">搜尋 \"%2$s\" 找到 %1$d 則對話</item>
+    </plurals>
+    <plurals name="tool_listed_conversations">
+        <item quantity="other">已列出 %1$d 個對話</item>
+    </plurals>
+    <plurals name="tool_shell_list_count">
+        <item quantity="other">列出了 %1$d 個終端機</item>
+    </plurals>
+    <plurals name="tool_shell_job_count">
+        <item quantity="other">列出了 %1$d 個 Shell 工作</item>
+    </plurals>
+    <plurals name="tool_found_files">
+        <item quantity="other">找到 %1$d 個檔案</item>
+    </plurals>
+    <plurals name="tool_searched_file">
+        <item quantity="other">找到 %1$d 處符合</item>
+    </plurals>
+    <plurals name="tool_listed_task_count">
+        <item quantity="other">已列出 %1$d 個任務</item>
+    </plurals>
+    <plurals name="tool_reading_files_count">
+        <item quantity="other">正在讀取 %1$d 個檔案…</item>
+    </plurals>
+    <plurals name="tool_read_files_count">
+        <item quantity="other">已讀取 %1$d 個檔案</item>
+    </plurals>
+    <plurals name="tool_web_search_result_count">
+        <item quantity="other">找到 %1$d 筆結果</item>
+    </plurals>
+    <string name="tool_json_empty_container">無內容</string>
+    <string name="tool_search_mcp_tools">搜尋 MCP 工具</string>
+    <string name="tool_searching_mcp_tools">正在搜尋 MCP 工具…</string>
+    <string name="tool_searching_mcp_tools_for">正在搜尋與 %1$s 相關的 MCP 工具…</string>
+    <string name="tool_searched_mcp_tools">已搜尋 MCP 工具</string>
+    <string name="tool_no_mcp_tools">找不到相符的 MCP 工具</string>
+    <plurals name="tool_found_mcp_tools">
+        <item quantity="other">找到 %1$d 個 MCP 工具</item>
+    </plurals>
+    <string name="tool_list_mcp_servers">列出 MCP 伺服器</string>
+    <string name="tool_listing_mcp_servers">正在列出 MCP 伺服器…</string>
+    <string name="tool_listed_mcp_servers_default">已列出 MCP 伺服器</string>
+    <string name="tool_no_mcp_servers_returned">未傳回 MCP 伺服器</string>
+    <string name="tool_list_mcp_servers_failed">列出 MCP 伺服器失敗</string>
+    <plurals name="tool_listed_mcp_servers">
+        <item quantity="other">已列出 %1$d 個 MCP 伺服器</item>
+    </plurals>
+    <string name="tool_edit_operation_update">更新</string>
+    <string name="tool_edit_operation_add">新增</string>
+    <string name="tool_edit_operation_delete">刪除</string>
+    <string name="tool_edit_operation_move">移動</string>
 </resources>

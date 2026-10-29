@@ -144,6 +144,14 @@ class SearchResultFormatterTest {
     }
 
     @Test
+    fun format_conversationRead_keepsPartialAnswerAndFailureDetailVisible() {
+        val raw = """{"type":"read_conversation","title":"Conversation","messages":[{"participant":"MODEL","text":"Partial answer","status":"ERROR","error":"Connection closed"}]}"""
+        val formatted = SearchResultFormatter.format(raw, context)
+        assertTrue(formatted.contains("Partial answer"))
+        assertTrue(formatted.contains("Connection closed"))
+    }
+
+    @Test
     fun format_conversationRead_emptyPageOmitsRange() {
         val json = """{"type":"read_conversation","title":"T","total_messages":99,"offset":99,"has_more":false,"messages":[]}"""
         val result = SearchResultFormatter.format(json, context)

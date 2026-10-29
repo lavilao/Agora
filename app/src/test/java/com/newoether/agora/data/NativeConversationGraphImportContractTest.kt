@@ -170,6 +170,64 @@ class NativeConversationGraphImportContractTest {
     }
 
     @Test
+    fun pinStateRestoresFromArchiveAndDefaultsToUnpinned() = runTest {
+        val pinnedOne = """{"id":"c1","title":"One","lastUpdated":11,"isPinned":true}"""
+        val source = FakeEntries(
+            mapOf(
+                NativeBackupFormat.CONVERSATIONS_ENTRY to
+                    """{"conversations":[$pinnedOne,$convTwo],"runs":[],"messages":[],""" +
+                        """"loops":[],"tasks":[]}""",
+            ),
+        )
+        val headers = headersFor(source, version = 4, strategy = ImportStrategy.REPLACE)
+        assertEquals(
+            mapOf("c1" to true, "c2" to false),
+            headers.conversations.associate { it.id to it.isPinned },
+        )
+    }
+
+    @Test
+    fun todoRoundTripsThroughNativePayloadAndLegacyArchivesDefaultToEmpty() = runTest {
+        val items = listOf(
+            com.newoether.agora.model.ConversationTodoItem("Check **literal** text", "completed"),
+            com.newoether.agora.model.ConversationTodoItem("Check\nnext step", "in_progress"),
+            com.newoether.agora.model.ConversationTodoItem("Pending"),
+        )
+        val raw = com.newoether.agora.model.ConversationTodo.encode(items)
+        val payload = NativeConversationPayload(
+            conversations = listOf(NativeExportChatEntity("c1", "One", 11L, todoJson = raw)),
+            runs = emptyList(), messages = emptyList(), loops = emptyList(),
+        )
+        val source = FakeEntries(mapOf(
+            NativeBackupFormat.CONVERSATIONS_ENTRY to kotlinx.serialization.json.Json.encodeToString(
+                NativeConversationPayload.serializer(), payload,
+            ),
+        ))
+        val restored = headersFor(source, version = 4, strategy = ImportStrategy.REPLACE)
+        assertEquals(raw, restored.conversations.single().todoJson)
+        assertEquals(items, com.newoether.agora.model.ConversationTodo.decode(restored.conversations.single().todoJson))
+        val legacy = headersFor(legacySource(), version = 4, strategy = ImportStrategy.REPLACE)
+        assertTrue(legacy.conversations.all { it.todoJson == null })
+    }
+
+    @Test
+    fun malformedTodoFailsHeadersBeforeAnyGraphWrites() = runTest {
+        val chatDao = mockk<ChatDao>()
+        val invalid = kotlinx.serialization.json.Json.encodeToString(
+            NativeConversationPayload.serializer(),
+            NativeConversationPayload(
+                listOf(NativeExportChatEntity("c1", "One", 11L,
+                    todoJson = """[{"content":"Task","status":"invalid"}]""")),
+                emptyList(), emptyList(), emptyList(),
+            ),
+        )
+        val source = FakeEntries(mapOf(NativeBackupFormat.CONVERSATIONS_ENTRY to invalid))
+        val error = runCatching { headersFor(source, 4, ImportStrategy.REPLACE, chatDao) }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        coVerify(exactly = 0) { chatDao.upsertConversation(any()) }
+    }
+
+    @Test
     fun mergeHeadersIncludeExistingConversations() = runTest {
         val chatDao = mockk<ChatDao>()
         coEvery { chatDao.getAllConversationIds() } returns listOf("old-conv")

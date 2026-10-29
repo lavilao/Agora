@@ -31,6 +31,21 @@ internal class GenerationToolOverlay(
     fun snapshot(): List<MessageSegment> =
         segments.toList() + citations.map { it.toMessageSegment() }
 
+    /** Request-boundary rollback includes merged citations and live stream-to-segment indices. */
+    fun capture(): () -> Unit {
+        val savedSegments = segments.toList()
+        val savedCitations = citations.toList()
+        val savedIndices = streamIndices.toMap()
+        return {
+            segments.clear()
+            segments.addAll(savedSegments)
+            citations.clear()
+            citations.addAll(savedCitations)
+            streamIndices.clear()
+            streamIndices.putAll(savedIndices)
+        }
+    }
+
     fun contentSnapshot(): List<MessageSegment> = segments.toList()
 
     fun replaceAll(replacement: List<MessageSegment>) {
@@ -121,7 +136,7 @@ internal class GenerationToolOverlay(
         if (existingIndex != null) {
             val existing = segments[existingIndex]
             val resolvedName = name.ifBlank { existing.toolName.orEmpty() }
-            val metadata = presentation.presentationMetadata(resolvedName)
+            val metadata = presentation.presentationMetadata(resolvedName, arguments)
             segments[existingIndex] = existing.copy(
                 toolName = resolvedName.ifBlank { existing.toolName },
                 toolArgs = arguments,
@@ -138,7 +153,7 @@ internal class GenerationToolOverlay(
         }
 
         val index = segments.size
-        val metadata = presentation.presentationMetadata(name)
+        val metadata = presentation.presentationMetadata(name, arguments)
         segments += MessageSegment(
             type = "tool",
             toolName = name.ifBlank { null },
@@ -181,7 +196,7 @@ internal class GenerationToolOverlay(
             "Missing live segment for tool call ${call.streamKey}"
         }
         val current = segments[index]
-        val metadata = presentation.presentationMetadata(call.name)
+        val metadata = presentation.presentationMetadata(call.name, call.arguments)
         segments[index] = current.copy(
             toolName = call.name,
             toolArgs = call.arguments,
@@ -209,17 +224,17 @@ internal class GenerationToolOverlay(
         )
     }
 
-    fun releaseCommittedResponseState(toolCallIds: Set<String>) {
+    fun markCommittedRound(toolCallIds: Set<String>, toolRoundId: String) {
         if (toolCallIds.isEmpty()) return
         segments.indices.forEach { index ->
             val segment = segments[index]
             if (
                 segment.type == "tool" &&
-                segment.toolCallId in toolCallIds &&
-                (segment.responseOutputItems.isNotEmpty() ||
-                    segment.responseOutputItemProvider != null)
+                segment.toolRoundId == null &&
+                segment.toolCallId in toolCallIds
             ) {
                 segments[index] = segment.copy(
+                    toolRoundId = toolRoundId,
                     responseOutputItems = emptyList(),
                     responseOutputItemProvider = null,
                 )
@@ -243,7 +258,10 @@ internal class GenerationToolOverlay(
                     Constants.MAX_TOOL_RESULT_LENGTH,
                 ),
             )
-            is ToolExecutionEvent.TargetResolved -> current.copy(toolTarget = event.target)
+            is ToolExecutionEvent.TargetResolved -> current.copy(
+                toolTarget = event.target,
+                toolDisplayName = event.displayName ?: current.toolDisplayName,
+            )
             is ToolExecutionEvent.Progress -> current.copy(toolState = ToolExecutionStates.RUNNING)
             is ToolExecutionEvent.Completed -> current
         }
@@ -264,7 +282,7 @@ internal class GenerationToolOverlay(
             toolResult = clipped,
             toolResultText = displayText,
             toolStructuredResult = structuredResult,
-            toolState = if (result.isError) ToolExecutionStates.FAILED else finalToolState(result.text),
+            toolState = finalToolState(result, call.name),
             toolImages = result.images,
             toolTranscription = transcription,
         )
@@ -279,6 +297,7 @@ internal class GenerationToolOverlay(
                 toolCallId = call.id,
                 resultImages = result.images,
                 displayName = completed.toolDisplayName,
+                target = completed.toolTarget,
                 resultText = displayText,
                 structuredResult = structuredResult,
                 responseOutputItems = completed.responseOutputItems,

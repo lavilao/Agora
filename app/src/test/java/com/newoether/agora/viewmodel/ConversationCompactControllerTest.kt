@@ -24,6 +24,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -56,7 +57,7 @@ class ConversationCompactControllerTest {
         val manager = mockk<GenerationManager>()
         val launcher = mockk<StandardGenerationContinuationLauncher>()
         val requestBuilder = mockk<GenerationRequestBuilder>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val source = sourceEntity()
         val pathRequest = slot<GenerationApiPathRequest>()
         val launchRequest = slot<StandardGenerationContinuationRequest>()
@@ -76,6 +77,7 @@ class ConversationCompactControllerTest {
                 job = completedJob,
                 modelMessageId = "compact_message",
                 started = CompletableDeferred(true),
+                uiToken = 1L,
             )
 
         val started = controller(
@@ -99,12 +101,29 @@ class ConversationCompactControllerTest {
         assertEquals(null, launchRequest.captured.replacementMessageId)
         assertEquals("compact", launchRequest.captured.requestKind)
         assertFalse(launchRequest.captured.touchConversationOnAdmission)
+        assertNull(launchRequest.captured.conversationModelId)
         assertEquals("compact prompt", launchRequest.captured.snapshot.config.effectiveSystemPrompt)
         assertEquals(
             BuiltInPrompts.CONTEXT_COMPACT_USER,
             launchRequest.captured.snapshot.config.initialUserPrompt,
         )
         assertTrue(launchRequest.captured.queueDrainRequiresSuccess)
+        assertFalse(launchRequest.captured.alreadyHoldsConversationLock)
+        controller(
+            conversations,
+            operation,
+            requestBuilder,
+            manager,
+            launcher,
+        ).startAutomaticStandard(
+            conversationId = "conversation",
+            contextLimit = 4096,
+            config = automaticConfig(),
+            state = state,
+            alreadyHoldsConversationLock = true,
+        )
+        // Headless Task callers forward their held automation lease to the ordinary launcher.
+        assertTrue(launchRequest.captured.alreadyHoldsConversationLock)
         assertFalse(launchRequest.captured.snapshot.config.thinkingEnabled)
         assertFalse(launchRequest.captured.snapshot.context.webSearchEnabled)
         assertFalse(launchRequest.captured.snapshot.context.shellEnabled)
@@ -126,7 +145,7 @@ class ConversationCompactControllerTest {
         val manager = mockk<GenerationManager>()
         val launcher = mockk<StandardGenerationContinuationLauncher>()
         val requestBuilder = mockk<GenerationRequestBuilder>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val source = sourceEntity()
         val launchRequest = slot<StandardGenerationContinuationRequest>()
         var compactMessageId: String? = null
@@ -157,6 +176,7 @@ class ConversationCompactControllerTest {
                 job = Job().apply { complete() },
                 modelMessageId = requireNotNull(request.modelMessageId),
                 started = CompletableDeferred(true),
+                uiToken = 1L,
             )
         }
         coEvery { conversations.getMessage(any()) } answers {
@@ -199,6 +219,7 @@ class ConversationCompactControllerTest {
         )
 
         assertTrue(result is CompactResult.Created)
+        assertNull(launchRequest.captured.conversationModelId)
         assertEquals(
             "system",
             launchRequest.captured.snapshot.config.effectiveSystemPrompt,
@@ -218,7 +239,7 @@ class ConversationCompactControllerTest {
         val manager = mockk<GenerationManager>()
         val launcher = mockk<StandardGenerationContinuationLauncher>()
         val requestBuilder = mockk<GenerationRequestBuilder>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val source = sourceEntity()
         val target = compactEntity(parentId = source.id)
         val suffix = sourceEntity(
@@ -262,6 +283,7 @@ class ConversationCompactControllerTest {
                 job = Job().apply { complete() },
                 modelMessageId = target.id,
                 started = CompletableDeferred(true),
+                uiToken = 1L,
             )
 
         val result = controller(
@@ -288,6 +310,7 @@ class ConversationCompactControllerTest {
         assertEquals("compact-preflight-run", launchRequest.captured.snapshot.runId)
         assertEquals("compact", launchRequest.captured.requestKind)
         assertTrue(launchRequest.captured.touchConversationOnAdmission)
+        assertNull(launchRequest.captured.conversationModelId)
         assertEquals(suffix, before.single { it.id == suffix.id })
         coVerify(exactly = 0) {
             conversations.createRunWithMessages(any(), any(), any(), any(), any(), any())
@@ -302,7 +325,7 @@ class ConversationCompactControllerTest {
         val operation = FakeCompactOperation(automaticNeeded = true)
         val manager = mockk<GenerationManager>()
         val launcher = mockk<StandardGenerationContinuationLauncher>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val source = sourceEntity()
         stubSelectedPath(
             conversations,
@@ -317,6 +340,7 @@ class ConversationCompactControllerTest {
             job = Job().apply { complete() },
             modelMessageId = "compact_message",
             started = CompletableDeferred(true),
+            uiToken = 1L,
         )
 
         val started = controller(
@@ -344,7 +368,7 @@ class ConversationCompactControllerTest {
         val operation = FakeCompactOperation(automaticNeeded = true)
         val manager = mockk<GenerationManager>()
         val launcher = mockk<StandardGenerationContinuationLauncher>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val source = sourceEntity()
         stubSelectedPath(
             conversations,
@@ -380,7 +404,7 @@ class ConversationCompactControllerTest {
         val conversations = mockk<ConversationRepository>()
         val operation = FakeCompactOperation(automaticNeeded = false)
         val launcher = mockk<StandardGenerationContinuationLauncher>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
 
         val started = controller(
             conversations,
@@ -431,7 +455,7 @@ class ConversationCompactControllerTest {
         val manager = mockk<GenerationManager>()
         val launcher = mockk<StandardGenerationContinuationLauncher>()
         val requestBuilder = mockk<GenerationRequestBuilder>()
-        val state = ConversationGenerationState("conversation")
+        val state = ConversationGenerationState("conversation", reclaimQueuedAttachments = {})
         val source = sourceEntity()
         var compactMessageId: String? = null
 
@@ -488,6 +512,7 @@ class ConversationCompactControllerTest {
                 job = Job().apply { complete() },
                 modelMessageId = messageId,
                 started = CompletableDeferred(true),
+                uiToken = 1L,
             )
         }
 

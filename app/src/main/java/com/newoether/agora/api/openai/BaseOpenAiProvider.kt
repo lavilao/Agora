@@ -123,7 +123,10 @@ abstract class BaseOpenAiProvider : LlmProvider {
                 val requestBodyJson = if (config.responsesApiEnabled) {
                     val request = OpenAiResponsesRequest(
                         model = config.modelId,
-                        input = apiMessages.toResponsesInput(providerName = name),
+                        input = apiMessages.toResponsesInput(
+                            providerName = name,
+                            targetModel = config.modelId,
+                        ),
                         tools = buildList {
                             addAll(config.tools.orEmpty().toResponsesTools())
                             if (config.openAiWebSearchEnabled) {
@@ -139,7 +142,7 @@ abstract class BaseOpenAiProvider : LlmProvider {
                             },
                         serviceTier = config.openAiServiceTier,
                         temperature = config.temperature,
-                        maxOutputTokens = config.maxTokens,
+                        maxOutputTokens = config.effectiveOpenAiMaxTokens(),
                         topP = config.topP,
                         promptCacheKey = config.promptCacheKey,
                     )
@@ -154,7 +157,7 @@ abstract class BaseOpenAiProvider : LlmProvider {
                         serviceTier = config.openAiServiceTier,
                         tools = config.tools,
                         temperature = config.temperature,
-                        maxTokens = config.maxTokens,
+                        maxTokens = config.effectiveOpenAiMaxTokens(),
                         topP = config.topP,
                         frequencyPenalty = config.frequencyPenalty,
                         presencePenalty = config.presencePenalty,
@@ -261,13 +264,20 @@ abstract class BaseOpenAiProvider : LlmProvider {
                                     "attempt=$attempt/$maxAttempts",
                             )
                             if (termination.isRetryable && attempt < maxAttempts) {
-                                // Nothing was surfaced yet, so a replay cannot duplicate output.
+                                // Consumers roll back only this attempt before the retry begins.
                                 DebugLog.w(
                                     "AgoraAPI",
                                     "[$name] Incomplete stream on attempt $attempt/$maxAttempts, retrying",
                                 )
                                 val retryDelayMs = retryDelayMillis(attempt)
-                                emit(StreamEvent.Retrying(attempt, ProviderRetryPolicy.MAX_RETRIES))
+                                emit(
+                                    StreamEvent.Retrying(
+                                        attempt,
+                                        ProviderRetryPolicy.MAX_RETRIES,
+                                        resetCurrentAttempt = termination.producedContent ||
+                                            ProviderRetryPolicy.requiresResponseReadRetry(termination.streamError),
+                                    ),
+                                )
                                 delay(retryDelayMs)
                                 retryScheduled = true
                             } else {
@@ -277,7 +287,11 @@ abstract class BaseOpenAiProvider : LlmProvider {
                         } else {
                             val errorRaw = handle.errorBody.orEmpty()
                             val hasV1Fallback = endpointIndex + 1 < endpointUrls.size
-                            if (hasV1Fallback) {
+                            if (hasV1Fallback &&
+                                !ProviderRetryPolicy.shouldRetryHttp(handle.code, errorRaw, retryableStatusCodes) &&
+                                !ProviderRetryPolicy.isResponseReadHttpFailure(handle.code, errorRaw) &&
+                                !ProviderRetryPolicy.isPermanentHttpFailure(handle.code, errorRaw)
+                            ) {
                                 DebugLog.w(
                                     "AgoraAPI",
                                     "[$name] HTTP ${handle.code}; trying endpoint candidate " +
@@ -300,7 +314,10 @@ abstract class BaseOpenAiProvider : LlmProvider {
                                     retryableStatusCodes,
                                 ) && attempt < maxAttempts
                             ) {
-                                val retryDelayMs = retryDelayMillis(attempt)
+                                val retryDelayMs = maxOf(
+                                    retryDelayMillis(attempt),
+                                    com.newoether.agora.util.NetworkRetryPolicy.retryAfterMillis(handle.retryAfter) ?: 0L,
+                                )
                                 DebugLog.w("AgoraAPI", "[$name] Transient error ${handle.code} on attempt $attempt/$maxAttempts, retrying in ${retryDelayMs}ms...")
                                 emit(StreamEvent.Retrying(attempt, ProviderRetryPolicy.MAX_RETRIES))
                                 delay(retryDelayMs)
@@ -351,6 +368,8 @@ abstract class BaseOpenAiProvider : LlmProvider {
                 handle.readLine()
             } catch (error: SocketTimeoutException) {
                 if (!currentCoroutineContext().isActive) break
+                responseBodyReadError = error.asRetryableResponseBodyReadError()
+                if (responseBodyReadError != null) break
                 if (++consecutiveReadTimeouts >= 3) {
                     timedOut = true
                     break
@@ -493,6 +512,8 @@ abstract class BaseOpenAiProvider : LlmProvider {
                 // A semantic terminal event already completed the model response. This timeout
                 // only closes its optional usage/[DONE] grace tail and is therefore success.
                 if (terminalDeadlineNanos != null) break
+                streamError = e.asRetryableResponseBodyReadError()
+                if (streamError != null) break
                 if (++consecutiveReadTimeouts >= 3) {
                     timedOut = true
                     break

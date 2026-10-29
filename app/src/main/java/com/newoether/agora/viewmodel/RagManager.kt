@@ -414,11 +414,23 @@ class RagManager(
         }
     }
 
-    fun renameEmbeddingModel(id: String, newName: String, batchSize: Int? = null) {
+    /**
+     * Updates the user-editable fields of an embedding model. The model id, endpoint and
+     * local file stay fixed because cached vectors belong to that exact model.
+     */
+    fun updateEmbeddingModel(id: String, newName: String, batchSize: Int? = null, remoteApiKey: String? = null) {
         scope.launch(Dispatchers.IO) {
             EmbeddingCacheLocks.forModel(id).withLock {
                 val models = settings.embeddingModels.value.map {
-                    if (it.id == id) it.copy(name = newName, batchSize = batchSize ?: it.batchSize) else it
+                    if (it.id == id) {
+                        it.copy(
+                            name = newName,
+                            batchSize = batchSize ?: it.batchSize,
+                            remoteApiKey = remoteApiKey ?: it.remoteApiKey,
+                        )
+                    } else {
+                        it
+                    }
                 }
                 settings.saveEmbeddingModels(models)
             }

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.compose.LocalImageTransformer
 import com.mikepenz.markdown.model.ImageWidth
+import com.newoether.agora.ui.components.formulaAlternateText
 import com.newoether.agora.ui.components.isDisplayLatexLink
 import com.newoether.agora.ui.components.latexSourceForLink
 import org.intellij.markdown.MarkdownElementTypes
@@ -53,7 +54,7 @@ internal fun DisplayLatexBlock(
         imageSize = imageSize,
     )
     val text = remember(source) {
-        buildAnnotatedString { appendInlineContent(DISPLAY_LATEX_INLINE_ID, source) }
+        buildAnnotatedString { appendInlineContent(DISPLAY_LATEX_INLINE_ID, formulaAlternateText(source)) }
     }
     val inlineContent = mapOf(
         DISPLAY_LATEX_INLINE_ID to InlineTextContent(
@@ -78,7 +79,9 @@ internal fun DisplayLatexBlock(
     )
     val scrollState = rememberScrollState()
     TrackStreamingHorizontalScroll(scrollState)
-    Row(modifier = modifier.fillMaxWidth().horizontalScroll(scrollState)) {
+    // A formula that fits has nothing to scroll; leaving the gesture unclaimed lets a horizontal
+    // swipe reach the drawer instead of being consumed here.
+    Row(modifier = modifier.fillMaxWidth().horizontalScroll(scrollState, enabled = scrollState.maxValue > 0)) {
         Text(
             text = text,
             style = style,

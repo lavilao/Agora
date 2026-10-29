@@ -5,13 +5,20 @@ import com.newoether.agora.api.util.contextWindowRetainedMessageIds
 import com.newoether.agora.api.util.contextWindowUsage
 import com.newoether.agora.api.util.tokens.ContextCostModel
 import com.newoether.agora.api.util.tokens.ContextCostModels
+import com.newoether.agora.data.ConversationSettings
 import com.newoether.agora.data.repository.ConversationRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.concurrent.atomic.AtomicLong
 
 internal data class ConversationContextProjection(
@@ -31,12 +38,38 @@ internal class ConversationContextProjector(
     private val generationManager: () -> GenerationManager,
     private val generationErrorFormatter: (String) -> String,
     private val newChatSystemPromptId: () -> String? = { null },
+    private val newChatConversationSettings: () -> ConversationSettings? = { null },
     private val contextLoader: DurableSelectedContextLoader =
         DurableSelectedContextLoader(conversations, generationErrorFormatter),
 ) {
     private val requestIds = AtomicLong(0L)
     private val _projection = MutableStateFlow(ConversationContextProjection())
     val projection: StateFlow<ConversationContextProjection> = _projection.asStateFlow()
+    private val _invalidationRevision = MutableStateFlow(0L)
+    val invalidationRevision: StateFlow<Long> = _invalidationRevision.asStateFlow()
+    private var latestRequest: Job? = null
+    private val projectionTurn = Mutex()
+
+    /**
+     * Starts a projection for the latest UI state. Each projection holds the whole selected
+     * history in memory, so a newer request cancels the older one, and the mutex lets at most one
+     * run at a time: a cancelled projection can still be inside non-suspending work.
+     * Call from one thread (the UI's).
+     */
+    fun request(
+        scope: CoroutineScope,
+        conversationId: String?,
+        selectedBranchesJson: String?,
+        selectedModelId: String,
+        tokenBudget: Int,
+    ) {
+        latestRequest?.cancel()
+        latestRequest = scope.launch {
+            projectionTurn.withLock {
+                project(conversationId, selectedBranchesJson, selectedModelId, tokenBudget)
+            }
+        }
+    }
 
     fun invalidate(conversationId: String?) {
         val previousUsage = _projection.value.usage
@@ -46,6 +79,8 @@ internal class ConversationContextProjector(
             usage = previousUsage,
             loading = true,
         )
+        // Room may already have emitted an equal graph. Give the UI a separate request key.
+        _invalidationRevision.update { it + 1L }
     }
 
     suspend fun project(
@@ -73,6 +108,11 @@ internal class ConversationContextProjector(
                         modelId = modelId,
                         systemPromptIdOverride = if (conversationId == null) {
                             newChatSystemPromptId()
+                        } else {
+                            null
+                        },
+                        conversationSettingsOverride = if (conversationId == null) {
+                            newChatConversationSettings()
                         } else {
                             null
                         },

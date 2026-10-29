@@ -39,7 +39,7 @@ class ConversationSettingsTransferSourceContractTest {
             .substringBefore("internal suspend fun prepareForegroundSend")
         val delegation = generation.substringAfter("internal suspend fun prepareForegroundSend")
             .substringBefore("internal suspend fun sendMessage")
-        assertTrue(delegation.contains("requestBuilder.prepareForegroundSend(target, composer, application)"))
+        assertTrue(delegation.contains("requestBuilder.prepareForegroundSend(target, composer, application, origin::showSnackbar)"))
         val prepare = sourceFile(
             "app/src/main/java/com/newoether/agora/viewmodel/GenerationRequestBuilder.kt",
         ).substringAfter("internal suspend fun prepareForegroundSend")

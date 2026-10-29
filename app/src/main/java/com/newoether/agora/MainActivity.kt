@@ -52,6 +52,7 @@ import com.newoether.agora.ui.tasks.TaskEditorSessionViewModel
 import com.newoether.agora.ui.tasks.TaskHistoryPreviewPhase
 import com.newoether.agora.ui.theme.AgoraTheme
 import com.newoether.agora.util.snackbarTimeoutMillis
+import com.newoether.agora.util.withAppLocale
 import com.newoether.agora.viewmodel.ChatViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -71,29 +72,8 @@ class MainActivity : ComponentActivity() {
         val langCode = kotlinx.coroutines.runBlocking {
             SettingsManager(newBase).appLanguage.first()
         }
-        val locale = when (langCode) {
-            "zh" -> java.util.Locale("zh", "CN")
-            "en" -> java.util.Locale("en")
-            "es" -> java.util.Locale("es")
-            "fr" -> java.util.Locale("fr")
-            "de" -> java.util.Locale("de")
-            "ru" -> java.util.Locale("ru")
-            "pt-BR" -> java.util.Locale("pt", "BR")
-            "ja" -> java.util.Locale("ja")
-            "ko" -> java.util.Locale("ko")
-            "ar" -> java.util.Locale("ar")
-            "vi" -> java.util.Locale("vi")
-            "zh-Hant" -> java.util.Locale.forLanguageTag("zh-Hant")
-            else -> null
-        }
-        if (locale != null) {
-            java.util.Locale.setDefault(locale)
-            val config = android.content.res.Configuration(newBase.resources.configuration)
-            config.setLocale(locale)
-            super.attachBaseContext(newBase.createConfigurationContext(config))
-        } else {
-            super.attachBaseContext(newBase)
-        }
+        com.newoether.agora.util.appLocaleFor(langCode)?.let { java.util.Locale.setDefault(it) }
+        super.attachBaseContext(newBase.withAppLocale(langCode))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -224,6 +204,8 @@ class MainActivity : ComponentActivity() {
                     // Create ViewModel via the process-scoped DI container (owned by AgoraApplication),
                     // so the same shared singletons back both the UI and background task execution.
                     val container = agoraApplication.requireContainer()
+                    // The WebUI mirrors the app's resolved colors and font.
+                    com.newoether.agora.webui.PublishWebUiTheme(container.webUi, fontPreference, customFontPath)
                     val factory = remember { container.chatViewModelFactory() }
                     val viewModel: ChatViewModel = viewModel(factory = factory)
 
@@ -264,6 +246,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppForegroundTracker.setInForeground(true)
+        // A foreground service may only start from the foreground; restore an enabled WebUI here.
+        lifecycleScope.launch {
+            (application as AgoraApplication).awaitContainer()?.webUi?.startIfEnabled()
+        }
     }
 
     override fun onPause() {
@@ -347,6 +333,8 @@ fun MainNavigation(
     var taskToOpen by remember { mutableStateOf<String?>(null) }
     val taskHistoryPreview = taskEditorSession.historyPreview
     val currentConversationId by viewModel.currentConversationId.collectAsState()
+    val selectedConversation by viewModel.currentConversation.collectAsState()
+    val subagentParentId = selectedConversation?.takeIf { it.id == currentConversationId }?.parentConversationId
     val isNewChatMode by viewModel.isNewChatMode.collectAsState()
     val isConversationSwitching by viewModel.isSwitching.collectAsState()
     com.newoether.agora.ui.tasks.TaskHistoryDestinationEffect(
@@ -473,7 +461,9 @@ fun MainNavigation(
             ChatApp(
                 viewModel = viewModel,
                 initialComposerFocusReady = initialComposerFocusReady,
-                onNavigateBack = taskHistoryPreview.backTaskId(currentConversationId, isNewChatMode)
+                onNavigateBack = subagentParentId?.takeIf { !isNewChatMode }?.let { parent ->
+                    { viewModel.selectConversation(parent); Unit }
+                } ?: taskHistoryPreview.backTaskId(currentConversationId, isNewChatMode)
                     ?.let { taskId ->
                         {
                             taskToOpen = taskId

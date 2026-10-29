@@ -9,7 +9,9 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.compose.components.markdownComponents
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,6 +25,11 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ThoughtLatexRenderingTest {
     @get:Rule val compose = createComposeRule()
+
+    // The app initialises jLatexMath through its manifest; Robolectric tests must do it here.
+    @Before fun initLatex() {
+        ru.noties.jlatexmath.JLatexMathAndroid.init(ApplicationProvider.getApplicationContext())
+    }
 
     @Test fun thoughtInlineFormulaRendersAsImage() = verify(thought = true)
 
@@ -66,10 +73,13 @@ class ThoughtLatexRenderingTest {
             .map { it.text }
         assertTrue("No text rendered: $texts", texts.any { "ratio" in it })
         // Semantics always carry the inline alternate text; what matters is that every formula
-        // is drawn by an image slot, inline or promoted to a block, instead of as that text.
-        assertTrue(
-            "Formulas without an image slot: inline=$inlineImages block=$blockImages",
-            inlineImages.size + blockImages.size == 2,
-        )
+        // is drawn as an image, inline or promoted to a block once its bitmap is taller than a
+        // line, instead of as that text. The renderer hands an inline image's alternate text (the
+        // formula source) to the image transformer, so each formula must resolve from it.
+        assertTrue("No image slots: inline=$inlineImages block=$blockImages", inlineImages.isNotEmpty())
+        val drawn = compose.onAllNodes(isRoot().not(), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .flatMap { node -> node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+        assertTrue("Formulas not drawn: $drawn", "\\frac{a+b}{c^2}" in drawn && "\\sum_{i=1}^{n} x_i" in drawn)
     }
 }

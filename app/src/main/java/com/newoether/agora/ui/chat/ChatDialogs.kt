@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,7 @@ import com.newoether.agora.data.ConversationSettings
 import com.newoether.agora.ui.components.SystemPromptPickerDialog
 import com.newoether.agora.ui.components.clearFocusOnTap
 import com.newoether.agora.viewmodel.ChatViewModel
+import kotlinx.coroutines.launch
 
 /** Rename-conversation dialog. Owns its own editable text, seeded from [initialName]. */
 @Composable
@@ -152,14 +154,23 @@ internal fun ChatForkConfirmationHost(
     onDismiss: () -> Unit,
 ) {
     val activeRequest = request ?: return
+    // Like delete, the confirmation blocks until the result: it closes after the fork opens or
+    // after its failure snackbar is shown.
+    var pending by remember(activeRequest) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val onResult: (Boolean) -> Unit = { scope.launch { onDismiss() } }
     ChatForkConfirmDialog(
         fromMessage = activeRequest.messageId != null,
+        pending = pending,
         onConfirm = {
-            onDismiss()
-            if (activeRequest.messageId == null) {
-                viewModel.forkConversationFrom()
-            } else {
-                viewModel.forkConversationFrom(activeRequest.messageId)
+            if (!pending) {
+                pending = true
+                val accepted = if (activeRequest.messageId == null) {
+                    viewModel.forkConversationFrom(onResult = onResult)
+                } else {
+                    viewModel.forkConversationFrom(activeRequest.messageId, onResult)
+                }
+                if (!accepted) onDismiss()
             }
         },
         onDismiss = onDismiss,
@@ -171,10 +182,15 @@ internal fun ChatForkConfirmDialog(
     fromMessage: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    pending: Boolean = false,
 ) {
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!pending) onDismiss() },
+        properties = DialogProperties(
+            dismissOnBackPress = !pending,
+            dismissOnClickOutside = !pending,
+        ),
         title = {
             Text(
                 text = stringResource(
@@ -201,13 +217,21 @@ internal fun ChatForkConfirmDialog(
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
+                enabled = !pending,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text(stringResource(R.string.conversation_fork_action))
+                if (pending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 3.dp,
+                    )
+                } else {
+                    Text(stringResource(R.string.conversation_fork_action))
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !pending) {
                 Text(stringResource(R.string.cancel))
             }
         },
@@ -282,11 +306,10 @@ internal fun ChatAdvancedSettingsDialog(
         overrides = overrides,
         globalDefaults = defaults,
         onSave = { settings ->
-            viewModel.setConversationSettings(currentId, settings)
-            onDismiss()
-        },
-        onResetToDefaults = {
-            viewModel.setConversationSettings(currentId, null)
+            if (validGenerationParameters(settings)) {
+                viewModel.updateConversationSettings(currentId) { it.withGenerationParameters(settings) }
+                onDismiss()
+            }
         },
         onDismiss = onDismiss
     )

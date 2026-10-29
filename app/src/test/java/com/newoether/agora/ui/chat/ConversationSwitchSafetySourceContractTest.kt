@@ -7,7 +7,7 @@ import org.junit.Test
 
 class ConversationSwitchSafetySourceContractTest {
     @Test
-    fun `conversation switch observes current projection without a fixed deadline`() {
+    fun `conversation switch bounds context projection wait before layout settlement`() {
         val source = File(
             locateMainSourceRoot(),
             "com/newoether/agora/ui/chat/ChatScrollCoordinator.kt",
@@ -50,15 +50,20 @@ class ConversationSwitchSafetySourceContractTest {
             ),
         )
         assertTrue(
-            "matching success or failure must be explicit before uncovering",
+            "matching success or failure is observed while the bounded wait is active",
             source.contains("projection.completed") && source.contains("!projection.loading"),
         )
-        val projectionWaitStart = source.indexOf("val projection = latestContextProjection")
+        val projectionWaitStart = source.indexOf("val contextReady = withTimeoutOrNull")
         val layoutSettleStart = source.indexOf("settleCoveredTransition", projectionWaitStart)
         assertTrue("matching context wait must precede layout settlement", projectionWaitStart >= 0 && layoutSettleStart > projectionWaitStart)
-        assertFalse(
-            "context projection latency must not terminalize the switch on a timer",
-            source.substring(projectionWaitStart, layoutSettleStart).contains("withTimeoutOrNull"),
+        assertTrue(
+            "context projection wait must have a bounded timeout before layout settlement",
+            source.substring(projectionWaitStart, layoutSettleStart)
+                .contains("withTimeoutOrNull(SCROLL_SETTLE_TIMEOUT_MS)"),
+        )
+        assertTrue(
+            "timeout must continue toward existing layout settlement",
+            source.substring(projectionWaitStart, layoutSettleStart).contains("if (!contextReady)"),
         )
         assertFalse(
             "a failed matching projection must still release the cover neutrally",
@@ -68,6 +73,19 @@ class ConversationSwitchSafetySourceContractTest {
             "projection latency must never be interpreted as a request to enter New Chat",
             source.contains("viewModel.createNewChat()"),
         )
+    }
+
+    @Test
+    fun `context invalidation revision participates in the canonical request effect`() {
+        val root = locateMainSourceRoot()
+        val chatApp = File(root, "com/newoether/agora/ui/chat/ChatApp.kt")
+            .readText().replace("\r\n", "\n")
+        val viewModel = File(root, "com/newoether/agora/viewmodel/ChatViewModel.kt")
+            .readText().replace("\r\n", "\n")
+        assertTrue(viewModel.contains("get() = contextProjector.invalidationRevision"))
+        assertTrue(chatApp.contains("conversationContextInvalidationRevision.collectAsState()"))
+        val effect = Regex("""LaunchedEffect\([^\n]*contextInvalidationRevision\)""")
+        assertTrue("invalidation must restart the existing projection request effect", effect.containsMatchIn(chatApp))
     }
 
     @Test

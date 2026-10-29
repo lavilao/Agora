@@ -26,7 +26,7 @@ class UserBubbleShapeTest {
         assertEquals(22.5f, rect.topLeftCornerRadius.x, 0.001f)
         assertEquals(22.5f, rect.topRightCornerRadius.x, 0.001f)
         assertEquals(22.5f, rect.bottomLeftCornerRadius.x, 0.001f)
-        assertEquals(8f, rect.bottomRightCornerRadius.x, 0.001f)
+        assertEquals(6f, rect.bottomRightCornerRadius.x, 0.001f)
     }
 
     @Test
@@ -35,7 +35,7 @@ class UserBubbleShapeTest {
         assertEquals(20f, rect.topLeftCornerRadius.x, 0.001f)
         assertEquals(20f, rect.topRightCornerRadius.x, 0.001f)
         assertEquals(20f, rect.bottomLeftCornerRadius.x, 0.001f)
-        assertEquals(8f, rect.bottomRightCornerRadius.x, 0.001f)
+        assertEquals(6f, rect.bottomRightCornerRadius.x, 0.001f)
     }
 
     @Test
@@ -44,13 +44,13 @@ class UserBubbleShapeTest {
         assertEquals(27f, rect.topLeftCornerRadius.x, 0.001f)
         assertEquals(27f, rect.topRightCornerRadius.x, 0.001f)
         assertEquals(27f, rect.bottomLeftCornerRadius.x, 0.001f)
-        assertEquals(8f, rect.bottomRightCornerRadius.x, 0.001f)
+        assertEquals(6f, rect.bottomRightCornerRadius.x, 0.001f)
     }
 
     @Test
     fun rtlMovesTailToBottomLeft() {
         val rect = rounded(Size(200f, 300f), LayoutDirection.Rtl)
-        assertEquals(8f, rect.bottomLeftCornerRadius.x, 0.001f)
+        assertEquals(6f, rect.bottomLeftCornerRadius.x, 0.001f)
         assertEquals(27f, rect.bottomRightCornerRadius.x, 0.001f)
     }
 }

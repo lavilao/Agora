@@ -4,7 +4,9 @@ import com.newoether.agora.api.anthropic.AnthropicProvider
 import com.newoether.agora.api.gemini.GeminiProvider
 import com.newoether.agora.api.ollama.OllamaProvider
 import com.newoether.agora.api.openai.OpenAiProvider
+import com.newoether.agora.api.util.prepareMessages
 import com.newoether.agora.model.ChatMessage
+import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.Participant
 import com.newoether.agora.util.DebugLog
 import com.sun.net.httpserver.HttpServer
@@ -144,6 +146,77 @@ class ProviderStreamingImageRequestTest {
             assertEquals(expected, images.single().jsonPrimitive.content)
             request.assertExactLength()
         }
+    }
+
+    @Test
+    fun anthropicAdjacentUserBatchReachesWireAsOrderedLosslessBlocks() = withImage { image, expected ->
+        withServer(anthropicResponse()) { server ->
+            val messages = adjacentUserBatch(image)
+            val prepared = prepareMessages(messages, contextTokenBudget = 16_384)
+            assertEquals(messages, prepared)
+            collect(AnthropicProvider(), config(server, model = "claude-3-5-sonnet-20240620"), prepared)
+
+            val request = server.takeRequest()
+            val wireMessages = request.json.getValue("messages").jsonArray
+            assertEquals(1, wireMessages.size)
+            val blocks = wireMessages.single().jsonObject.getValue("content").jsonArray
+                .map(JsonElement::jsonObject)
+            assertEquals(listOf("text", "image", "text", "text"), blocks.map {
+                it.getValue("type").jsonPrimitive.content
+            })
+            assertEquals(messages.map { it.text }, blocks.mapNotNull { it["text"]?.jsonPrimitive?.content })
+            assertEquals(expected, blocks[1].getValue("source").jsonObject.getValue("data").jsonPrimitive.content)
+            assertEquals(messages, prepared)
+            request.assertExactLength()
+        }
+    }
+
+    @Test
+    fun geminiAdjacentUserBatchReachesWireAsOrderedLosslessParts() = withImage { image, expected ->
+        withServer(geminiResponse()) { server ->
+            val messages = adjacentUserBatch(image)
+            val prepared = prepareMessages(messages, contextTokenBudget = 16_384)
+            assertEquals(messages, prepared)
+            collect(GeminiProvider(), config(server, model = "gemini-2.5-flash"), prepared)
+
+            val request = server.takeRequest()
+            val wireContents = request.json.getValue("contents").jsonArray
+            assertEquals(1, wireContents.size)
+            val parts = wireContents.single().jsonObject.getValue("parts").jsonArray
+                .map(JsonElement::jsonObject)
+            assertEquals(listOf("text", "text", "inlineData", "text"), parts.map { it.keys.single() })
+            assertEquals(messages.map { it.text }, parts.mapNotNull { it["text"]?.jsonPrimitive?.content })
+            assertEquals(expected, parts[2].getValue("inlineData").jsonObject.getValue("data").jsonPrimitive.content)
+            assertEquals(messages, prepared)
+            request.assertExactLength()
+        }
+    }
+
+    private fun adjacentUserBatch(image: File): List<ChatMessage> = listOf(
+        ChatMessage(id = "typed", text = "typed", participant = Participant.USER, runId = "batch"),
+        ChatMessage(
+            id = "answer", parentId = "typed", runId = "batch",
+            text = "<ask_user_answers>answer</ask_user_answers>",
+            images = listOf(image.absolutePath), participant = Participant.USER,
+            source = MessageSource.askUser(listOf(MessageSource.AskUserItem("Which?", "First"))),
+        ),
+        ChatMessage(
+            id = "completion", parentId = "answer", runId = "batch",
+            text = "<subagent_result>done</subagent_result>", participant = Participant.USER,
+            source = MessageSource(MessageSource.Kind.SUBAGENT, subagentResults = mapOf("child" to "result")),
+        ),
+    )
+
+    private fun collect(
+        provider: LlmProvider,
+        config: ProviderConfig,
+        messages: List<ChatMessage>,
+    ) {
+        val events = runBlocking {
+            withTimeout(3_000L) { provider.generateResponse(messages, config).toList() }
+        }
+        assertTrue(events.none { it is StreamEvent.Error })
+        assertTrue(events.any { it is StreamEvent.TextChunk && it.text == "ok" })
     }
 
     private fun collect(

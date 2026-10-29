@@ -1,14 +1,11 @@
 package com.newoether.agora.viewmodel
 
-import com.newoether.agora.model.AttachmentMeta
+import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.SelectedAttachment
 import com.newoether.agora.util.AttachmentFiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
 
 /**
@@ -29,6 +26,10 @@ internal data class QueuedSend(
     /** Immutable foreground admission; legacy/internal queue producers may capture at drain time. */
     val generationSnapshot: GenerationAdmissionSnapshot? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Null for a message the user typed; set for automatic input such as ask_user answers. */
+    val source: MessageSource? = null,
+    /** Retained until the ordinary generation owns admission, or this pending input is discarded. */
+    val releaseGenerationAdmission: (() -> Unit)? = null,
 )
 
 internal data class GuidanceBatchLease(
@@ -41,38 +42,6 @@ internal data class GuidanceBatchLease(
     }
 }
 
-/** One queue drain becomes one durable user bubble while preserving FIFO content and ownership. */
-internal fun mergeQueuedGuidance(batch: List<QueuedSend>): QueuedSend {
-    require(batch.isNotEmpty())
-    val first = batch.first()
-    val attachmentItems = buildList {
-        var imageOffset = 0
-        batch.forEach { queued ->
-            queued.preparedAttachmentMetaJson
-                ?.let { raw -> Json.decodeFromString<AttachmentMeta>(raw).items }
-                .orEmpty()
-                .forEach { item ->
-                    add(
-                        item.imageIndex?.let { index ->
-                            item.copy(imageIndex = imageOffset + index)
-                        } ?: item,
-                    )
-                }
-            imageOffset += queued.preparedImages.size
-        }
-    }
-    return first.copy(
-        text = batch.joinToString(separator = "\n\n", transform = QueuedSend::text),
-        modelId = batch.last().modelId,
-        attachments = batch.flatMap(QueuedSend::attachments),
-        preparedImages = batch.flatMap(QueuedSend::preparedImages),
-        preparedAttachmentMetaJson = attachmentItems
-            .takeIf(List<*>::isNotEmpty)
-            ?.let { Json.encodeToString(AttachmentMeta(it)) },
-        generationSnapshot = batch.last().generationSnapshot,
-    )
-}
-
 /**
  * Sole owner of pending and claimed in-memory guidance for one conversation.
  *
@@ -80,6 +49,7 @@ internal fun mergeQueuedGuidance(batch: List<QueuedSend>): QueuedSend {
  * durable claims transfer attachment ownership to Room; disposal owns only still-pending cleanup.
  */
 internal class GuidanceLeaseStore(
+    private val reclaimAttachments: (List<SelectedAttachment>) -> Unit,
     private val newLeaseId: () -> String = { UUID.randomUUID().toString() },
 ) {
     private val lock = Any()
@@ -100,8 +70,27 @@ internal class GuidanceLeaseStore(
     fun enqueue(send: QueuedSend) {
         synchronized(lock) {
             check(!disposed) { "Conversation guidance store was disposed" }
+            AttachmentFiles.setLivePaths(send, AttachmentFiles.ownedPaths(send.attachments) + send.preparedImages)
             _queuedSends.value = _queuedSends.value + send
         }
+    }
+
+    /** Exact outbox identity stays owned while pending or claimed by an in-flight drain. */
+    fun containsSubagentResult(childId: String, resultId: String): Boolean = synchronized(lock) {
+        (_queuedSends.value.asSequence() + claimedGuidance.values.asSequence().flatten()).any {
+            it.source?.subagentResults?.get(childId) == resultId
+        }
+    }
+
+    /** A committed wait result supersedes only its exact pending automatic notifications. */
+    fun removeSubagentResults(receipts: Map<String, String>): List<QueuedSend> = synchronized(lock) {
+        val removed = _queuedSends.value.filter { send ->
+            val source = send.source
+            source?.kind == MessageSource.Kind.SUBAGENT && source.subagentResults.isNotEmpty() &&
+                source.subagentResults.all { (id, resultId) -> receipts[id] == resultId }
+        }
+        _queuedSends.value = _queuedSends.value - removed.toSet()
+        removed
     }
 
     fun remove(id: String): QueuedSend? = synchronized(lock) {
@@ -120,19 +109,41 @@ internal class GuidanceLeaseStore(
         lease
     }
 
+    /** Only consumed automatic inputs may be retired from a claimed batch before admission. */
+    fun retireSubagentResults(lease: GuidanceBatchLease, receipts: Set<Pair<String, String>>): GuidanceBatchLease? =
+        synchronized(lock) {
+            check(claimedGuidance[lease.id] == lease.batch)
+            val retained = lease.batch.filterNot { send ->
+                val results = send.source?.subagentResults.orEmpty()
+                results.isNotEmpty() && results.all { (id, resultId) -> (id to resultId) in receipts }
+            }
+            if (retained.isEmpty()) claimedGuidance.remove(lease.id)
+            else claimedGuidance[lease.id] = retained
+            retained.takeIf { it.isNotEmpty() }?.let { GuidanceBatchLease(lease.id, it) }
+        }
+
     /** Settle one exact lease without allowing duplicate or unknown results to mutate the queue. */
     fun settle(leaseId: String, durable: Boolean): Boolean {
         var orphaned = emptyList<QueuedSend>()
         synchronized(lock) {
             val batch = claimedGuidance.remove(leaseId) ?: return false
             when {
-                durable -> Unit
+                durable -> batch.forEach {
+                    it.releaseGenerationAdmission?.invoke()
+                    AttachmentFiles.releaseLivePaths(it)
+                }
                 disposed -> orphaned = batch
                 else -> _queuedSends.value = batch + _queuedSends.value
             }
         }
-        orphaned.forEach(QueuedSend::deleteOwnedFiles)
+        orphaned.forEach(::discard)
         return true
+    }
+
+    fun discard(send: QueuedSend) {
+        send.releaseGenerationAdmission?.invoke()
+        AttachmentFiles.releaseLivePaths(send)
+        if (send.attachments.isNotEmpty()) reclaimAttachments(send.attachments)
     }
 
     /** Mark the owner closed and transfer its still-pending batch to the disposal caller. */
@@ -140,8 +151,4 @@ internal class GuidanceLeaseStore(
         disposed = true
         _queuedSends.value.also { _queuedSends.value = emptyList() }
     }
-}
-
-internal fun QueuedSend.deleteOwnedFiles() {
-    AttachmentFiles.deleteBacking(attachments)
 }

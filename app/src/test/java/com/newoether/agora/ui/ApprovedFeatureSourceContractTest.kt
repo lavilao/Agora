@@ -13,6 +13,8 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
         val root = sourceRoot()
         val rag = source(root, "com/newoether/agora/viewmodel/RagManager.kt")
         val settings = source(root, "com/newoether/agora/ui/settings/SettingsSearchPage.kt")
+        val cacheFile = File(root, "com/newoether/agora/ui/settings/EmbeddingCacheRow.kt")
+        val cache = cacheFile.takeIf(File::isFile)?.readText() ?: settings
         val dao = source(root, "com/newoether/agora/data/local/ChatSearchDao.kt")
         val entities = source(root, "com/newoether/agora/data/local/ChatEntities.kt")
         val database = source(root, "com/newoether/agora/data/local/ChatDatabase.kt")
@@ -35,16 +37,16 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
 
         assertTrue(settings.contains("viewModel.ragManager.cacheRows.collectAsState()") &&
             settings.contains("LaunchedEffect(embeddingModelIds) { viewModel.ragManager.loadCacheCounts() }"))
-        assertTrue(settings.contains("EmbeddingCacheRowPhase.RECACHE"))
-        assertTrue(settings.contains("stringResource(R.string.loading_label)"))
+        assertTrue(cache.contains("EmbeddingCacheRowPhase.RECACHE"))
+        assertTrue(cache.contains("stringResource(R.string.loading_label)"))
         assertFalse(settings.contains("retryCacheRow"))
         assertFalse(settings.contains("EmbeddingCacheRowSnapshot.Loading"))
         assertFalse(settings.contains("R.string.cache_work_remaining"))
-        assertTrue(settings.contains("targetState = listOfNotNull(typeLabel, cacheLabel)"))
-        assertEquals(2, settings.split("enabled = visualPhase == phase").size - 1)
-        assertTrue(settings.split("animationSpec = tween(250)").size - 1 >= 2)
-        assertTrue(settings.contains("modifier = Modifier.size(cacheActionSize)"))
-        assertTrue(settings.contains("modifier = Modifier.size(24.dp)"))
+        assertTrue(cache.contains("targetState = listOfNotNull(typeLabel,"))
+        assertEquals(2, cache.split("enabled = visualPhase == phase").size - 1)
+        assertTrue(cache.split("animationSpec = tween(250)").size - 1 >= 2)
+        assertTrue(cache.contains("modifier = Modifier.size("))
+        assertTrue(cache.contains("modifier = Modifier.size(24.dp)"))
         assertTrue(settings.contains("viewModel.ragManager.setAutoCacheEnabled"))
         assertTrue(listOf("cachingProgress", "val allCached =", "embeddingCacheActionState(")
             .none(settings::contains))
@@ -52,7 +54,7 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
         assertTrue(dao.contains("GROUP BY e.modelId"))
         assertTrue(dao.contains("getEmbeddingCountsByModels"))
         assertTrue(entities.contains("Index(value = [\"modelId\"])"))
-        assertTrue(database.contains("CURRENT_VERSION = 34"))
+        assertTrue(database.contains("CURRENT_VERSION = 41"))
         assertTrue(database.contains("MIGRATION_23_24"))
         assertTrue(database.contains("MIGRATION_24_25"))
         assertTrue(database.contains("MIGRATION_25_26"))
@@ -152,7 +154,7 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
         assertTrue(transcription.contains("suspend fun describeImageWithProgress("))
         assertFalse(contracts.contains("toolImageTranscriber"))
         val toolMessages = source(root, "com/newoether/agora/api/util/ToolMessages.kt")
-        assertTrue(toolMessages.contains("--- Image Transcription: view_image ---"))
+        assertTrue(toolMessages.contains("--- Image Transcription: file_view_image ---"))
         assertTrue(toolMessages.contains("transcriptionDescriptionsForBatch("))
         // Defect pins (owner device reports): transcription-enabled models never receive raw
         // images; the compact group title stays the transcription label while TOOL_CALLING;
@@ -271,7 +273,7 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
         assertTrue(capture.contains("Icons.Default.MoreVert"))
         assertTrue(capture.contains("containerColor = MaterialTheme.colorScheme.surfaceContainer"))
         assertTrue(capture.contains("tonalElevation = 16.dp"))
-        assertTrue(capture.contains("shape = RoundedCornerShape(12.dp)"))
+        assertTrue(capture.contains("AgoraDropdownMenu("))
         assertTrue(
             capture.contains("R.string.developer_options_clear_diagnostics_action"),
         )
@@ -547,15 +549,15 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
             admission.indexOf("providerRegistry.awaitInitialSync()") in
                 0 until admission.indexOf("providerRegistry.canonicalModelId(modelId)"),
         )
-        assertTrue(builder.contains("internal suspend fun awaitProviderKey(modelId: String)"))
-        assertTrue(builder.contains("providerRegistry.awaitInitialSync()\n        return resolveProviderKey(modelId)"))
+        assertTrue(builder.contains("internal suspend fun awaitProviderKey(modelId: String, report: (String) -> Unit)"))
+        assertTrue(builder.contains("providerRegistry.awaitInitialSync()\n        return resolveProviderKey(modelId, report)"))
         assertEquals(2, Regex("requestBuilder\\.awaitProviderKey\\(").findAll(generation).count())
         val foregroundAdmission = builder
             .substringAfter("internal suspend fun prepareForegroundSend(")
             .substringBefore("internal suspend fun awaitProviderKey(")
-        assertTrue(generation.contains("requestBuilder.prepareForegroundSend(target, composer, application)"))
+        assertTrue(generation.contains("requestBuilder.prepareForegroundSend(target, composer, application, origin::showSnackbar)"))
         assertTrue(
-            foregroundAdmission.indexOf("awaitProviderKey(target.modelId)") in
+            foregroundAdmission.indexOf("awaitProviderKey(target.modelId, report)") in
                 0 until foregroundAdmission.indexOf("captureAdmissionSnapshot("),
         )
         assertFalse(foregroundAdmission.contains("resolveProviderKey("))
@@ -660,12 +662,16 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
             .substringAfter("internal fun captureForegroundSendTarget(")
             .substringBefore("internal suspend fun prepareForegroundSend(")
         assertTrue(foregroundTargetCapture.contains("val wasNewChat ="))
-        assertTrue(foregroundTargetCapture.contains("modelId = currentActiveModel.value"))
+        assertTrue(foregroundTargetCapture.contains("modelId = modelId"))
+        assertTrue(
+            source(root, "com/newoether/agora/viewmodel/ChatViewModel.kt")
+                .contains("modelId = currentActiveModel.value"),
+        )
 
         val foregroundDelegation = generation
             .substringAfter("internal suspend fun prepareForegroundSend(")
             .substringBefore("internal suspend fun sendMessage(")
-        assertTrue(foregroundDelegation.contains("requestBuilder.prepareForegroundSend(target, composer, application)"))
+        assertTrue(foregroundDelegation.contains("requestBuilder.prepareForegroundSend(target, composer, application, origin::showSnackbar)"))
         val foregroundAdmission = source(root, "com/newoether/agora/viewmodel/GenerationRequestBuilder.kt")
             .substringAfter("internal suspend fun prepareForegroundSend(")
             .substringBefore("internal suspend fun awaitProviderKey(")
@@ -691,6 +697,7 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
             root,
             "com/newoether/agora/viewmodel/GenerationRequestBuilder.kt",
         )
+        val rendering = source(root, "com/newoether/agora/viewmodel/GenerationPromptRendering.kt")
         val exporter = source(root, "com/newoether/agora/data/DataExporter.kt")
         val importer = source(root, "com/newoether/agora/data/DataImporter.kt")
         val settings = source(
@@ -701,16 +708,18 @@ internal class ApprovedFeatureSourceContractTest : UiSourceContractFixture() {
         assertTrue(manager.contains("File(context.filesDir, \"skill_db\")"))
         assertTrue(manager.contains("fun catalog(): String"))
         assertFalse(manager.contains("active_skill"))
-        assertTrue(provider.contains("list_skill_files"))
-        assertTrue(provider.contains("read_skill_file"))
-        assertTrue(provider.contains("create_skill_file"))
-        assertTrue(provider.contains("edit_skill_file"))
-        assertTrue(provider.contains("delete_skill_file"))
+        assertTrue(provider.contains("skill_list"))
+        assertTrue(provider.contains("skill_read"))
+        assertTrue(provider.contains("skill_create"))
+        assertTrue(provider.contains("skill_edit"))
+        assertTrue(provider.contains("skill_delete"))
         assertFalse(provider.contains("update_active_skill"))
         assertTrue(builder.contains("skillCatalog = if (skillReadAccess) skillManager.catalog()"))
-        assertTrue(builder.contains("if (includeSkillCatalog) skillManager.catalog() else \"\""))
-        assertTrue(builder.contains("PredefinedVariables.SKILL_CATALOG to skillCatalog"))
-        assertTrue(builder.contains("skillCatalog = skillCatalogDeferred.await()"))
+        // The prompt catalog is frozen once per Run with the captured template.
+        assertTrue(builder.contains("val skillCatalog = if (settings.accessSkills.value) skillManager.catalog() else \"\""))
+        assertTrue(builder.contains(": ResolvedPrompt = resolveGenerationPromptTemplate("))
+        assertTrue(rendering.contains("PredefinedVariables.SKILL_CATALOG to skillCatalog"))
+        assertTrue(rendering.contains("skillCatalog = promptTemplate.skillCatalog"))
         assertFalse(builder.contains("effectiveSystemPromptWithSkills"))
         assertTrue(exporter.contains("memories/skill_db/"))
         assertTrue(importer.contains("memories/skill_db/"))

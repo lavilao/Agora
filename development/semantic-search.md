@@ -12,6 +12,27 @@ page plus the requested top candidates; corpus growth must not translate into An
   remain owned by the existing RAG/provider path.
 - Searchable sources exclude Task conversations, non-USER/non-MODEL rows, blank or short source
   text, and synthetic tool/result/Compact rows.
+- Literal search, expanded search context and conversation_read also exclude synthetic Compact
+  summaries. Branch traversal may cross these rows but must not return their bodies as messages.
+- Global history tools and drawer search exclude child conversations through root-only database
+  eligibility, before count, pagination, literal/citation search and semantic ranking. A child must
+  never displace a visible root in a limited page or top-K result. Final semantic hydration rechecks
+  root eligibility. Existing child content and embeddings remain stored; this read boundary does
+  not change cache admission or delete data.
+- `conversation_read` admits a child only when its durable `parentConversationId` equals the calling
+  generation's conversation ID. Missing caller identity, unrelated roots, child self-reads and sibling
+  reads cannot authorize that child. Unauthorized and missing IDs return the same `not_found` result
+  before loading topology or message bodies. Ordinary top-level history reads remain available.
+  Parent-owned child discovery continues through `agent_list`, never `conversation_list`.
+- Every `conversation_list` item includes a JSON boolean `is_generating`. Each call captures one
+  current snapshot from the existing generation registry plus active automation ownership, matching
+  the native drawer indicator. Idle, completed, failed and stopped owners return false once their
+  canonical execution ownership settles. Stored orphaned Runs do not imply live generation. This
+  projection must not open conversations, instantiate runtime states or load message bodies, and
+  active children remain excluded from the list.
+- Compact summaries are also ineligible for cache admission, reconciliation, embedding generation
+  and transactional embedding commit. Existing Compact cache rows are excluded from counts/ranking
+  and reclaimed by the canonical bounded maintenance path, never by a search or startup scan.
 - Similarity is cosine similarity. Candidates must be strictly above the configured RAG threshold,
   ordered by descending score, and limited to the requested count.
 - Stable embedding row id is the deterministic tie-breaker for equal scores.
@@ -33,6 +54,30 @@ page plus the requested top candidates; corpus growth must not translate into An
 Peak application memory is therefore proportional to one configured page, the cached query vector, the
 bounded top-K heap, and the final bounded message set. It is not proportional to embedding-row
 count or total cached text.
+
+### Literal history search
+
+Keyword search shares `HISTORY_MESSAGE_ELIGIBILITY` with semantic pages and final hydration.
+It retains literal substring matching (including Chinese, case-insensitive ASCII and escaped LIKE
+wildcards), conversation-title matches, and citation-title matches. Literal search does not impose
+the semantic minimum text length; existing short nonempty messages remain searchable.
+
+`ChatSearchDao` seeks `(timestamp, id)` newest first through `index_messages_timestamp_id`.
+A limited inner query selects at most 128 message identities before the outer query applies shared
+visibility, text/title matching and citation eligibility. Queries without ASCII letters use literal
+`instr` matching; queries containing ASCII letters retain escaped LIKE for its ASCII case folding.
+The fixed citation-segment marker also uses `instr`. Hidden rows advance the cursor but cannot match
+or cause text/JSON to be returned. SQL returns only identity, time, a match flag, and eligible citation
+JSON; Kotlin decodes citation titles outside the database read. The repository stops
+at the requested count, hydrates only winners and rechecks visibility. It runs on IO, checks
+cancellation during matching and yields between pages. No whole-search transaction, OFFSET scan,
+full-entity corpus load or second citation scan is allowed. A miss still scans bounded pages until
+exhaustion; corpus-wide work is cancellable and never one unbounded database statement.
+
+Schema 41 adds only the timestamp/id B-tree index, preserving all messages and existing indexes.
+It requires no tokenizer, FTS payload table or message-text backfill. SQLite builds this additive
+index once during migration; migration cost is separate from ongoing query latency.
+
 
 ## 3. Ownership
 

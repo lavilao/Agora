@@ -23,11 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import com.newoether.agora.ui.components.BOTTOM_SHEET_SHAPE
 import com.newoether.agora.ui.components.BottomSheetMaxWidth
 import com.newoether.agora.ui.components.DialogWindowEdgeToEdge
 
@@ -42,7 +42,6 @@ fun MotionAwareModalBottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(),
-    shape: Shape = BottomSheetDefaults.ExpandedShape,
     containerColor: Color = BottomSheetDefaults.ContainerColor,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
@@ -51,7 +50,7 @@ fun MotionAwareModalBottomSheet(
             onDismissRequest = onDismissRequest,
             modifier = modifier.widthIn(max = BottomSheetMaxWidth),
             sheetState = sheetState,
-            shape = shape,
+            shape = BOTTOM_SHEET_SHAPE,
             containerColor = containerColor,
             content = content,
         )
@@ -105,7 +104,7 @@ fun MotionAwareModalBottomSheet(
                             }
                         }
                     },
-                shape = shape,
+                shape = BOTTOM_SHEET_SHAPE,
                 color = containerColor,
                 contentColor = contentColorFor(containerColor),
             ) {

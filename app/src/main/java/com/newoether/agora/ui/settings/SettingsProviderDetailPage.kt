@@ -1,18 +1,12 @@
 package com.newoether.agora.ui.settings
 
-import com.newoether.agora.util.DebugLog
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Cached
@@ -26,7 +20,6 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
-import com.newoether.agora.ui.motion.MotionAwareCircularProgressIndicator as CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -37,7 +30,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.newoether.agora.R
@@ -45,7 +37,8 @@ import com.newoether.agora.data.ApiKeyEntry
 import com.newoether.agora.data.CustomEndpointProtocol
 import com.newoether.agora.data.CustomProviderNamePolicy
 import com.newoether.agora.data.isAnthropicProtocolProvider
-import com.newoether.agora.data.isAnthropicCacheEnabledForProvider
+import com.newoether.agora.data.isPromptCacheSettingEnabledForProvider
+import com.newoether.agora.data.supportsPromptCacheSetting
 import com.newoether.agora.data.anthropicCacheTtlForProvider
 import com.newoether.agora.data.LocalChatModelConfig
 import com.newoether.agora.data.repository.addApiKey
@@ -61,13 +54,57 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.newoether.agora.ui.components.AgoraDropdownMenu
+import com.newoether.agora.ui.components.AgoraDropdownMenuItem
+import com.newoether.agora.ui.components.SecretVisibilityToggle
+import com.newoether.agora.ui.components.rememberSecretVisible
+import com.newoether.agora.ui.components.secretVisualTransformation
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsProviderDetailPage(
     providerName: String,
     viewModel: ChatViewModel,
     onBack: () -> Unit,
+) {
+    var editorRoute by remember(providerName) { mutableStateOf<LocalChatEditorRoute?>(null) }
+    val showDocFab by viewModel.settings.showDocumentationFab.collectAsState()
+    BackHandler(enabled = editorRoute != null) { editorRoute = null }
+    GuardedAnimatedContent(
+        targetState = editorRoute,
+        forward = editorRoute != null,
+        contentKey = { route -> route?.initial?.id ?: if (route != null) "add" else null },
+    ) { route ->
+        if (route != null) {
+            SettingsSecondaryPane {
+                LocalChatModelEditor(
+                    initial = route.initial,
+                    viewModel = viewModel,
+                    onBack = { editorRoute = null },
+                    showDocFab = showDocFab,
+                )
+            }
+        } else {
+            ProviderDetailSettingsList(
+                providerName = providerName,
+                viewModel = viewModel,
+                onBack = onBack,
+                onAddModel = { editorRoute = LocalChatEditorRoute(null) },
+                onEditModel = { editorRoute = LocalChatEditorRoute(it) },
+            )
+        }
+    }
+}
+
+private data class LocalChatEditorRoute(val initial: LocalChatModelConfig?)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProviderDetailSettingsList(
+    providerName: String,
+    viewModel: ChatViewModel,
+    onBack: () -> Unit,
+    onAddModel: () -> Unit,
+    onEditModel: (LocalChatModelConfig) -> Unit,
 ) {
     val apiKeys by viewModel.settings.apiKeys.collectAsState()
     val activeApiKeyIds by viewModel.settings.activeApiKeyIds.collectAsState()
@@ -90,65 +127,14 @@ fun SettingsProviderDetailPage(
     val customConfig = customProviders.firstOrNull { it.name == currentName }
     val isCustom = customConfig != null
 
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
     // Dialogs
     var showKeyDialog by remember { mutableStateOf<ApiKeyEntry?>(null) }
     var showDeleteKeyConfirm by remember { mutableStateOf<ApiKeyEntry?>(null) }
-    var importingModel by remember { mutableStateOf(false) }
-    var copiedFilePath by remember { mutableStateOf<String?>(null) }
-    var showAddModelDialog by remember { mutableStateOf(false) }
-    var showEditModelDialog by remember { mutableStateOf<LocalChatModelConfig?>(null) }
     var showDeleteModelConfirm by remember { mutableStateOf<LocalChatModelConfig?>(null) }
-    var showGgufError by remember { mutableStateOf(false) }
     var showCactusCatalog by remember { mutableStateOf(false) }
     var showRenameProvider by remember { mutableStateOf(false) }
     var showDeleteProvider by remember { mutableStateOf(false) }
     var providerMenuExpanded by remember { mutableStateOf(false) }
-
-    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            importingModel = true
-            scope.launch {
-                val importedPath = withContext(Dispatchers.IO) {
-                    try {
-                        val dest = java.io.File(
-                            context.filesDir,
-                            "chat_model_${java.util.UUID.randomUUID()}.gguf",
-                        )
-                        val copied = context.contentResolver.openInputStream(uri)?.use { input ->
-                            dest.outputStream().use { output -> input.copyTo(output) }
-                            true
-                        } == true
-                        if (!copied) return@withContext null
-                        val magic = ByteArray(4)
-                        dest.inputStream().use { it.read(magic) }
-                        val valid = magic[0] == 'G'.code.toByte() &&
-                            magic[1] == 'G'.code.toByte() &&
-                            magic[2] == 'U'.code.toByte() &&
-                            magic[3] == 'F'.code.toByte()
-                        if (valid) {
-                            dest.absolutePath
-                        } else {
-                            dest.delete()
-                            null
-                        }
-                    } catch (e: Exception) {
-                        DebugLog.e("ProviderDetail", "GGUF import", e)
-                        null
-                    }
-                }
-                if (importedPath == null) {
-                    showGgufError = true
-                } else {
-                    copiedFilePath = importedPath
-                    showAddModelDialog = true
-                }
-                importingModel = false
-            }
-        }
-    }
 
     CollapsingSettingsScaffold(
         title = if (isLocal) stringResource(R.string.local_title) else currentName,
@@ -157,9 +143,9 @@ fun SettingsProviderDetailPage(
             if (isCustom) {
                 Box {
                     IconButton(onClick = { providerMenuExpanded = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.options)) }
-                    DropdownMenu(expanded = providerMenuExpanded, onDismissRequest = { providerMenuExpanded = false }, containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 16.dp, shape = RoundedCornerShape(12.dp)) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = { providerMenuExpanded = false; showRenameProvider = true })
-                        DropdownMenuItem(text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }, onClick = { providerMenuExpanded = false; showDeleteProvider = true })
+                    AgoraDropdownMenu(expanded = providerMenuExpanded, onDismissRequest = { providerMenuExpanded = false }, containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 16.dp) {
+                        AgoraDropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = { providerMenuExpanded = false; showRenameProvider = true })
+                        AgoraDropdownMenuItem(text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }, onClick = { providerMenuExpanded = false; showDeleteProvider = true })
                     }
                 }
             }
@@ -396,9 +382,9 @@ fun SettingsProviderDetailPage(
                                     trailingContent = {
                                         Box {
                                             IconButton(onClick = { showMenu = true }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, stringResource(R.string.options), modifier = Modifier.size(18.dp)) }
-                                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 16.dp, shape = RoundedCornerShape(12.dp)) {
-                                                DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = { showMenu = false; showEditModelDialog = model })
-                                                DropdownMenuItem(text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }, onClick = { showMenu = false; showDeleteModelConfirm = model })
+                                            AgoraDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 16.dp) {
+                                                AgoraDropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = { showMenu = false; onEditModel(model) })
+                                                AgoraDropdownMenuItem(text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }, onClick = { showMenu = false; showDeleteModelConfirm = model })
                                             }
                                         }
                                     }
@@ -406,21 +392,10 @@ fun SettingsProviderDetailPage(
                             }
                         }
                         add {
-                            Box(modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = !importingModel) { filePickerLauncher.launch(arrayOf("*/*")) }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                                if (importingModel) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(stringResource(R.string.importing_model), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-                                    }
-                                } else {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(stringResource(R.string.import_model_chat), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-                                    }
-                                }
-                            }
+                            SettingsAddItem(
+                                label = stringResource(R.string.import_model_chat),
+                                onClick = onAddModel,
+                            )
                         }
                         add {
                             Box(
@@ -511,9 +486,11 @@ fun SettingsProviderDetailPage(
                     onEditKey = { showKeyDialog = it },
                     onDeleteKey = { showDeleteKeyConfirm = it },
                 )
-                if (isAnthropicProtocolProvider(currentName, customProviders)) {
+                if (supportsPromptCacheSetting(currentName, customProviders)) {
                     val providerId = customConfig?.providerId ?: currentName
-                    val cacheEnabled = isAnthropicCacheEnabledForProvider(
+                    // OpenAI-protocol endpoints share the switch (prompt_cache_key) but have no TTL.
+                    val cacheTtlSupported = isAnthropicProtocolProvider(currentName, customProviders)
+                    val cacheEnabled = isPromptCacheSettingEnabledForProvider(
                         providerId, anthropicCacheEnabled, customProviders,
                     )
                     val cacheTtl = anthropicCacheTtlForProvider(
@@ -544,7 +521,7 @@ fun SettingsProviderDetailPage(
                                     ),
                                 )
                             }
-                            if (cacheEnabled) {
+                            if (cacheEnabled && cacheTtlSupported) {
                                 add {
                                     var expanded by remember(providerId) { mutableStateOf(false) }
                                     SettingsItem(
@@ -566,15 +543,14 @@ fun SettingsProviderDetailPage(
                                                     color = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.padding(end = 4.dp),
                                                 )
-                                                DropdownMenu(
+                                                AgoraDropdownMenu(
                                                     expanded = expanded,
                                                     onDismissRequest = { expanded = false },
                                                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                                     tonalElevation = 16.dp,
-                                                    shape = RoundedCornerShape(12.dp),
                                                 ) {
                                                     listOf("5m", "1h").forEach { ttl ->
-                                                        DropdownMenuItem(
+                                                        AgoraDropdownMenuItem(
                                                             text = { Text(ttl) },
                                                             leadingIcon = {
                                                                 if (cacheTtl == ttl) {
@@ -607,20 +583,6 @@ fun SettingsProviderDetailPage(
     }
 
     // --- Dialogs ---
-    if (showGgufError) {
-        AlertDialog(containerColor = MaterialTheme.colorScheme.surfaceContainer, onDismissRequest = { showGgufError = false }, title = { Text(stringResource(R.string.import_invalid_gguf_title), fontWeight = FontWeight.Bold) }, text = { Text(stringResource(R.string.import_invalid_gguf_desc)) }, confirmButton = { TextButton(onClick = { showGgufError = false }) { Text(stringResource(R.string.ok)) } })
-    }
-
-    // Local model add/edit dialogs (mmproj + speculative draft pickers live here)
-    LocalChatModelDialogs(
-        viewModel = viewModel,
-        showAddModelDialog = showAddModelDialog,
-        copiedFilePath = copiedFilePath,
-        editModel = showEditModelDialog,
-        onAddDismissed = { showAddModelDialog = false; copiedFilePath = null },
-        onEditDismissed = { showEditModelDialog = null },
-    )
-
     // Cactus engine catalog: download prebuilt bundles or import local ones
     CactusModelDialogs(
         viewModel = viewModel,
@@ -641,7 +603,8 @@ fun SettingsProviderDetailPage(
             Column(Modifier.fillMaxWidth()) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.provider_key_name_hint)) }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().noOpBringIntoView())
                 Spacer(modifier = Modifier.height(8.dp))
-                Box(modifier = Modifier.noOpBringIntoView()) { OutlinedTextField(value = key, onValueChange = { key = it }, label = { Text("${currentName} API Key") }, visualTransformation = PasswordVisualTransformation(), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
+                var keyVisible by rememberSecretVisible()
+                Box(modifier = Modifier.noOpBringIntoView()) { OutlinedTextField(value = key, onValueChange = { key = it }, label = { Text("${currentName} API Key") }, visualTransformation = secretVisualTransformation(keyVisible), trailingIcon = { SecretVisibilityToggle(keyVisible) { keyVisible = !keyVisible } }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
             }
         }, confirmButton = { TextButton(onClick = { if (name.isNotBlank() && key.isNotBlank()) { if (isEdit) viewModel.settings.updateApiKey(entry.id, name, key) else viewModel.settings.addApiKey(name, key, currentName); showKeyDialog = null } }) { Text(if (isEdit) stringResource(R.string.provider_save) else stringResource(R.string.provider_add)) } }, dismissButton = { TextButton(onClick = { showKeyDialog = null }) { Text(stringResource(R.string.cancel)) } })
     }

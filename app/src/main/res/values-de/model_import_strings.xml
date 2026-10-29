@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="embedding_import_title">Embedding-Modell (.gguf)</string>
+    <string name="embedding_import_desc">Ein GGUF-Embedding-Modell für die lokale semantische Suche importieren</string>
+    <string name="local_chat_import_title">Chat-Modell (.gguf)</string>
+    <string name="local_chat_import_desc">Ein GGUF-Chat-Modell importieren, um Unterhaltungen auf diesem Gerät auszuführen</string>
+    <string name="model_import_not_imported">Nicht importiert · %1$s</string>
+    <string name="model_import_file_missing">Datei fehlt</string>
+    <string name="local_projector_enabled">Bildeingabe aktiviert</string>
+    <string name="local_draft_title">Entwurfsmodell (.gguf)</string>
+    <string name="local_draft_desc">Optional: ein kleines Entwurfs-GGUF importieren, dessen Vorschläge das Hauptmodell in einem Schritt prüft</string>
+    <string name="local_draft_enabled">Spekulatives Decoding aktiv</string>
+</resources>

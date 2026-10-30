@@ -113,6 +113,25 @@ jobs:
           android.suppressUnsupportedCompileSdk=36
           EOF
 
+      # R8/minify: OFF por política del fork. El nativo (libagora_llama.so,
+      # libagora_cactus.so) resuelve campos/métodos Java POR NOMBRE vía JNI y R8 los
+      # renombra → SIGABRT al cargar el primer modelo (crash confirmado 2026-10-30:
+      # NoSuchFieldError useMmap/flashAttention en LlamaEngineOptions). Este guard
+      # falla ruidosamente si un merge upstream reactiva isMinifyEnabled, en vez de
+      # producir un APK que crashea. Detalle: development/r8-minification.md.
+      - name: "R8 - verificar OFF (política del fork)"
+        if: github.event.inputs.build_type == 'release'
+        run: |
+          set -euo pipefail
+          grep -q 'isMinifyEnabled = false' app/build.gradle.kts || {
+            echo "ERROR: se esperaba isMinifyEnabled = false en app/build.gradle.kts."
+            echo "Un merge upstream probablemente reactivó R8. R8 ofusca los campos que el"
+            echo "nativo lee por nombre (LlamaEngineOptions.useMmap/flashAttention/...) y la"
+            echo "app crashea (SIGABRT) al cargar el primer modelo. Ver development/r8-minification.md."
+            exit 1
+          }
+          echo "R8/minify OFF (política del fork: el nativo lee miembros Java por nombre vía JNI)"
+
       - name: Build APK Release (arm64-v8a · llama.cpp + Cactus)
         if: github.event.inputs.build_type == 'release'
         run: |

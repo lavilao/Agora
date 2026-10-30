@@ -1,3 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# R8 POLICY (2026-10-30): minification is OFF by default (isMinifyEnabled = false in
+# app/build.gradle.kts) and must stay off unless development/r8-minification.md is
+# satisfied. The native bridges (libagora_llama.so, libagora_cactus.so) resolve Java
+# members by name through JNI; R8 renames them and the app aborts (SIGABRT) on the
+# first model load. A release build with R8 on crashed on every phone with:
+#   NoSuchFieldError: no "Z" field "useMmap" in LlamaEngineOptions (fields a/b/c...)
+# The rules below are the defensive inventory for the case where shrinking is ever
+# deliberately re-enabled; they are inert while minify is off.
+# ─────────────────────────────────────────────────────────────────────────────
+
 # kotlinx.serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
@@ -41,6 +52,11 @@
 -keep class com.newoether.agora.api.ChatTemplateToolCall { *; }
 -keep class com.newoether.agora.api.ChatTemplateMessage { *; }
 -keep class com.newoether.agora.api.ChatTemplateTool { *; }
+# JNI (llama): read_engine_options() reads ALL of these fields by exact name via
+# GetFieldID on every model load. This was the class missing a keep rule in the
+# 2026-10-30 crash: R8 renamed flashAttention/useMmap/... to a/b/c... and the app
+# aborted with SIGABRT while loading the first model.
+-keep class com.newoether.agora.api.LlamaEngineOptions { *; }
 -keep class com.newoether.agora.api.LlamaChatTemplateRequest { *; }
 -keep class com.newoether.agora.api.ChatTemplateGrammarTrigger { *; }
 -keep class com.newoether.agora.api.LlamaChatTemplateResult { *; }

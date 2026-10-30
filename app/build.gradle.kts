@@ -75,8 +75,22 @@ android {
         }
         release {
             signingConfig = releaseSigning
-            // R8 shrinks and optimizes release code; keep rules live in proguard-rules.pro.
-            isMinifyEnabled = true
+            // DO NOT ENABLE R8/minification here. Confirmed crash (2026-10-30, v2.1.0
+            // post-merge release builds): the native bridges resolve Java members by name
+            // through JNI, and R8 renames them. read_engine_options() (llama_chat_options.h)
+            // reads all 18 LlamaEngineOptions fields via GetFieldID; with shrinking those
+            // fields became a/b/c..., GetFieldID("flashAttention") failed, and the next
+            // GetFieldID("useMmap") aborted the process:
+            //   Fatal signal 6 (SIGABRT): Throwing new exception 'no "Z" field "useMmap"
+            //   in class "Lcom/newoether/agora/api/LlamaEngineOptions;"' with unexpected
+            //   pending exception: java.lang.NoSuchFieldError: no "Ljava/lang/String;"
+            //   field "flashAttention" ...
+            // The app died on the first model load (title generation) on every UI, ABI and
+            // model. CI cannot catch this (it assembles but never loads a model on a
+            // device). Policy and the required keep-rule inventory live in
+            // development/r8-minification.md; proguard-rules.pro carries the defensive
+            // keep rules in case minification is ever deliberately re-enabled.
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

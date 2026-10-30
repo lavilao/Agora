@@ -57,7 +57,7 @@ class CactusBundleManagerTest {
         File(dir, "token_embeddings.weights").delete()
         val problem = CactusBundleManager.validateBundle(dir)
         assertNotNull(problem)
-        assertTrue(problem.contains("weight"))
+        assertTrue(problem!!.contains("weight"))
         dir.deleteRecursively()
     }
 
@@ -68,7 +68,7 @@ class CactusBundleManagerTest {
         File(dir, "tokenizer_config.txt").writeText("tokenizer_type=bpe\n")
         val problem = CactusBundleManager.validateBundle(dir)
         assertNotNull(problem)
-        assertTrue(problem.contains("tokenizer.json"))
+        assertTrue(problem!!.contains("tokenizer.json"))
         dir.deleteRecursively()
     }
 

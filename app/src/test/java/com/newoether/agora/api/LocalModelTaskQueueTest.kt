@@ -129,15 +129,15 @@ class LocalModelTaskQueueTest {
         val path = "C:/models/model.gguf"
 
         assertEquals(
-            LocalModelIdentity.Chat(path, 2048),
-            LocalModelIdentity.Chat(path, 2048),
+            LocalModelIdentity.Chat(path, 2048, LlamaBackendPreference.AUTO, LlamaEngineOptions()),
+            LocalModelIdentity.Chat(path, 2048, LlamaBackendPreference.AUTO, LlamaEngineOptions()),
         )
         assertNotEquals(
-            LocalModelIdentity.Chat(path, 2048),
-            LocalModelIdentity.Chat(path, 4096),
+            LocalModelIdentity.Chat(path, 2048, LlamaBackendPreference.AUTO, LlamaEngineOptions()),
+            LocalModelIdentity.Chat(path, 4096, LlamaBackendPreference.AUTO, LlamaEngineOptions()),
         )
         assertNotEquals(
-            LocalModelIdentity.Chat(path, 2048) as LocalModelIdentity,
+            LocalModelIdentity.Chat(path, 2048, LlamaBackendPreference.AUTO, LlamaEngineOptions()) as LocalModelIdentity,
             LocalModelIdentity.Embedding(path),
         )
     }

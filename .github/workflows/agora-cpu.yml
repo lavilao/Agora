@@ -21,6 +21,11 @@ on:
         default: 'release'
         type: choice
         options: [debug, release]
+      minify_enabled:
+        description: 'R8 minification (release only)'
+        required: true
+        default: true
+        type: boolean
 
 env:
   JAVA_VERSION: '21'
@@ -78,6 +83,16 @@ jobs:
           grep -q 'abiFilters += listOf("${{ env.TARGET_ABI }}")' app/build.gradle.kts || { echo "defaultConfig no parcheado"; exit 1; }
           grep -q 'abiFilters += "${{ env.TARGET_ABI }}"' app/build.gradle.kts || { echo "buildType debug no parcheado"; exit 1; }
           echo "build.gradle.kts parcheado (ABI armv7, sin args cmake extra)"
+
+      # Diagnóstico: permite apagar R8 (isMinifyEnabled) para aislar crashes que solo
+      # aparecen en release con shrinking. El valor por defecto (true) es el build normal.
+      - name: Patch build.gradle.kts (R8 off, solo si se pide)
+        if: ${{ github.event.inputs.build_type == 'release' && inputs.minify_enabled == false }}
+        run: |
+          set -euo pipefail
+          sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/' app/build.gradle.kts
+          grep -q 'isMinifyEnabled = false' app/build.gradle.kts || { echo "R8 no se apagó"; exit 1; }
+          echo "build.gradle.kts parcheado: R8/minify OFF (build de diagnóstico)"
 
       - name: Patch CMakeLists.txt (OpenMP + armv7 + neon-vfpv4)
         run: |

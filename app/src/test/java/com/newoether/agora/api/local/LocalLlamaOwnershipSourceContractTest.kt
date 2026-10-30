@@ -163,8 +163,49 @@ class LocalLlamaOwnershipSourceContractTest {
 
         assertTrue(generationHeader.contains("CALLBACK_TOKEN_BATCH = 4"))
         assertTrue(generationHeader.contains("CALLBACK_BYTE_BATCH = 64"))
-        listOf("nativeChatGenerate", "nativeChatGenerateWithImages").forEach { functionName ->
-            val function = nativeFunctionSection(native, functionName)
+        // The text loop runs the fork's speculative round first (draft decode, sampled
+        // verification, per-round EOG/piece/parse); the plain single-token path after it
+        // repeats the classic accept -> eog -> piece -> decode -> count -> parse order.
+        run {
+            val function = nativeFunctionSection(native, "nativeChatGenerate")
+            val loop = function.substringAfter("while (generated < generation_limit)")
+            val cancellation = loop.indexOf("cancelled.load")
+            val specDecode = loop.indexOf("llama_decode")
+            val specSample = loop.indexOf("common_sampler_sample_and_accept_n")
+            val specEog = loop.indexOf("llama_vocab_is_eog")
+            val specParse = loop.indexOf("parser.update(")
+            assertTrue(cancellation >= 0 && cancellation < specDecode)
+            assertTrue(specDecode in 0 until specSample)
+            assertTrue(specSample < specEog && specEog < specParse)
+
+            val plain = loop.substringAfter("common_sampler_sample(smpl, handle->ctx, -1)")
+            val accept = plain.indexOf("common_sampler_accept")
+            val eog = plain.indexOf("llama_vocab_is_eog")
+            val piece = plain.indexOf("token_to_piece(handle->vocab")
+            val decode = plain.indexOf("llama_decode")
+            val count = plain.indexOf("generated++")
+            val parse = plain.indexOf("parser.update(")
+            assertTrue(accept >= 0 && accept < eog)
+            assertTrue(eog < piece)
+            assertTrue(plain.contains("!is_preserved_token(metadata, new_token_id)"))
+            assertTrue(piece >= 0 && piece < decode)
+            assertTrue(decode < count)
+            assertTrue(count < parse)
+            assertTrue(function.contains("common_sampler_free(smpl);"))
+            assertTrue(loop.contains("callback_tokens >= CALLBACK_TOKEN_BATCH"))
+            assertTrue(loop.contains("callback_buffer.size() >= CALLBACK_BYTE_BATCH"))
+            assertTrue(loop.contains("std::min(callback_buffer.size(), CALLBACK_BYTE_BATCH)"))
+            assertTrue(loop.contains("callback_buffer[emit_len]) & 0xC0) == 0x80"))
+            assertTrue(loop.contains("!consumer_closed && !callback_buffer.empty()"))
+            assertTrue(loop.contains("failure = \"Stream consumer closed\""))
+            assertTrue(loop.contains("if (consumer_closed) break"))
+            assertTrue(loop.contains("Generated incomplete UTF-8 output"))
+            assertFalse(loop.contains("llama_synchronize"))
+            assertFalse(loop.contains("char piece[256]"))
+        }
+        // The multimodal loop keeps upstream's classic ordering: no speculative branch.
+        run {
+            val function = nativeFunctionSection(native, "nativeChatGenerateWithImages")
             val loop = function.substringAfter("while (generated < generation_limit)")
             val cancellation = loop.indexOf("cancelled.load")
             val sample = loop.indexOf("common_sampler_sample")

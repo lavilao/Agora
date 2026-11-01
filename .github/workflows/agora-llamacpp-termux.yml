@@ -13,6 +13,8 @@
 #      Cortex-A53; mejora el -mfpu=neon que el NDK ya añade para armeabi-v7a)
 #    - OpenMP ON (libomp del NDK, se empaqueta junto a los binarios)
 #    - GGML_LLAMAFILE OFF y Vulkan OFF (build 100% CPU)
+#    - BUILD_SHARED_LIBS OFF: binarios autocontenidos (solo libomp.so externa)
+#      y STL estático por defecto del toolchain
 #  Por defecto compila el MISMO pin de llama.cpp que usa Agora
 #  (thirdparty/llama.cpp = 00d56b11); el input llamacpp_ref permite probar
 #  otra branch/tag/SHA de ggml-org/llama.cpp.
@@ -94,6 +96,7 @@ jobs:
             -DGGML_CPU_ARM_ARCH="armv7-a" \
             -DGGML_LLAMAFILE=OFF \
             -DGGML_CCACHE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_OPENSSL=OFF \
             -DLLAMA_BUILD_TESTS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF
@@ -101,16 +104,30 @@ jobs:
 
       # El log completo queda en build.log; los grep confirman que las flags
       # de la receta llegaron de verdad al compilador (no basta un build verde).
+      # En fallo, se extrae el contexto de los errores (make -j los esparce por
+      # todo el log, un tail se los come).
       - name: Compilar (Release)
         run: |
           set -euo pipefail
-          cmake --build build -j"$(nproc)" --verbose > build.log 2>&1 || { tail -100 build.log; exit 1; }
+          cmake --build build --target llama-cli llama-bench llama-quantize -j"$(nproc)" --verbose > build.log 2>&1 || {
+            echo "=== ERRORES DE COMPILACIÓN (grep) ==="
+            grep -n -E 'error:|fatal error:' build.log | head -40 || true
+            echo "=== CONTEXTO DEL PRIMER ERROR ==="
+            FIRST="$(grep -n -E 'error:' build.log | head -1 | cut -d: -f1 || true)"
+            if [ -n "$FIRST" ]; then
+              START=$(( FIRST > 15 ? FIRST - 15 : 1 ))
+              sed -n "${START},$(( FIRST + 15 ))p" build.log
+            fi
+            echo "=== ÚLTIMAS 40 LÍNEAS ==="
+            tail -40 build.log
+            exit 1
+          }
           grep -q -- '-mfpu=neon-vfpv4' build.log || { echo "ERROR: -mfpu=neon-vfpv4 no llegó al compilador"; exit 1; }
           grep -q -- '-march=armv7-a'   build.log || { echo "ERROR: -march=armv7-a ausente"; exit 1; }
           grep -q -- '-fopenmp'         build.log || { echo "ERROR: OpenMP ausente (GGML_OPENMP)"; exit 1; }
           echo "Compilación OK; flags verificadas en el log (armv7-a + neon-vfpv4 + OpenMP)"
 
-      - name: Empaquetar (binarios strip + libomp + libc++ + README)
+      - name: Empaquetar (binarios strip + libomp + README)
         run: |
           set -euo pipefail
           TC="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64"
@@ -127,10 +144,9 @@ jobs:
           [ -n "$LIBOMP" ] || { echo "ERROR: libomp.so no está en el NDK"; exit 1; }
           cp "$LIBOMP" dist/libomp.so
 
-          # C++ runtime compartido (ANDROID_STL por defecto en el toolchain)
-          LIBCPP="$TC/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so"
-          [ -f "$LIBCPP" ] || { echo "ERROR: libc++_shared.so no está en el NDK"; exit 1; }
-          cp "$LIBCPP" dist/libc++_shared.so
+          # C++ runtime: el toolchain del NDK enlaza libc++ estáticamente por
+          # defecto (-static-libstdc++), así que no hace falta empaquetar
+          # libc++_shared.so; la verificación de NEEDED lo confirma.
 
           cat > dist/README.txt <<'EOF'
           llama.cpp standalone for Termux - armeabi-v7a (Redmi 9A / Helio G25)
@@ -144,7 +160,7 @@ jobs:
             llama-bench       speed benchmark (prefill pp + decode tg)
             llama-quantize    quantize / convert GGUF models
             libomp.so         OpenMP runtime (required at run time)
-            libc++_shared.so  C++ runtime (required at run time)
+            SHA256SUMS.txt    checksums of every file
 
           Setup in Termux
             1. mkdir -p ~/llamacpp && cd ~/llamacpp
@@ -168,7 +184,7 @@ jobs:
             - SHA256SUMS.txt contains the checksums of every file.
           EOF
 
-          (cd dist && sha256sum llama-cli llama-bench llama-quantize libomp.so libc++_shared.so > SHA256SUMS.txt)
+          (cd dist && sha256sum llama-cli llama-bench llama-quantize libomp.so > SHA256SUMS.txt)
           ls -la dist/
 
       - name: Verificar binarios (ELF32 ARM + linker Android)
@@ -188,7 +204,7 @@ jobs:
             echo "  Atributos ARM (NEON/VFP):"
             "$RE" -A "$BIN" | grep -E 'Tag_CPU_name|Tag_Advanced_SIMD_arch|Tag_VFP_arch|Tag_FP_arch' | sed 's/^ */  /' || true
           done
-          echo "Binarios verificados: ELF32 ARM, linker de Android, solo bionic + libomp + libc++_shared"
+          echo "Binarios verificados: ELF32 ARM, linker de Android, solo bionic + libomp"
 
       - name: Subir binarios
         uses: actions/upload-artifact@v4

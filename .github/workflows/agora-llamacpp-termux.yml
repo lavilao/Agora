@@ -1,9 +1,11 @@
 # ============================================================================
 #  llama.cpp standalone para Termux (armeabi-v7a)
 #
-#  Build manual de los binarios SUELTOS de llama.cpp (llama-cli, llama-bench,
-#  llama-quantize) para probar el motor en el teléfono de 32 bits (Redmi 9A /
-#  Helio G25, 8x Cortex-A53) directamente desde Termux, sin Agora.
+#  Build manual de los binarios SUELTOS de llama.cpp (llama-server, llama-cli,
+#  llama-bench, llama-quantize) para probar el motor en el teléfono de 32 bits
+#  (Redmi 9A / Helio G25, 8x Cortex-A53) directamente desde Termux, sin Agora.
+#  llama-server es el objetivo principal: usar el celular como servidor LLM
+#  (API compatible con OpenAI + WebUI embebida) accesible desde la red local.
 #
 #  Usa EXACTAMENTE la receta CPU del build armv7 de Agora (agora-cpu.yml):
 #    - toolchain NDK r28c + CMake 3.22.1 (los mismos del CI de Agora)
@@ -80,8 +82,9 @@ jobs:
       # ggml que el patch de agora-cpu.yml para armeabi-v7a, con
       # -mfpu=neon-vfpv4 global (en Agora va como target_compile_options de
       # ggml-cpu; aquí cubre también src/ y los tools, mismo efecto en el
-      # código que importa). LLAMA_BUILD_SERVER queda ON porque en este pin
-      # llama-cli depende de server-context.
+      # código que importa). LLAMA_BUILD_SERVER queda ON (default del pin) y
+      # aquí SÍ se compila el target llama-server: misma receta CPU, más la
+      # WebUI embebida y el vendor cpp-httplib/nlohmann del pin.
       - name: Configurar build (CMake + toolchain NDK, receta CPU de Agora)
         run: |
           set -euo pipefail
@@ -113,7 +116,7 @@ jobs:
       - name: Compilar (Release)
         run: |
           set -euo pipefail
-          cmake --build build --target llama-cli llama-bench llama-quantize -j"$(nproc)" --verbose > build.log 2>&1 || {
+          cmake --build build --target llama-server llama-cli llama-bench llama-quantize -j"$(nproc)" --verbose > build.log 2>&1 || {
             echo "=== ERRORES DE COMPILACIÓN (grep) ==="
             grep -n -E 'error:|fatal error:' build.log | head -40 || true
             echo "=== CONTEXTO DEL PRIMER ERROR ==="
@@ -136,7 +139,7 @@ jobs:
           set -euo pipefail
           TC="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64"
           mkdir -p dist
-          for BIN in llama-cli llama-bench llama-quantize; do
+          for BIN in llama-server llama-cli llama-bench llama-quantize; do
             [ -f "build/bin/$BIN" ] || { echo "ERROR: falta build/bin/$BIN"; ls build/bin || true; exit 1; }
             "$TC/bin/llvm-strip" --strip-unneeded "build/bin/$BIN"
             cp "build/bin/$BIN" dist/
@@ -160,6 +163,7 @@ jobs:
           Same llama.cpp pin as Agora.
 
           Files
+            llama-server      HTTP server: OpenAI-compatible API + WebUI (main tool)
             llama-cli         chat and one-shot generation
             llama-bench       speed benchmark (prefill pp + decode tg)
             llama-quantize    quantize / convert GGUF models
@@ -171,7 +175,7 @@ jobs:
             2. Copy the files here after unzipping, e.g. from Downloads:
                termux-setup-storage
                cp /sdcard/Download/llamacpp-armeabiv7-termux/* .
-            3. chmod +x llama-cli llama-bench llama-quantize
+            3. chmod +x llama-server llama-cli llama-bench llama-quantize
             4. export LD_LIBRARY_PATH=$HOME/llamacpp
 
           Find your best thread count (Helio G25: 4x A53 @2.0GHz + 4x @1.5GHz)
@@ -180,7 +184,27 @@ jobs:
           Chat
             ./llama-cli -m model.gguf -t 4 -cnv --simple-io
 
+          Server (use the phone as an LLM server)
+            # Keep Android from killing/suspending Termux while it runs:
+              termux-wake-lock
+            # Serve on the LAN (no auth: only trusted networks!), then open
+            # http://<phone-ip>:8080 in any browser on the same Wi-Fi:
+              ./llama-server -m model.gguf -t 4 --host 0.0.0.0 --port 8080
+            # Phone only (curl from Termux itself): drop --host (127.0.0.1).
+            # OpenAI-compatible endpoint:
+              curl http://127.0.0.1:8080/v1/chat/completions \
+                -H 'Content-Type: application/json' \
+                -d '{"messages":[{"role":"user","content":"hola"}]}'
+            # Health / loaded model:
+              curl http://127.0.0.1:8080/health
+            # When done:
+              termux-wake-unlock
+
           Notes
+            - For long sessions also disable battery optimization for Termux
+              (Settings > Apps > Termux > Battery > Unrestricted) or Android
+              may kill the server when the screen goes off.
+            - Ports below 1024 need root: use 1024+ (8080 default is fine).
             - Token generation (tg) is memory-bandwidth bound: -t 4 often
               matches or beats -t 8 on big.LITTLE A53. Prefill (pp) scales
               further.
@@ -188,7 +212,7 @@ jobs:
             - SHA256SUMS.txt contains the checksums of every file.
           EOF
 
-          (cd dist && sha256sum llama-cli llama-bench llama-quantize libomp.so > SHA256SUMS.txt)
+          (cd dist && sha256sum llama-server llama-cli llama-bench llama-quantize libomp.so > SHA256SUMS.txt)
           ls -la dist/
 
       - name: Verificar binarios (ELF32 ARM + linker Android)
@@ -196,7 +220,7 @@ jobs:
           set -euo pipefail
           TC="$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64"
           RE="$TC/bin/llvm-readelf"
-          for BIN in dist/llama-cli dist/llama-bench dist/llama-quantize; do
+          for BIN in dist/llama-server dist/llama-cli dist/llama-bench dist/llama-quantize; do
             echo "=== $BIN ==="
             "$RE" -h "$BIN" | grep -E 'Class:|Machine:' | sed 's/^ *//'
             "$RE" -h "$BIN" | grep -q 'Class:.*ELF32'  || { echo "ERROR: $BIN no es ELF32"; exit 1; }

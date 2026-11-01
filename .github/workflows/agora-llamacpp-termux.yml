@@ -36,7 +36,11 @@ env:
   NDK_VERSION: '28.2.13676358'
   CMAKE_VERSION: '3.22.1'
   TARGET_ABI: 'armeabi-v7a'
-  ANDROID_API: '26'
+  # API 29 (Android 10, el OS de fábrica del Redmi 9A): bionic solo expone
+  # posix_spawn* desde API 28 y vendor/sheredom/subprocess.h (llama-common)
+  # lo usa; con android-26 la compilación falla con "use of undeclared
+  # identifier 'posix_spawn_file_actions_init'".
+  ANDROID_API: '29'
 
 jobs:
   build-armeabiv7-termux:

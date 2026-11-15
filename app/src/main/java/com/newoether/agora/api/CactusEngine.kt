@@ -739,6 +739,7 @@ private object CactusEngineBridge {
     fun init(bundlePath: String): Long = CactusEngine.nativeInitPublic(bundlePath)
     fun destroy(handle: Long) = CactusEngine.nativeDestroyPublic(handle)
     fun stop(handle: Long) = CactusEngine.nativeStopPublic(handle)
+    fun loadedKind(): String = CactusEngine.loadedKind()
     fun complete(
         handle: Long,
         messagesJson: String,

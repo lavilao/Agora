@@ -2,9 +2,10 @@
 //
 // The full Cactus runtime (thirdparty/cactus) writes its NEON kernels for
 // ARMv8.2-A + FP16 + DotProd + I8MM and cannot run on a 32-bit phone. Cactus
-// also publishes the Needle 3 engine as a prebuilt static library
-// (HuggingFace Cactus-Compute/needle3, android-armv7/libneedle.a) that runs
-// the same family's tiny tool-calling models from single ".cact" files.
+// publishes its unified prebuilt engine (HuggingFace Cactus-Compute/cactus,
+// releases/<version>/android-armv7/libcactus.a) for that ABI instead: one
+// runtime that loads single ".cact" archives for text (Needle), speech
+// (Whistle) and vision (Mirage) side by side, one model per kind.
 // This bridge exposes that runtime behind the exact same Kotlin surface the
 // arm64 boundary exposes for the full engine, so CactusChatEngine drives both
 // without knowing which one it holds:
@@ -12,34 +13,38 @@
 //   nativeInit(path)     path is a .cact FILE (not a bundle directory);
 //                        the bytes are read once and kept alive for the
 //                        whole process because the engine maps them in place.
+//                        nativeLoadedKind() then reports whether the archive
+//                        carries the text router ("text") or Mirage ("vision").
 //   nativeComplete(...)  messagesJson carries a needle session envelope
 //                        ({"system", "tools", "feed", "reset",
 //                        "max_new_tokens"}) built by the Kotlin layer, which
-//                        owns the conversation bookkeeping: the needle
+//                        owns the conversation bookkeeping: the prebuilt
 //                        runtime keeps its own accumulating conversation and
 //                        is NOT stateless like the full engine.
 //   nativeStop(...)      best effort only: generation itself cannot be
 //                        interrupted, it is bounded by max_new_tokens and
 //                        the response grammar.
 //
-// The same engine also runs Whistle speech models: needle keeps one model
-// per kind (NEEDLE_TEXT, NEEDLE_SPEECH), so the chat model and a 16 kHz
-// transcription model are resident side by side. The speech side is exposed
-// through CactusSpeechEngine:
+// The same engine also runs Whistle speech models and Mirage vision models:
+// it keeps one model per kind (CACTUS_TEXT, CACTUS_SPEECH, CACTUS_VISION), so
+// a chat model, a 16 kHz transcription model and an image describe model are
+// resident side by side. Those non-chat sides are exposed through
+// CactusSpeechEngine and CactusVisionEngine:
 //   nativeLoadSpeechModel(path)  loads a Whistle .cact (kept independent of
 //                                 the resident chat model);
 //   nativeTranscribe(pcm, ...)    16 kHz mono float PCM in [-1, 1], at most
 //                                 30 s, returns the engine's JSON verbatim
+//                                 or an error envelope;
+//   nativeDescribe(rgb, ...)      packed 8-bit RGB pixels of one image, plus
+//                                 JSON options, return Mirage's structured
+//                                 record (scene, objects, text, relations)
 //                                 or an error envelope.
 //
-// The needle API is plain C, so no STL types cross the library boundary, but
-// the prebuilt engine's internals live in the NDK libc++ "__ndk1" namespace.
-// The module links the shared STL (ANDROID_STL=c++_shared), whose r28
-// libc++ no longer defines std::__ndk1::__hash_memory that the armv7 engine
-// references out of line - hash_memory_shim.cpp provides that one symbol as
-// a weak definition (verbatim LLVM murmur2 algorithm).
+// The C API is plain C, so no STL types cross the library boundary, but the
+// prebuilt engine's internals live in the NDK libc++ "__ndk1" namespace. The
+// module links the shared STL (ANDROID_STL=c++_shared) for those references.
 //
-// Privacy: unlike the full engine, the needle runtime exposes no telemetry
+// Privacy: unlike the full engine, the prebuilt runtime exposes no telemetry
 // or cloud-handoff surface at all; its API is pure local inference.
 
 #include <jni.h>
@@ -53,26 +58,32 @@
 #include <vector>
 
 #include "jni_utf8.h"
-#include "needle.h"
+#include "cactus.h"
 
-#define LOG_TAG "AgoraCactusNeedle"
+#define LOG_TAG "AgoraCactusRuntime"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
 
-// needle keeps one process-global, non-thread-safe model: every entry point
-// serializes through this mutex.
-std::mutex g_needle_mutex;
+// needle keeps one process-global, non-thread-safe model per kind: every
+// entry point serializes through this mutex.
+std::mutex g_cactus_mutex;
 
 // The engine reads the .cact bytes in place and has no unload API, so every
-// loaded file's buffer must outlive the process. They are keyed by path; a
-// slot's bytes are only dropped when that model kind is definitively replaced
-// (see the reconciliation notes in nativeInit / nativeLoadSpeechModel).
+// loaded file's buffer must outlive the process. They are kept keyed by path
+// for the whole session: Needle, Whistle and Mirage are mapped concurrently
+// and a replaced archive's buffer may still be mapped, so none is ever freed.
 std::map<std::string, std::vector<unsigned char>> g_act_bytes;
-std::string g_text_path;   // .cact currently loaded as the NEEDLE_TEXT model
-std::string g_speech_path; // .cact currently loaded as the NEEDLE_SPEECH model
+std::string g_text_path;   // .cact currently loaded as the CACTUS_TEXT model
+std::string g_speech_path; // .cact currently loaded as the CACTUS_SPEECH model
+std::string g_vision_path; // .cact currently loaded as the CACTUS_VISION model
 
-// Static-prefix cache: needle_init() re-tokenizes system + tools; it is only
+// Kind of the model the last nativeInit() opened: "text" or "vision". The
+// Kotlin chat engine reads it to route Mirage to cactus_describe() instead of
+// the tool-calling text path.
+std::string g_loaded_kind;
+
+// Static-prefix cache: cactus_init() re-tokenizes system + tools; it is only
 // re-run when either side actually changed between completions.
 std::string g_last_system;
 std::string g_last_tools;
@@ -86,6 +97,9 @@ std::string g_bridge_error;
 bool g_stop_requested = false;
 
 constexpr int kOutCapacity = 64 * 1024;
+// Mirage's structured record (scene, objects, OCR, relations) is larger than
+// a chat turn's JSON, so the vision path gets its own wider transfer buffer.
+constexpr int kVisionOutCapacity = 256 * 1024;
 constexpr long kMaxActSize = 512L * 1024L * 1024L;
 
 // ---------------------------------------------------------------------------
@@ -339,7 +353,7 @@ std::string error_envelope(const std::string & message) {
 }
 
 // Reads one .cact file's bytes into the path-keyed store. The engine maps the
-// bytes in place, so a successful needle_load() transfers ownership: the entry
+// bytes in place, so a successful cactus_load() transfers ownership: the entry
 // stays until its model kind is definitively replaced. A path that is already
 // resident reuses its original buffer - re-reading could free memory a loaded
 // model still maps, so a file replaced on disk is only picked up after a
@@ -393,7 +407,19 @@ extern "C" {
 JNIEXPORT jstring JNICALL
 Java_com_newoether_agora_api_CactusEngine_nativeEngineBackend(
         JNIEnv * env, jobject /*thiz*/) {
+    // The prebuilt runtime keeps its historical backend id: it still runs the
+    // single-file "chat router" models (.cact) that BACKEND_NEEDLE names, now
+    // with the Cactus 4.x engine that also carries speech and vision.
     return env->NewStringUTF("needle");
+}
+
+// Kind of the .cact that nativeInit() opened last: "text" for the tool-calling
+// chat model, "vision" for Mirage. The chat engine routes on it.
+JNIEXPORT jstring JNICALL
+Java_com_newoether_agora_api_CactusEngine_nativeLoadedKind(
+        JNIEnv * env, jobject /*thiz*/) {
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
+    return env->NewStringUTF(g_loaded_kind.c_str());
 }
 
 JNIEXPORT jlong JNICALL
@@ -401,62 +427,63 @@ Java_com_newoether_agora_api_CactusEngine_nativeInit(
         JNIEnv * env, jobject /*thiz*/, jstring bundle_path) {
     std::string path;
     if (!agora::jni::read_java_path(env, bundle_path, path)) return 0;
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
     g_bridge_error.clear();
 
     // Reloading the very same file only needs a fresh conversation.
-    if (g_text_path == path && (needle_models() & NEEDLE_TEXT)) {
-        needle_reset();
+    if ((g_text_path == path && (cactus_models() & CACTUS_TEXT)) ||
+            (g_vision_path == path && (cactus_models() & CACTUS_VISION))) {
+        cactus_reset();
         g_last_system.clear();
         g_last_tools.clear();
         g_initialized = false;
+        g_loaded_kind = (g_vision_path == path) ? "vision" : "text";
         return 1;
     }
 
     const std::vector<unsigned char> * bytes = read_act_file(path);
     if (bytes == nullptr) return 0;
-    const int models_before = needle_models();
-    const int rc = needle_load(
+    const int models_before = cactus_models();
+    const int rc = cactus_load(
         bytes->data(), static_cast<unsigned long long>(bytes->size()));
     if (rc != 0) {
-        g_bridge_error = needle_last_error() ? needle_last_error() : "needle_load failed";
-        LOGE("needle_load failed: rc=%d err=%s", rc, g_bridge_error.c_str());
+        g_bridge_error = cactus_last_error() ? cactus_last_error() : "cactus_load failed";
+        LOGE("cactus_load failed: rc=%d err=%s", rc, g_bridge_error.c_str());
         // Nothing was loaded from these bytes; the engine does not map them.
         g_act_bytes.erase(path);
         return 0;
     }
 
-    // needle_load reads whichever kind the .cact carries and keeps the other:
-    // reconcile which slot owns the file now. needle_models() only reveals a
-    // newly-added kind, so the one ambiguous case (both kinds resident, the
-    // file replaced one of them) is resolved by comparing the bytes with the
-    // already-loaded speech model. Freeing a still-mapped buffer is the one
-    // unrecoverable mistake; retaining a replaced one only costs its file size.
-    const int models_after = needle_models();
-    const bool was_text = (models_before & NEEDLE_TEXT) != 0;
-    const bool was_speech = (models_before & NEEDLE_SPEECH) != 0;
-    const bool now_speech = (models_after & NEEDLE_SPEECH) != 0;
-    bool carried_speech = !was_speech && now_speech;
-    if (!carried_speech && was_speech && was_text) {
-        const auto loaded = g_act_bytes.find(g_speech_path);
-        carried_speech = loaded != g_act_bytes.end() &&
+    // cactus_load reads whichever kind the .cact carries and keeps the others
+    // loaded, so classify the kind this file opened. A newly-added VISION bit
+    // or a byte-identical reload of the resident Mirage archive means the file
+    // is a vision model; otherwise it is the text (tool-calling) model the
+    // chat path drives. The engine has no unload API and maps the bytes in
+    // place: every loaded file's buffer stays resident for the process, since
+    // Needle, Whistle and Mirage can all be mapped at once.
+    const int models_after = cactus_models();
+    const bool gained_speech = (models_after & ~models_before & CACTUS_SPEECH) != 0;
+    const bool gained_vision = (models_after & ~models_before & CACTUS_VISION) != 0;
+    bool is_vision = gained_vision;
+    if (!is_vision && !g_vision_path.empty()) {
+        const auto loaded = g_act_bytes.find(g_vision_path);
+        is_vision = loaded != g_act_bytes.end() &&
             loaded->second.size() == bytes->size() &&
             std::memcmp(loaded->second.data(), bytes->data(), bytes->size()) == 0;
     }
-    if (carried_speech) {
+    if (gained_speech) {
         // The file carried a speech model (Whistle): it cannot be a chat model.
         g_speech_path = path;
-        g_bridge_error = "this .cact carries a speech model, not a text model";
+        g_bridge_error = "this .cact carries a speech model, not a chat model";
         LOGE("%s", g_bridge_error.c_str());
         return 0;
     }
-    if (g_text_path != path) {
-        // Safe to forget the replaced text model's bytes only when it cannot
-        // still be mapped: speech was not loaded, so the engine's text model
-        // necessarily came from this file. With both kinds resident the old
-        // text bytes are retained instead (bounded by the files ever loaded).
-        if (!was_speech) g_act_bytes.erase(g_text_path);
+    if (is_vision) {
+        g_vision_path = path;
+        g_loaded_kind = "vision";
+    } else {
         g_text_path = path;
+        g_loaded_kind = "text";
     }
     g_last_system.clear();
     g_last_tools.clear();
@@ -464,7 +491,7 @@ Java_com_newoether_agora_api_CactusEngine_nativeInit(
     return 1;
 }
 
-// Loads one .cact as the process's NEEDLE_SPEECH model (Whistle). The speech
+// Loads one .cact as the process's CACTUS_SPEECH model (Whistle). The speech
 // model is independent of the chat model: loading it never disturbs the text
 // model, and the engine keeps both resident once loaded. Returns JNI_FALSE
 // with g_bridge_error set when the file cannot be read or carries a text
@@ -474,30 +501,37 @@ Java_com_newoether_agora_api_CactusSpeechEngine_nativeLoadSpeechModel(
         JNIEnv * env, jobject /*thiz*/, jstring model_path) {
     std::string path;
     if (!agora::jni::read_java_path(env, model_path, path)) return JNI_FALSE;
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
     g_bridge_error.clear();
 
-    if (g_speech_path == path && (needle_models() & NEEDLE_SPEECH)) {
+    if (g_speech_path == path && (cactus_models() & CACTUS_SPEECH)) {
         return JNI_TRUE;
     }
 
     const std::vector<unsigned char> * bytes = read_act_file(path);
     if (bytes == nullptr) return JNI_FALSE;
-    const int models_before = needle_models();
-    const int rc = needle_load(
+    const int models_before = cactus_models();
+    const int rc = cactus_load(
         bytes->data(), static_cast<unsigned long long>(bytes->size()));
     if (rc != 0) {
-        g_bridge_error = needle_last_error() ? needle_last_error() : "needle_load failed";
-        LOGE("needle_load failed: rc=%d err=%s", rc, g_bridge_error.c_str());
+        g_bridge_error = cactus_last_error() ? cactus_last_error() : "cactus_load failed";
+        LOGE("cactus_load failed: rc=%d err=%s", rc, g_bridge_error.c_str());
         g_act_bytes.erase(path);
         return JNI_FALSE;
     }
 
-    const int models_after = needle_models();
-    const bool was_text = (models_before & NEEDLE_TEXT) != 0;
-    const bool was_speech = (models_before & NEEDLE_SPEECH) != 0;
-    const bool now_text = (models_after & NEEDLE_TEXT) != 0;
-    const bool now_speech = (models_after & NEEDLE_SPEECH) != 0;
+    const int models_after = cactus_models();
+    if ((models_after & ~models_before & CACTUS_VISION) != 0) {
+        // Mirage (or another vision archive): nothing here can transcribe.
+        g_vision_path = path;
+        g_bridge_error = "this .cact carries a vision model, not a speech model";
+        LOGE("%s", g_bridge_error.c_str());
+        return JNI_FALSE;
+    }
+    const bool was_text = (models_before & CACTUS_TEXT) != 0;
+    const bool was_speech = (models_before & CACTUS_SPEECH) != 0;
+    const bool now_text = (models_after & CACTUS_TEXT) != 0;
+    const bool now_speech = (models_after & CACTUS_SPEECH) != 0;
     bool carried_text = !was_text && now_text;
     if (!carried_text && !now_speech) {
         // A text file with no speech model anywhere: the text model was
@@ -520,12 +554,10 @@ Java_com_newoether_agora_api_CactusSpeechEngine_nativeLoadSpeechModel(
         LOGE("%s", g_bridge_error.c_str());
         return JNI_FALSE;
     }
-    if (g_speech_path != path) {
-        // The speech model was replaced; its predecessor's bytes are only
-        // safe to drop when no text model shares the ambiguity (see above).
-        if (!was_text) g_act_bytes.erase(g_speech_path);
-        g_speech_path = path;
-    }
+    // The speech model was replaced. Its predecessor's bytes stay resident:
+    // the engine maps loaded archives in place and offers no unload API, so
+    // dropping a buffer it may still map is the one unrecoverable mistake.
+    g_speech_path = path;
     return JNI_TRUE;
 }
 
@@ -537,7 +569,7 @@ JNIEXPORT jstring JNICALL
 Java_com_newoether_agora_api_CactusSpeechEngine_nativeTranscribe(
         JNIEnv * env, jobject /*thiz*/, jfloatArray pcm, jint samples,
         jstring language, jstring keywords) {
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
     g_bridge_error.clear();
     if (pcm == nullptr || samples <= 0) {
         g_bridge_error = "no audio was captured";
@@ -548,7 +580,7 @@ Java_com_newoether_agora_api_CactusSpeechEngine_nativeTranscribe(
         g_bridge_error = "audio sample count exceeds the buffer";
         return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
     }
-    if (!(needle_models() & NEEDLE_SPEECH)) {
+    if (!(cactus_models() & CACTUS_SPEECH)) {
         g_bridge_error = "no speech model is loaded";
         return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
     }
@@ -569,16 +601,16 @@ Java_com_newoether_agora_api_CactusSpeechEngine_nativeTranscribe(
         return env->NewStringUTF(error_envelope("cannot access the audio buffer").c_str());
     }
     std::vector<char> out(kOutCapacity);
-    const int rc = needle_transcribe(
+    const int rc = cactus_transcribe(
         audio, samples,
         language != nullptr ? language_code.c_str() : nullptr,
         keywords != nullptr ? keywords_text.c_str() : nullptr,
         0, out.data(), kOutCapacity);
     env->ReleaseFloatArrayElements(pcm, audio, JNI_ABORT);
     if (rc < 0) {
-        const char * engine_error = needle_last_error();
-        g_bridge_error = engine_error ? engine_error : "needle_transcribe failed";
-        LOGE("needle_transcribe failed: %s", g_bridge_error.c_str());
+        const char * engine_error = cactus_last_error();
+        g_bridge_error = engine_error ? engine_error : "cactus_transcribe failed";
+        LOGE("cactus_transcribe failed: %s", g_bridge_error.c_str());
         return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
     }
     return env->NewStringUTF(out.data());
@@ -587,17 +619,17 @@ Java_com_newoether_agora_api_CactusSpeechEngine_nativeTranscribe(
 JNIEXPORT void JNICALL
 Java_com_newoether_agora_api_CactusEngine_nativeDestroy(
         JNIEnv * /*env*/, jobject /*thiz*/, jlong /*handle*/) {
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
     // The runtime has no unload API and its weights are mapped in place, so
     // the model stays resident until another .cact replaces it or the
     // process dies. Rewind the conversation so the next session starts clean.
-    needle_reset();
+    cactus_reset();
 }
 
 JNIEXPORT void JNICALL
 Java_com_newoether_agora_api_CactusEngine_nativeStop(
         JNIEnv * /*env*/, jobject /*thiz*/, jlong /*handle*/) {
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
     // Generation itself cannot be interrupted (the C API is synchronous and
     // offers no callback); stop further history replay for this request.
     g_stop_requested = true;
@@ -628,25 +660,25 @@ Java_com_newoether_agora_api_CactusEngine_nativeComplete(
         return -1;
     }
 
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
     g_stop_requested = false;
     g_bridge_error.clear();
 
-    if (!(needle_models() & NEEDLE_TEXT)) {
+    if (!(cactus_models() & CACTUS_TEXT)) {
         g_bridge_error = "needle bridge: no text model is loaded";
         return -1;
     }
 
     if (envelope.reset) {
-        needle_reset();
+        cactus_reset();
     }
 
     if (!g_initialized || envelope.system != g_last_system || tools != g_last_tools) {
-        const int rc = needle_init(envelope.system.c_str(), tools.c_str(), nullptr);
+        const int rc = cactus_init(envelope.system.c_str(), tools.c_str(), nullptr);
         if (rc < 0) {
-            const char * engine_error = needle_last_error();
-            g_bridge_error = engine_error ? engine_error : "needle_init failed";
-            LOGE("needle_init failed: %s", g_bridge_error.c_str());
+            const char * engine_error = cactus_last_error();
+            g_bridge_error = engine_error ? engine_error : "cactus_init failed";
+            LOGE("cactus_init failed: %s", g_bridge_error.c_str());
             g_initialized = false;
         } else {
             g_initialized = true;
@@ -665,13 +697,13 @@ Java_com_newoether_agora_api_CactusEngine_nativeComplete(
                 stoppedEarly = true;
                 break;
             }
-            const int rc = needle_complete(
+            const int rc = cactus_complete(
                 turn.c_str(), nullptr, 0, envelope.max_new_tokens,
                 out.data(), kOutCapacity);
             if (rc < 0) {
-                const char * engine_error = needle_last_error();
-                g_bridge_error = engine_error ? engine_error : "needle_complete failed";
-                LOGE("needle_complete failed: %s", g_bridge_error.c_str());
+                const char * engine_error = cactus_last_error();
+                g_bridge_error = engine_error ? engine_error : "cactus_complete failed";
+                LOGE("cactus_complete failed: %s", g_bridge_error.c_str());
                 return -1;
             }
             response.assign(out.data(), strnlen(out.data(), kOutCapacity));
@@ -708,11 +740,66 @@ Java_com_newoether_agora_api_CactusEngine_nativeComplete(
     return static_cast<jint>(response.size());
 }
 
+// Describes one image with the resident Mirage model. rgb holds packed 8-bit
+// RGB pixels (width * height * 3 bytes), options is a JSON settings object
+// (sections, fields, max_objects, max_text_lines, max_tokens, ...) or null,
+// and language is one of en/de/fr/es/it/nl/pl or null for the default. The
+// engine's own JSON record is returned verbatim, or an error envelope.
+JNIEXPORT jstring JNICALL
+Java_com_newoether_agora_api_CactusVisionEngine_nativeDescribe(
+        JNIEnv * env, jobject /*thiz*/, jbyteArray rgb, jint width, jint height,
+        jstring options, jstring language) {
+    if (rgb == nullptr || width <= 0 || height <= 0) {
+        return env->NewStringUTF(error_envelope("no image pixels were supplied").c_str());
+    }
+    const jlong expected = static_cast<jlong>(width) * height * 3;
+    if (static_cast<jlong>(env->GetArrayLength(rgb)) < expected) {
+        return env->NewStringUTF(error_envelope("the image buffer is too small").c_str());
+    }
+    std::string options_json;
+    if (options != nullptr &&
+        !agora::jni::read_java_string(env, options, options_json)) {
+        return env->NewStringUTF(error_envelope("invalid options argument").c_str());
+    }
+    std::string language_code;
+    if (language != nullptr &&
+        !agora::jni::read_java_string(env, language, language_code)) {
+        return env->NewStringUTF(error_envelope("invalid language argument").c_str());
+    }
+
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
+    g_bridge_error.clear();
+    if (!(cactus_models() & CACTUS_VISION)) {
+        return env->NewStringUTF(
+            error_envelope("the vision model is not loaded").c_str());
+    }
+    jbyte * pixels = env->GetByteArrayElements(rgb, nullptr);
+    if (pixels == nullptr) {
+        return env->NewStringUTF(
+            error_envelope("cannot access the image buffer").c_str());
+    }
+    std::vector<char> out(kVisionOutCapacity);
+    const int rc = cactus_describe(
+        reinterpret_cast<const unsigned char *>(pixels), width, height,
+        options_json.empty() ? nullptr : options_json.c_str(),
+        language_code.empty() ? nullptr : language_code.c_str(),
+        nullptr, out.data(), kVisionOutCapacity);
+    env->ReleaseByteArrayElements(rgb, pixels, JNI_ABORT);
+    if (rc < 0) {
+        const char * engine_error = cactus_last_error();
+        g_bridge_error = engine_error ? engine_error : "cactus_describe failed";
+        LOGE("cactus_describe failed: %s", g_bridge_error.c_str());
+        return env->NewStringUTF(error_envelope(g_bridge_error).c_str());
+    }
+    const std::string record(out.data(), strnlen(out.data(), kVisionOutCapacity));
+    return env->NewStringUTF(record.c_str());
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_newoether_agora_api_CactusEngine_nativeGetLastError(
         JNIEnv * env, jobject /*thiz*/) {
-    std::lock_guard<std::mutex> lock(g_needle_mutex);
-    const char * message = g_bridge_error.empty() ? needle_last_error() : g_bridge_error.c_str();
+    std::lock_guard<std::mutex> lock(g_cactus_mutex);
+    const char * message = g_bridge_error.empty() ? cactus_last_error() : g_bridge_error.c_str();
     if (message == nullptr) message = "";
     return env->NewStringUTF(message);
 }

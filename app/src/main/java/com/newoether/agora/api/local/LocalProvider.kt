@@ -393,23 +393,25 @@ class LocalProvider(
                     maxTokens = config.maxTokens ?: modelConfig.maxTokens,
                     enableThinking = config.thinkingEnabled,
                 )
-                // The Needle runtime never free-forms an answer: when nothing
-                // is routed (no tools declared, nothing matched, or the call
-                // was withheld for low confidence) the localized hint becomes
-                // the visible reply instead of an empty bubble.
-                val needleEmptyResponse =
-                    if (CactusEngine.isNeedleBackend()) {
-                        context.getString(
-                            if (toolsJson == null) {
-                                R.string.cactus_needle_no_tools
-                            } else {
-                                R.string.cactus_needle_no_match
-                            },
-                        )
-                    } else {
-                        null
-                    }
-                val tokenFlow = engine.generate(turns, options, toolsJson, needleEmptyResponse)
+                // Neither prebuilt-runtime specialist free-forms a chat
+                // answer. Mirage needs an attached image to describe; the
+                // Needle router needs a tool to route (no tools declared,
+                // nothing matched, or the call was withheld for low
+                // confidence). In each case the localized hint becomes the
+                // visible reply instead of an empty bubble.
+                val emptyResponseText = when {
+                    CactusVisionEngine.isVisionModelPath(modelConfig.localFilePath) ->
+                        context.getString(R.string.cactus_vision_no_image)
+                    CactusEngine.isNeedleBackend() -> context.getString(
+                        if (toolsJson == null) {
+                            R.string.cactus_needle_no_tools
+                        } else {
+                            R.string.cactus_needle_no_match
+                        },
+                    )
+                    else -> null
+                }
+                val tokenFlow = engine.generate(turns, options, toolsJson, emptyResponseText)
                 val streamScope = HttpClient.boundStreamScope()
                 val nativeCancel = GenerationCancelHandle { engine.cancel() }
                 streamScope?.register(nativeCancel)

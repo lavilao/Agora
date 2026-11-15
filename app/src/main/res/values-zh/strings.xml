@@ -370,6 +370,8 @@
     <string name="cactus_catalog_needle3_desc">35 MB 的工具调用模型，可在 32 位手机上运行。它会挑对工具并填好每个参数，完全离线。不适合开放式聊天。</string>
     <string name="cactus_needle_no_tools">Needle 3 是工具调用模型：仅当本会话启用了工具或技能时才会行动。如需开放式聊天，请选择 llama.cpp 模型。</string>
     <string name="cactus_catalog_whistle_desc">设备端语音转文字（英语、德语、法语、西班牙语、意大利语、荷兰语、波兰语）。长按聊天中的麦克风按钮即可口述，完全离线。</string>
+    <string name="cactus_catalog_mirage_desc">设备端 22 MB 视觉模型：描述画面、说出物体名称并读取图片中的文字，完全离线。可设为图片转文字模型，或在聊天中附上照片。</string>
+    <string name="cactus_vision_no_image">Mirage 用于描述图片：请附上照片，或在设置中将其设为图片转文字模型。</string>
     <string name="voice_input_desc">使用 Whistle 口述</string>
     <string name="voice_slide_to_cancel">左滑取消</string>
     <string name="voice_release_to_cancel">松开取消</string>

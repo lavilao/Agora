@@ -333,6 +333,8 @@
     <string name="cactus_catalog_needle3_desc">Modelo de 35 MB de llamadas a herramientas que corre en teléfonos de 32 bits. Elige la herramienta correcta y rellena cada argumento, todo sin conexión. No está hecho para conversación abierta.</string>
     <string name="cactus_needle_no_tools">Needle 3 es un modelo de llamadas a herramientas: actúa cuando la conversación tiene herramientas o skills activos. Para conversación abierta, elige un modelo de llama.cpp.</string>
     <string name="cactus_catalog_whistle_desc">Voz a texto en el dispositivo (inglés, alemán, francés, español, italiano, neerlandés, polaco). Mantén pulsado el botón de micrófono del chat para dictar, totalmente sin conexión.</string>
+    <string name="cactus_catalog_mirage_desc">Modelo de visión de 22 MB en el dispositivo: describe la escena, nombra los objetos y lee el texto de una imagen, todo sin conexión. Elígelo como modelo de transcripción de imágenes o adjunta una foto en el chat.</string>
+    <string name="cactus_vision_no_image">Mirage describe imágenes: adjunta una foto o elígelo como modelo de transcripción de imágenes en Ajustes.</string>
     <string name="voice_input_desc">Dictar con Whistle</string>
     <string name="voice_slide_to_cancel">Desliza a la izquierda para cancelar</string>
     <string name="voice_release_to_cancel">Suelta para cancelar</string>

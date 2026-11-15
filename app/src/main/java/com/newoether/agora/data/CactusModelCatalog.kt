@@ -46,6 +46,12 @@ internal object CactusModelCatalog {
          * as a chat model.
          */
         val isSpeech: Boolean = false,
+        /**
+         * True when the ".cact" carries a vision model (Mirage): it answers by
+         * describing an attached image, which makes it usable both in a chat
+         * with a photo and as the on-device image transcription model.
+         */
+        val isVision: Boolean = false,
         /** Ordered variants, first is the recommended default. */
         val variants: List<Variant>,
     ) {
@@ -130,6 +136,30 @@ internal object CactusModelCatalog {
     )
 
     /**
+     * Mirage, Cactus' image-understanding model (HuggingFace
+     * Cactus-Compute/mirage): a single 21.6 MB ".cact" that runs on the same
+     * prebuilt engine as Needle 3 and Whistle. It describes a picture — scene,
+     * objects, writing it reads, relations — so it serves a photo in a chat and
+     * the app's image transcription setting alike, fully on device.
+     */
+    val mirageActEntry: Entry = Entry(
+        repoId = "$ORG/mirage",
+        slug = "mirage",
+        pinnedRevision = "main",
+        tracksMain = true,
+        isActFile = true,
+        isVision = true,
+        variants = listOf(
+            Variant(
+                bits = 2.0,
+                filename = "mirage.cact",
+                sizeBytes = 21_611_043L,
+                sha256 = "4249a0f7515272ff76b9414bec17d7e7daf84b15b66c7fb4f17fce1e66f9f237",
+            ),
+        ),
+    )
+
+    /**
      * Whistle, Cactus' speech-to-text model (HuggingFace
      * Cactus-Compute/whistle): a single 16.9 MB ".cact" that runs on the
      * same prebuilt engine as Needle 3, beside the resident chat model. It
@@ -157,18 +187,20 @@ internal object CactusModelCatalog {
     /**
      * Catalog entries the given engine backend can actually run:
      * [CactusEngine.BACKEND_NEEDLE] (32-bit phones) gets the ".cact" models
-     * (Needle 3 for tool-calling chat, Whistle for speech to text),
-     * [CactusEngine.BACKEND_CACTUS] (arm64) the full bundle families, and a
-     * null backend (no engine packaged) nothing.
+     * (Needle 3 for tool-calling chat, Mirage for image understanding,
+     * Whistle for speech to text), [CactusEngine.BACKEND_CACTUS] (arm64) the
+     * full bundle families, and a null backend (no engine packaged) nothing.
      */
     fun entriesForBackend(backend: String?): List<Entry> = when (backend) {
-        CactusEngine.BACKEND_NEEDLE -> listOf(needle3ActEntry, whistleActEntry)
+        CactusEngine.BACKEND_NEEDLE ->
+            listOf(needle3ActEntry, mirageActEntry, whistleActEntry)
         CactusEngine.BACKEND_CACTUS -> entries
         else -> emptyList()
     }
 
     fun entryForSlug(slug: String): Entry? =
-        (entries + needle3ActEntry + whistleActEntry).firstOrNull { it.slug == slug }
+        (entries + needle3ActEntry + mirageActEntry + whistleActEntry)
+            .firstOrNull { it.slug == slug }
 
     /** Local directory name for one downloaded variant, e.g. "gemma-4-e2b-it-cq4". */
     fun bundleDirName(entry: Entry, variant: Variant): String {

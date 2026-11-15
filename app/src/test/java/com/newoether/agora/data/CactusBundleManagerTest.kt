@@ -3,7 +3,9 @@ package com.newoether.agora.data
 import com.newoether.agora.api.CactusChatTurn
 import com.newoether.agora.api.CactusCompletionOptions
 import com.newoether.agora.api.CactusCompletionResult
+import com.newoether.agora.api.CactusEngine
 import com.newoether.agora.api.CactusJson
+import com.newoether.agora.api.CactusVisionTranscript
 import com.newoether.agora.api.CactusTurnToolCall
 import java.io.File
 import java.nio.file.Files
@@ -139,6 +141,48 @@ class CactusModelCatalogTest {
             assertEquals(64, variant.sha256.length)
             assertTrue(variant.sizeBytes > 0)
         }
+    }
+
+    @Test
+    fun `mirage is offered on the prebuilt backend with a pinned checksum`() {
+        val mirage = CactusModelCatalog.entryForSlug("mirage")!!
+        assertTrue(mirage.isVision)
+        assertTrue(mirage.isActFile)
+        assertTrue(mirage in CactusModelCatalog.entriesForBackend(CactusEngine.BACKEND_NEEDLE))
+        // The full arm64 engine cannot load .cact archives.
+        assertTrue(mirage !in CactusModelCatalog.entriesForBackend(CactusEngine.BACKEND_CACTUS))
+        val variant = mirage.defaultVariant
+        assertEquals("mirage.cact", variant.filename)
+        assertEquals(64, variant.sha256.length)
+        assertTrue(variant.sizeBytes > 0)
+    }
+}
+
+class CactusVisionTranscriptTest {
+
+    private fun render(raw: String): String =
+        CactusVisionTranscript.render(Json.parseToJsonElement(raw).jsonObject)
+
+    @Test
+    fun `renders the scene objects and read text`() {
+        val text = render(
+            """{"description":"A stop sign on a pole.",
+                "objects":[{"name":"stop sign","score":0.64},{"name":"pole"}],
+                "text":[{"text":"ARRET"}],
+                "reasoning":"inferred from the sign"}""",
+        )
+        assertEquals(
+            "A stop sign on a pole.\nObjects: stop sign, pole\nText in the image:\n- ARRET",
+            text,
+        )
+    }
+
+    @Test
+    fun `accepts flat strings and skips empty fields`() {
+        val text = render(
+            """{"description":"A desk.","objects":["mug",""],"relations":[]}""",
+        )
+        assertEquals("A desk.\nObjects: mug", text)
     }
 }
 

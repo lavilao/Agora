@@ -333,6 +333,8 @@
     <string name="cactus_catalog_needle3_desc">32ビットのスマートフォンで動作する35MBのツール呼び出しモデル。正しいツールを選び、すべての引数を埋めます。完全オフライン。自由な会話には向きません。</string>
     <string name="cactus_needle_no_tools">Needle 3 はツール呼び出しモデルです。この会話でツールやスキルが有効なときに動作します。自由な会話には llama.cpp モデルを選んでください。</string>
     <string name="cactus_catalog_whistle_desc">端末上で動く音声認識（英語・ドイツ語・フランス語・スペイン語・イタリア語・オランダ語・ポーランド語）。チャットのマイクボタンを長押しして音声入力。完全オフライン。</string>
+    <string name="cactus_catalog_mirage_desc">端末上で動く22MBの視覚モデル。画像の場面を説明し、物体を名づけ、書かれている文字を読み取ります。完全オフライン。画像文字起こしのモデルとして選ぶか、チャットに写真を添付してください。</string>
+    <string name="cactus_vision_no_image">Mirageは画像を説明します。写真を添付するか、設定で画像文字起こしのモデルとして選択してください。</string>
     <string name="voice_input_desc">Whistle で音声入力</string>
     <string name="voice_slide_to_cancel">左にスライドでキャンセル</string>
     <string name="voice_release_to_cancel">指を離すとキャンセル</string>

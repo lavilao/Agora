@@ -333,6 +333,8 @@
     <string name="cactus_catalog_needle3_desc">Un modèle d\'appels d\'outils de 35 Mo qui tourne sur les téléphones 32 bits. Il choisit le bon outil et remplit chaque argument, hors ligne. Conçu pour les appels d\'outils, pas pour la conversation libre.</string>
     <string name="cactus_needle_no_tools">Needle 3 est un modèle d\'appels d\'outils : il agit quand cette conversation a des outils ou des skills activés. Pour une conversation libre, choisis un modèle llama.cpp.</string>
     <string name="cactus_catalog_whistle_desc">Reconnaissance vocale sur l\'appareil (anglais, allemand, français, espagnol, italien, néerlandais, polonais). Maintenez le bouton micro du chat pour dicter, entièrement hors ligne.</string>
+    <string name="cactus_catalog_mirage_desc">Un modèle de vision de 22 Mo sur l\'appareil : il décrit la scène, nomme les objets et lit le texte d\'une image, entièrement hors ligne. Choisis-le comme modèle de transcription d\'images ou joins une photo dans le chat.</string>
+    <string name="cactus_vision_no_image">Mirage décrit les images : joins une photo ou choisis-le comme modèle de transcription d\'images dans les réglages.</string>
     <string name="voice_input_desc">Dicter avec Whistle</string>
     <string name="voice_slide_to_cancel">Glissez à gauche pour annuler</string>
     <string name="voice_release_to_cancel">Relâchez pour annuler</string>

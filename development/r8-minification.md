@@ -70,7 +70,7 @@ this inventory and the keep rules in the same change.
 | `com.newoether.agora.api.ChatTemplateGrammarTrigger` (`token`, `type`, `value`, constructor) | `llama_chat_template.cpp` | `GetFieldID`, `GetMethodID` |
 | `com.newoether.agora.api.NativeChatCallback` and implementors (`onText`) | `llama_chat_callbacks.cpp` | `GetMethodID` |
 | `com.newoether.agora.api.CactusTokenStream` and implementors (`onToken`) | `cactus_engine_jni.cpp` | `GetMethodID` |
-| Classes with `external`/`native` methods (`LlamaChatEngine`, `CactusEngine`, `CactusSpeechEngine`, embedding/whisper bridges) | JNI registration by symbol name | `keepclasseswithmembernames native <methods>` |
+| Classes with `external`/`native` methods (`LlamaChatEngine`, `CactusEngine`, `CactusSpeechEngine`, `CactusVisionEngine`, embedding/whisper bridges) | JNI registration by symbol name | `keepclasseswithmembernames native <methods>` |
 
 The Kotlin class names must also not change shape visible to JNI: the native symbol
 names (`Java_com_newoether_agora_api_...`) bake in the package and class names.
@@ -86,8 +86,8 @@ release artifact is published:
    shows no lookup outside the inventory; new lookups found this way are added to
    the inventory and the keep rules first.
 3. The release APK is installed and exercised on a real device: model load, streamed
-   generation, title generation, Cactus (`.cact`) chat, and Whistle transcription
-   (each engine touches a different part of the by-name surface). CI green alone is
-   not evidence.
+   generation, title generation, Cactus (`.cact`) chat, Mirage image description,
+   and Whistle transcription (each engine touches a different part of the by-name
+   surface). CI green alone is not evidence.
 4. `adb logcat -b crash` shows no `NoSuchFieldError`/`NoSuchMethodError`/
    `UnsatisfiedLinkError` during that session.

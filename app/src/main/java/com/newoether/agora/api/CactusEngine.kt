@@ -44,10 +44,24 @@ object CactusEngine {
     /** Vendored upstream release; weight bundles must use tags <= this version. */
     const val UPSTREAM_VERSION = "v2.2.2"
 
+    /**
+     * Prebuilt unified engine packaged for armeabi-v7a (HuggingFace
+     * Cactus-Compute/cactus, releases/4.1.1/android-armv7). It replaced the
+     * engine-specific libneedle.a and loads `.cact` text (Needle), speech
+     * (Whistle) and vision (Mirage) models. The arm64 path keeps vendoring the
+     * separate CQ-bundle engine above, so this version deliberately does not
+     * gate its weight tags.
+     */
+    const val PREBUILT_UPSTREAM_VERSION = "v4.1.1"
+
     /** Backend id: full engine built from the vendored source (arm64). */
     const val BACKEND_CACTUS = "cactus"
 
-    /** Backend id: prebuilt Needle 3 runtime for 32-bit phones (.cact models). */
+    /**
+     * Backend id: the prebuilt Cactus runtime packaged for 32-bit phones. It
+     * runs `.cact` models (Needle, Mirage, Whistle); the id is historical and
+     * also selects the .cact catalog, so persisted state keeps using it.
+     */
     const val BACKEND_NEEDLE = "needle"
 
     @Volatile
@@ -75,6 +89,9 @@ object CactusEngine {
     private external fun nativeGetLastError(): String
     private external fun nativeSetLogLevel(level: Int)
     private external fun nativeEngineBackend(): String
+
+    /** "text" or "vision": the kind of the .cact the prebuilt engine opened. */
+    private external fun nativeLoadedKind(): String
 
     // Internal indirection so CactusChatEngine can share the loaded boundary.
     internal fun nativeInitPublic(bundlePath: String): Long = nativeInit(bundlePath)
@@ -136,6 +153,13 @@ object CactusEngine {
 
     internal fun lastError(): String = try {
         nativeGetLastError()
+    } catch (_: UnsatisfiedLinkError) {
+        ""
+    }
+
+    /** Kind of the model the last load opened, or "" without a prebuilt engine. */
+    internal fun loadedKind(): String = try {
+        nativeLoadedKind()
     } catch (_: UnsatisfiedLinkError) {
         ""
     }
@@ -375,7 +399,11 @@ internal object CactusJson {
  * is running.
  *
  * [bundlePath] is a ".cactus" bundle directory on the full engine (arm64) or
- * a single ".cact" model file on the prebuilt Needle runtime (armv7).
+ * a single ".cact" model file on the prebuilt runtime (armv7), which carries
+ * the tool-calling router (Needle), speech (Whistle) or vision (Mirage).
+ * Vision archives answer through `cactus_describe()` instead of the chat
+ * envelope: they describe the last user turn's image as plain text, which is
+ * exactly what the image transcription setting expects from a model.
  */
 internal class CactusChatEngine(
     val bundlePath: String,
@@ -383,6 +411,9 @@ internal class CactusChatEngine(
 
     @Volatile
     private var nativeHandle: Long = 0L
+
+    /** True when the loaded archive is Mirage: describe images, do not route. */
+    private var visionModel: Boolean = false
 
     /** Needle session: user turns already accumulated inside the runtime. */
     private var fedUserTurns: List<String> = emptyList()
@@ -411,17 +442,24 @@ internal class CactusChatEngine(
                 return false
             }
         }
-        nativeHandle = CactusEngineBridge.init(bundlePath)
-        if (nativeHandle == 0L) {
+        val handle = CactusEngineBridge.init(bundlePath)
+        if (handle == 0L) {
             DebugLog.e(TAG, "Cactus model failed to load: ${CactusEngine.lastError()}")
             return false
         }
+        nativeHandle = handle
+        // The engine reports the kind of the archive it opened; the file-name
+        // hint covers a replaced Mirage archive, whose load does not add a new
+        // vision slot (the old archive already held it).
+        visionModel = CactusEngineBridge.loadedKind() == "vision" ||
+            CactusVisionEngine.isVisionModelPath(bundlePath)
         return true
     }
 
     override fun close() {
         val handle = nativeHandle
         nativeHandle = 0L
+        visionModel = false
         if (handle != 0L) {
             CactusEngineBridge.destroy(handle)
         }
@@ -446,10 +484,14 @@ internal class CactusChatEngine(
         options: CactusCompletionOptions,
         toolsJson: String?,
         onToken: CactusTokenStream?,
+        emptyResponseText: String? = null,
     ): CactusCompletionResult {
         val handle = nativeHandle
         if (handle == 0L) {
             return CactusCompletionResult.parse("{\"success\":false,\"error\":\"model not loaded\"}")
+        }
+        if (visionModel) {
+            return completeVision(turns, options, emptyResponseText)
         }
         if (needleBackend) {
             return completeNeedle(turns, options, toolsJson)
@@ -531,6 +573,42 @@ internal class CactusChatEngine(
         return CactusCompletionResult.parse(buffer.decodeToString(0, written.toInt()))
     }
 
+    /**
+     * Mirage completion. The model is an image-understanding specialist, not a
+     * chat model: it describes the last user turn's first image (scene,
+     * objects, writing) and that description becomes the answer. A turn with
+     * no image carries no question it can answer, so it settles with an empty
+     * response and lets the caller's localized hint fill the bubble.
+     */
+    private fun completeVision(
+        turns: List<CactusChatTurn>,
+        options: CactusCompletionOptions,
+        emptyResponseText: String?,
+    ): CactusCompletionResult {
+        val image = turns.lastOrNull { it.role == "user" && it.images.isNotEmpty() }
+            ?.images
+            ?.firstOrNull { it.isNotBlank() }
+        if (image == null) {
+            return CactusCompletionResult.parse(
+                buildJsonObject {
+                    put("success", true)
+                    put("response", emptyResponseText.orEmpty())
+                }.toString(),
+            )
+        }
+        val description = CactusVisionEngine.describeBlocking(image, options.maxTokens)
+        val error = description.error
+        if (error != null) {
+            return completionFailure(error)
+        }
+        return CactusCompletionResult.parse(
+            buildJsonObject {
+                put("success", true)
+                put("response", description.text)
+            }.toString(),
+        )
+    }
+
     private fun completionFailure(message: String): CactusCompletionResult {
         val detail = message.ifBlank { "Cactus completion failed" }
         return CactusCompletionResult.parse(
@@ -565,7 +643,7 @@ internal class CactusChatEngine(
             close(RuntimeException("Model not loaded"))
             return@callbackFlow
         }
-        val streaming = toolsJson == null && !needleBackend
+        val streaming = toolsJson == null && !needleBackend && !visionModel
         val callback = if (streaming) {
             CactusTokenStream { token ->
                 trySendBlocking(LlamaGenerationEvent.Text(token)).isSuccess
@@ -574,7 +652,7 @@ internal class CactusChatEngine(
             null
         }
         val result = try {
-            complete(turns, options, toolsJson, callback)
+            complete(turns, options, toolsJson, callback, emptyResponseText)
         } catch (e: Throwable) {
             close(e)
             return@callbackFlow

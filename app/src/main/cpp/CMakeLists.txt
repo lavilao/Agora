@@ -105,13 +105,14 @@ target_link_options(agora_proot PRIVATE
 # Cactus runs ".cactus" bundle directories (config.txt + vocab.txt +
 # components/manifest.json + *.weights), not GGUF. Its own NEON kernels are
 # written for ARMv8.2-A + FP16 + DotProd + I8MM, so the full runtime is only
-# packaged for arm64-v8a devices. 32-bit phones get the prebuilt Needle 3
+# packaged for arm64-v8a devices. 32-bit phones get Cactus' prebuilt unified
 # engine that Cactus publishes for armeabi-v7a (HuggingFace
-# Cactus-Compute/needle3): a static library running the same family's tiny
-# tool-calling models from single ".cact" files. Every other ABI keeps the
-# llama.cpp engine only; a STATIC placeholder keeps the Gradle target list
-# resolvable while no .so enters the APK, so the Kotlin availability probe
-# (libagora_cactus.so presence) reports the engine as unavailable there.
+# Cactus-Compute/cactus, releases/<version>/android-armv7): a static library
+# (libcactus.a + cactus.h) that runs text, speech and vision models from single
+# ".cact" files. Every other ABI keeps the llama.cpp engine only; a STATIC
+# placeholder keeps the Gradle target list resolvable while no .so enters the
+# APK, so the Kotlin availability probe (libagora_cactus.so presence) reports
+# the engine as unavailable there.
 set(CACTUS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../thirdparty/cactus" CACHE PATH "Cactus source directory")
 get_filename_component(CACTUS_DIR "${CACTUS_DIR}" REALPATH)
 set(CACTUS_PREBUILT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cactus-prebuilt")
@@ -141,23 +142,19 @@ if(ANDROID_ABI STREQUAL "arm64-v8a" AND EXISTS "${CACTUS_DIR}/cactus-engine/CMak
         )
     endif()
 else()
-    # 32-bit ARM: link Cactus' prebuilt Needle 3 engine. The module links the
-    # shared STL (ANDROID_STL=c++_shared), which satisfies the engine's
-    # "__ndk1" libc++ references; the NDK r28 libc++ no longer defines
-    # std::__ndk1::__hash_memory, which the armv7 engine references out of
-    # line, so hash_memory_shim.cpp (the verbatim LLVM murmur2 definition,
-    # weak) is compiled in to close that one gap.
+    # 32-bit ARM: link Cactus' prebuilt unified engine (Cactus runtime 4.x).
+    # The module links the shared STL (ANDROID_STL=c++_shared) for the
+    # engine's "__ndk1" libc++ references.
     if(ANDROID_ABI STREQUAL "armeabi-v7a" AND
-       EXISTS "${CACTUS_PREBUILT_DIR}/armeabi-v7a/libneedle.a")
+       EXISTS "${CACTUS_PREBUILT_DIR}/armeabi-v7a/libcactus.a")
         add_library(agora_cactus SHARED
-            cactus_needle_jni.cpp
-            cactus-prebuilt/armeabi-v7a/hash_memory_shim.cpp
+            cactus_runtime_jni.cpp
         )
         target_include_directories(agora_cactus PRIVATE
             "${CACTUS_PREBUILT_DIR}/include"
         )
         target_link_libraries(agora_cactus PRIVATE
-            "${CACTUS_PREBUILT_DIR}/armeabi-v7a/libneedle.a"
+            "${CACTUS_PREBUILT_DIR}/armeabi-v7a/libcactus.a"
             log
         )
         target_link_options(agora_cactus PRIVATE

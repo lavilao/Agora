@@ -376,6 +376,8 @@
     <string name="cactus_catalog_needle3_desc">A 35 MB on-device tool-calling model that runs on 32-bit phones. It picks the right tool and fills every argument, fully offline. Not made for open-ended chat.</string>
     <string name="cactus_needle_no_tools">Needle 3 is a tool-calling model: it acts when this conversation has tools or skills enabled. For open-ended chat, pick a llama.cpp model.</string>
     <string name="cactus_catalog_whistle_desc">On-device speech to text (English, German, French, Spanish, Italian, Dutch, Polish). Hold the chat\'s microphone button to dictate, fully offline.</string>
+    <string name="cactus_catalog_mirage_desc">A 22 MB on-device vision model: it describes the scene, names the objects and reads the writing in an image, fully offline. Pick it as the image transcription model, or attach a photo in chat.</string>
+    <string name="cactus_vision_no_image">Mirage describes images: attach a photo, or choose it as the image transcription model in Settings.</string>
     <string name="voice_input_desc">Dictate with Whistle</string>
     <string name="voice_slide_to_cancel">Slide left to cancel</string>
     <string name="voice_release_to_cancel">Release to cancel</string>

@@ -333,6 +333,8 @@
     <string name="cactus_catalog_needle3_desc">نموذج استدعاء أدوات بحجم 35 ميغابايت يعمل على هواتف 32 بت. يختار الأداة الصحيحة ويملأ كل الوسائط، دون اتصال بالكامل. ليس مصممًا للمحادثة المفتوحة.</string>
     <string name="cactus_needle_no_tools">Needle 3 نموذج استدعاء أدوات: يعمل عندما تكون الأدوات أو المهارات مفعّلة في هذه المحادثة. للمحادثة المفتوحة اختر نموذج llama.cpp.</string>
     <string name="cactus_catalog_whistle_desc">تحويل الكلام إلى نص على الجهاز (الإنجليزية والألمانية والفرنسية والإسبانية والإيطالية والهولندية والبولندية). اضغط مطولاً على زر الميكروفون في الدردشة للإملاء، دون اتصال بالكامل.</string>
+    <string name="cactus_catalog_mirage_desc">نموذج رؤية بحجم 22 ميغابايت يعمل على الجهاز: يصف المشهد ويسمّي العناصر ويقرأ الكتابة في الصورة، دون اتصال بالكامل. اختره كنموذج تحويل الصور إلى نص، أو أرفق صورة في الدردشة.</string>
+    <string name="cactus_vision_no_image">Mirage يصف الصور: أرفق صورة، أو اختره كنموذج تحويل الصور إلى نص في الإعدادات.</string>
     <string name="voice_input_desc">إملاء باستخدام Whistle</string>
     <string name="voice_slide_to_cancel">اسحب إلى اليسار للإلغاء</string>
     <string name="voice_release_to_cancel">اترك للإلغاء</string>

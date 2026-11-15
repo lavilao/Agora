@@ -444,16 +444,19 @@ process environment flags at library load, so the engine runs fully on device.
 Cactus models share the single resident-model admission gate with llama.cpp
 (`LocalModelRuntime`), and per-request options always restate the no-cloud flags.
 
-On armeabi-v7a the same `libagora_cactus.so` name packages Cactus' prebuilt Needle 3
-engine (`cactus-prebuilt/`, HuggingFace `Cactus-Compute/needle3`) instead: it runs
-single `.cact` model files rather than bundle directories, and its `needle.h` C API
-is conversation-stateful, so the Kotlin `CactusChatEngine` session shadows the fed
+On armeabi-v7a the same `libagora_cactus.so` name packages Cactus' prebuilt
+unified engine instead (runtime 4.1.1, `cactus-prebuilt/`, HuggingFace
+`Cactus-Compute/cactus` releases/4.1.1/android-armv7 `libcactus.a` + `cactus.h`):
+it runs single `.cact` archives rather than bundle directories, and its C API is
+conversation-stateful, so the Kotlin `CactusChatEngine` session shadows the fed
 user turns and sends only deltas (full replay on branch/regenerate), while the
 arm64 bridge stays stateless through `cactus_complete`. Both bridges implement the
 same `CactusEngine` JNI surface and identify themselves through
-`nativeEngineBackend()` (`"cactus"` vs `"needle"`); the needle engine's only
-libc++ gap against NDK r28 (`std::__ndk1::__hash_memory`) is closed by a weak shim
-compiled from the verbatim LLVM murmur2 source.
+`nativeEngineBackend()` (`"cactus"` vs `"needle"`). The prebuilt engine keeps one
+process-global model per kind (`CACTUS_TEXT`, `CACTUS_SPEECH`, `CACTUS_VISION`),
+so the tool-calling router, the speech model and the vision model are resident
+side by side; `nativeLoadedKind()` tells the Kotlin side which kind an opened
+archive carries.
 
 The needle engine also runs Whistle, Cactus' speech-to-text `.cact` model
 (HuggingFace `Cactus-Compute/whistle`): the runtime keeps one process-global model
@@ -468,11 +471,23 @@ composer feature (`ComposerVoiceRecorder`), not a model feature: a 16 kHz mono
 PCM16 `AudioRecord` feed capped at the engine's 30 s ceiling is transcribed after
 release (slide-left cancels) and works with any resident chat model — needle `.cact`
 or llama.cpp GGUF — so the arm64 full-engine build simply hides the button
-(no `.cact` support there) rather than failing at record time. The needle system
-turn carries factual session state (date/locale/device, day precision) per the
+(no `.cact` support there) rather than failing at record time. The needle system turn carries factual session state (date/locale/device, day precision) per the
 engine's tool-design guide: facts resolve phrases like "tomorrow", instructions
 there do not steer decoding, and the coarse precision keeps the engine's
 static-prefix cache stable across a day.
+
+Mirage, Cactus' vision `.cact`, runs on that same prebuilt engine as the third
+model kind. It is an image-understanding model, not a chat model: `CactusChatEngine`
+routes a vision archive to `cactus_describe()` with the last user turn's image
+decoded to packed RGB, asks only for the scene, objects and OCR sections, and
+renders the structured record as transcript text (`CactusVisionTranscript`); the
+boxes, scores and masks stay in the engine JSON. Because that answer is ordinary
+chat text, Mirage serves two surfaces with no provider change: a photo attached
+to a conversation with Mirage selected, and the image transcription setting,
+where selecting the Mirage model transcribes images for any chat model that
+cannot read them. A turn without an image settles on a localized hint instead of
+failing. Writes of the image bytes are bounded by a subsampled decode (longest
+side <= 1024 px) so a phone-sized photo cannot exhaust the heap.
 
 The F-Droid sandbox runs commands with concurrent output collection and an actual
 wall-clock timeout. The shared glob matcher is implemented without API-26-only

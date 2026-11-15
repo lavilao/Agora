@@ -333,6 +333,8 @@
     <string name="cactus_catalog_needle3_desc">32비트 폰에서 실행되는 35MB 도구 호출 모델입니다. 올바른 도구를 고르고 모든 인수를 채웁니다. 완전 오프라인. 자유로운 대화에는 적합하지 않습니다.</string>
     <string name="cactus_needle_no_tools">Needle 3는 도구 호출 모델입니다. 이 대화에서 도구나 스킬이 활성화되어 있을 때 동작합니다. 자유로운 대화에는 llama.cpp 모델을 선택하세요.</string>
     <string name="cactus_catalog_whistle_desc">기기에서 직접 실행되는 음성 인식(영어, 독일어, 프랑스어, 스페인어, 이탈리아어, 네덜란드어, 폴란드어). 채팅의 마이크 버튼을 길게 눌러 받아쓰기하세요. 완전 오프라인.</string>
+    <string name="cactus_catalog_mirage_desc">기기에서 직접 실행되는 22MB 비전 모델입니다. 장면을 설명하고 물체의 이름을 붙이며 이미지 속 글자를 읽습니다. 완전 오프라인. 이미지 텍스트 추출 모델로 선택하거나 채팅에 사진을 첨부하세요.</string>
+    <string name="cactus_vision_no_image">Mirage는 이미지를 설명합니다. 사진을 첨부하거나 설정에서 이미지 텍스트 추출 모델로 선택하세요.</string>
     <string name="voice_input_desc">Whistle로 받아쓰기</string>
     <string name="voice_slide_to_cancel">왼쪽으로 밀어 취소</string>
     <string name="voice_release_to_cancel">놓으면 취소됩니다</string>

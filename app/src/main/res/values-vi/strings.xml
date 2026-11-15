@@ -336,6 +336,8 @@
     <string name="cactus_catalog_needle3_desc">Mô hình gọi công cụ 35 MB chạy trên điện thoại 32 bit. Nó chọn đúng công cụ và điền mọi tham số, hoàn toàn ngoại tuyến. Không dành cho trò chuyện tự do.</string>
     <string name="cactus_needle_no_tools">Needle 3 là mô hình gọi công cụ: nó hành động khi cuộc trò chuyện này có công cụ hoặc kỹ năng được bật. Để trò chuyện tự do, hãy chọn mô hình llama.cpp.</string>
     <string name="cactus_catalog_whistle_desc">Chuyển giọng nói thành văn bản ngay trên máy (tiếng Anh, Đức, Pháp, Tây Ban Nha, Ý, Hà Lan, Ba Lan). Giữ nút micrô trong trò chuyện để đọc chính tả, hoàn toàn ngoại tuyến.</string>
+    <string name="cactus_catalog_mirage_desc">Mô hình thị giác 22 MB ngay trên máy: mô tả cảnh, gọi tên đồ vật và đọc chữ trong ảnh, hoàn toàn ngoại tuyến. Chọn nó làm mô hình chuyển ảnh thành văn bản, hoặc đính kèm ảnh trong trò chuyện.</string>
+    <string name="cactus_vision_no_image">Mirage mô tả hình ảnh: hãy đính kèm ảnh, hoặc chọn nó làm mô hình chuyển ảnh thành văn bản trong Cài đặt.</string>
     <string name="voice_input_desc">Đọc chính tả bằng Whistle</string>
     <string name="voice_slide_to_cancel">Trượt sang trái để hủy</string>
     <string name="voice_release_to_cancel">Thả ra để hủy</string>

@@ -66,9 +66,10 @@ import kotlinx.coroutines.launch
  * bundles for the vendored runtime revision; downloads stream from
  * HuggingFace with checksum verification, and bundles can also be imported
  * from a .zip archive or a folder produced by `cactus convert` on a computer.
- * On 32-bit phones the catalog offers the single-file Needle 3 model (.cact)
- * that the prebuilt runtime packaged in those builds runs. Where no engine is
- * packaged at all (emulator builds) the whole surface explains the
+ * On 32-bit phones the catalog offers the single-file models (.cact) that the
+ * prebuilt runtime packaged in those builds runs: Needle 3 for tool calls,
+ * Mirage for image understanding and Whistle for speech to text. Where no
+ * engine is packaged at all (emulator builds) the whole surface explains the
  * requirement instead of failing silently.
  */
 @Composable
@@ -271,6 +272,9 @@ internal fun CactusModelDialogs(
                                                     "Speech model installed: ${file.name}",
                                                 )
                                             } else {
+                                                // Mirage registers like a chat model on
+                                                // purpose: that is what makes it selectable
+                                                // in the image transcription settings.
                                                 pendingBundle = PendingCactusModel(
                                                     path = file,
                                                     suggestedModelId = file.name.removeSuffix(".cact"),
@@ -391,6 +395,7 @@ private fun suggestedAlias(
     entry: CactusModelCatalog.Entry,
     variant: CactusModelCatalog.Variant,
 ): String {
+    if (entry.isVision) return "Mirage"
     if (entry.isActFile) return "Needle 3 · CQ${variant.bits}"
     val family = if (entry.slug.startsWith("gemma")) "Gemma 4 E2B" else entry.slug
     val bits = if (variant.bits == variant.bits.toInt().toDouble()) {
@@ -441,12 +446,14 @@ private fun CactusCatalogEntryRow(
     var selectedVariant by remember(entry) { mutableStateOf(entry.defaultVariant) }
     val displayName = when {
         entry.isSpeech -> "Whistle"
+        entry.isVision -> "Mirage"
         entry.isActFile -> "Needle 3"
         entry.slug.startsWith("gemma") -> "Gemma 4 E2B (it)"
         else -> "Needle"
     }
     val description = when {
         entry.isSpeech -> stringResource(R.string.cactus_catalog_whistle_desc)
+        entry.isVision -> stringResource(R.string.cactus_catalog_mirage_desc)
         entry.isActFile -> stringResource(R.string.cactus_catalog_needle3_desc)
         entry.slug.startsWith("gemma") -> stringResource(R.string.cactus_catalog_gemma_desc)
         else -> stringResource(R.string.cactus_catalog_needle_desc)
@@ -497,7 +504,7 @@ private fun CactusCatalogEntryRow(
                             },
                         )
                         Text(
-                            if (entry.isSpeech) {
+                            if (entry.isSpeech || entry.isVision) {
                                 formatBytes(variant.sizeBytes)
                             } else {
                                 "CQ${variant.bits} · ${formatBytes(variant.sizeBytes)}"

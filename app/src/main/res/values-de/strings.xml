@@ -333,6 +333,8 @@
     <string name="cactus_catalog_needle3_desc">Ein 35-MB-Modell für Funktionsaufrufe, das auf 32-Bit-Telefonen läuft. Es wählt das richtige Werkzeug und füllt jedes Argument, komplett offline. Nicht für offene Gespräche gedacht.</string>
     <string name="cactus_needle_no_tools">Needle 3 ist ein Modell für Funktionsaufrufe: Es handelt, wenn diese Konversation Werkzeuge oder Skills aktiviert hat. Für offene Gespräche wähle ein llama.cpp-Modell.</string>
     <string name="cactus_catalog_whistle_desc">Sprache zu Text auf dem Gerät (Englisch, Deutsch, Französisch, Spanisch, Italienisch, Niederländisch, Polnisch). Mikrofontaste im Chat gedrückt halten zum Diktieren, vollständig offline.</string>
+    <string name="cactus_catalog_mirage_desc">Ein 22-MB-Vision-Modell auf dem Gerät: Es beschreibt die Szene, benennt die Objekte und liest die Schrift in einem Bild, vollständig offline. Wähle es als Bildtranskriptionsmodell oder hänge ein Foto im Chat an.</string>
+    <string name="cactus_vision_no_image">Mirage beschreibt Bilder: Hänge ein Foto an oder wähle es in den Einstellungen als Bildtranskriptionsmodell.</string>
     <string name="voice_input_desc">Mit Whistle diktieren</string>
     <string name="voice_slide_to_cancel">Zum Abbrechen nach links wischen</string>
     <string name="voice_release_to_cancel">Zum Abbrechen loslassen</string>

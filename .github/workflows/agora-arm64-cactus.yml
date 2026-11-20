@@ -43,7 +43,18 @@ jobs:
       - name: Checkout repo + submodules
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Checkout submodules (Cactus opcional)
+        run: |
+          set -euo pipefail
+          git submodule update --init --recursive thirdparty/llama.cpp thirdparty/proot
+          # Cactus reescribió su historia y borró su árbol C++ (cactus-engine): si el
+          # pin vuelve a quedar inalcanzable el build sigue adelante (armv7 usa el
+          # prebuilt y arm64 cae al stub) en vez de morir en el checkout.
+          if ! git submodule update --init thirdparty/cactus; then
+            echo "::warning::thirdparty/cactus inalcanzable; build sin el motor Cactus de arm64"
+          fi
 
       - name: Info de los pins de terceros
         run: |
@@ -162,7 +173,6 @@ jobs:
             unzip -l "$apk" | awk '/lib\/arm64-v8a\// {print "    " $NF}'
             # Motores: llama.cpp + Cactus, más el runtime compartido.
             for lib in libagora_llama.so libmtmd.so libc++_shared.so \
-                       libagora_cactus.so \
                        libproot_exec.so; do
               unzip -l "$apk" | grep -q "lib/arm64-v8a/$lib" \
                 && echo "  OK: $lib" \
@@ -177,9 +187,13 @@ jobs:
               echo "  ERROR: libggml-vulkan.so presente (build CPU esperado)"; exit 1
             fi
             echo "  OK: sin libggml-vulkan.so (build CPU confirmado)"
-            echo "  OK: motor Cactus incluido (libagora_cactus.so)"
+            if unzip -l "$apk" | grep -q "lib/arm64-v8a/libagora_cactus.so"; then
+              echo "  OK: motor Cactus incluido (libagora_cactus.so)"
+            else
+              echo "::warning::sin libagora_cactus.so: Cactus ya no publica el árbol C++ (cactus-engine) que compila arm64, así que la app cae al stub y solo armv7 lleva motor Cactus"
+            fi
           done
-          echo "APK verificado: arm64-v8a llama.cpp + Cactus completo"
+          echo "APK verificado: arm64-v8a llama.cpp"
 
       - name: Subir APK
         if: always()

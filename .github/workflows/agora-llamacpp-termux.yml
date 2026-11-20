@@ -54,7 +54,18 @@ jobs:
       - name: Checkout repo + submodules
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Checkout submodules (Cactus opcional)
+        run: |
+          set -euo pipefail
+          git submodule update --init --recursive thirdparty/llama.cpp thirdparty/proot
+          # Cactus reescribió su historia y borró su árbol C++ (cactus-engine): si el
+          # pin vuelve a quedar inalcanzable el build sigue adelante (armv7 usa el
+          # prebuilt y arm64 cae al stub) en vez de morir en el checkout.
+          if ! git submodule update --init thirdparty/cactus; then
+            echo "::warning::thirdparty/cactus inalcanzable; build sin el motor Cactus de arm64"
+          fi
 
       - name: Info del pin de llama.cpp
         run: >-

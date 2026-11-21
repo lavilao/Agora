@@ -130,8 +130,24 @@ fun FullScreenMediaViewer(
     if (isSingleVideo == true) {
         var showOverlay by remember { mutableStateOf(true) }
         var closing by remember { mutableStateOf(false) }
+        var actionsVisible by remember { mutableStateOf(false) }
         Box(modifier = Modifier.fillMaxSize()) {
-            VideoPlayer(uri = url, onClose = onClose, closing = closing)
+            VideoPlayer(
+                uri = url,
+                onClose = onClose,
+                closing = closing,
+                onLongPress = {
+                    haptics.longPress()
+                    actionsVisible = true
+                },
+            )
+            if (actionsVisible) {
+                VideoActionsSheet(
+                    url = url,
+                    onMessage = onMessage,
+                    onDismiss = { actionsVisible = false },
+                )
+            }
             AnimatedVisibility(
                 visible = showOverlay,
                 enter = fadeIn(),
@@ -274,6 +290,7 @@ private fun MediaPager(
     var showOverlay by remember { mutableStateOf(true) }
     var closing by remember { mutableStateOf(false) }
     var actionsForUrl by remember { mutableStateOf<String?>(null) }
+    var actionsAreVideo by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, urls.size - 1)) { urls.size }
     val currentPageIsVideo = rememberIsVideoMedia(urls[pagerState.currentPage])
     fun requestClose() {
@@ -304,7 +321,16 @@ private fun MediaPager(
                 }
                 true -> {
                     if (page == pagerState.currentPage) {
-                        VideoPlayer(uri = mediaUrl, onClose = onClose, closing = closing)
+                        VideoPlayer(
+                            uri = mediaUrl,
+                            onClose = onClose,
+                            closing = closing,
+                            onLongPress = {
+                                haptics.longPress()
+                                actionsAreVideo = true
+                                actionsForUrl = mediaUrl
+                            },
+                        )
                     }
                 }
                 false -> {
@@ -316,6 +342,7 @@ private fun MediaPager(
                         },
                         onLongPress = {
                             haptics.longPress()
+                            actionsAreVideo = false
                             actionsForUrl = mediaUrl
                         },
                         consumeConditionally = true,
@@ -323,7 +350,13 @@ private fun MediaPager(
                 }
             }
         }
-        actionsForUrl?.let { ImageActionsSheet(url = it, onMessage = onMessage, onDismiss = { actionsForUrl = null }) }
+        actionsForUrl?.let { url ->
+            if (actionsAreVideo) {
+                VideoActionsSheet(url = url, onMessage = onMessage, onDismiss = { actionsForUrl = null })
+            } else {
+                ImageActionsSheet(url = url, onMessage = onMessage, onDismiss = { actionsForUrl = null })
+            }
+        }
         AnimatedVisibility(
             visible = showOverlay,
             enter = fadeIn(),

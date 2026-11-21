@@ -20,12 +20,15 @@ internal data class ConchTextResponse(
 )
 
 internal object ConchNetwork {
+    /** Connection attempts stay short: three retries, then the caller sees the failure. */
+    const val MAX_RETRIES = 3
     const val CONTROL_LIMIT = 64L shl 10
     const val RESPONSE_LIMIT = 40L shl 20
     const val LINE_LIMIT = 10L shl 20
 
     private val readOnlyPaths = setOf(
         "/file/read", "/file/image", "/file/glob", "/file/grep", "/jobs/list", "/jobs/get",
+        "/file/transfer/capabilities", "/file/transfer/info", "/file/transfer/read", "/file/transfer/status",
     )
 
     fun isReadOnly(path: String): Boolean = path in readOnlyPaths
@@ -35,6 +38,7 @@ internal object ConchNetwork {
         if (!isReadOnly(path)) return block()
         var retryAfter: String? = null
         return NetworkRetryPolicy.retry(
+            maxRetries = MAX_RETRIES,
             canRetry = { failure ->
                 val http = NetworkRetryPolicy.causes(failure).filterIsInstance<NetworkHttpException>().firstOrNull()
                 retryAfter = http?.retryAfter
@@ -70,7 +74,7 @@ internal object ConchNetwork {
         headers: Map<String, String>,
         callTimeoutMillis: Long? = null,
         replaySafe: Boolean = false,
-        maxRetries: Int = NetworkRetryPolicy.MAX_RETRIES,
+        maxRetries: Int = MAX_RETRIES,
     ): ConchTextResponse = execute(
         Request.Builder().url(url).post(body.toRequestBody("application/json".toMediaType())),
         headers, RESPONSE_LIMIT, callTimeoutMillis ?: 130_000, replaySafe, maxRetries,
@@ -82,7 +86,7 @@ internal object ConchNetwork {
         limit: Long,
         timeoutMillis: Long,
         replaySafe: Boolean = builder.build().method == "GET",
-        maxRetries: Int = NetworkRetryPolicy.MAX_RETRIES,
+        maxRetries: Int = MAX_RETRIES,
     ): ConchTextResponse {
         require(timeoutMillis > 0)
         headers.forEach { (name, value) -> builder.header(name, value) }

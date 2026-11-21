@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import com.newoether.agora.PHONE_USE_SUPPORTED
 import com.newoether.agora.R
+import com.newoether.agora.phone.PhoneUseIcon
 import com.newoether.agora.ui.settings.datacontrol.SettingsDataControlPage
 import com.newoether.agora.viewmodel.ChatViewModel
 
@@ -268,6 +270,7 @@ internal val baseSettingsGroups = listOf(
             R.string.mcp_desc,
             iconRes = R.drawable.ic_mcp,
         ),
+        SettingsCategory("phoneuse", R.string.phone_title, R.string.phone_description, PhoneUseIcon),
         SettingsCategory("automation", R.string.settings_automation, R.string.settings_automation_desc, Icons.Default.Repeat),
         SettingsCategory("todo", R.string.settings_todo, R.string.settings_todo_desc, Icons.Default.Checklist),
         SettingsCategory("subagents", R.string.settings_subagents, R.string.settings_subagents_desc, Icons.Default.AccountTree),
@@ -321,7 +324,10 @@ fun SettingsScreen(
     val developerOptionsEnabled by viewModel.settings.developerOptionsEnabled.collectAsState()
     val settingsGroups = remember(developerOptionsEnabled) {
         buildList {
-            addAll(baseSettingsGroups)
+            addAll(baseSettingsGroups.map { group ->
+                if (PHONE_USE_SUPPORTED) group
+                else group.copy(items = group.items.filterNot { it.key == "phoneuse" })
+            })
             if (developerOptionsEnabled) add(developerSettingsGroup)
             add(aboutSettingsGroup)
         }

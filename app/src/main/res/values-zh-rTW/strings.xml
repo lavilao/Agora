@@ -188,6 +188,8 @@
     <string name="conversation_read_empty">所選分支中沒有訊息。</string>
     <string name="conversation_read_page">頁面：訊息 %1$d-%2$d</string>
     <string name="conversation_read_more">使用更高的 offset 檢視更多訊息。</string>
+    <string name="conversation_tools_more">此訊息還有更多工具呼叫（tool_offset：%1$d）。</string>
+    <string name="conversation_details_error">無法讀取已儲存的訊息詳細資料（%1$s）。</string>
 
     <string name="tool_call_failed">工具呼叫失敗</string>
     <string name="database_incompatible">資料庫不相容</string>
@@ -298,6 +300,7 @@
     <string name="time_with_label">時間：%1$s</string>
     <string name="model_with_label">模型：%1$s</string>
     <string name="arguments_label">參數：</string>
+    <string name="tool_search_provider">提供者: %1$s</string>
     <string name="result_label">結果：</string>
 
     <!-- Cost & Tokens -->
@@ -342,6 +345,7 @@
     <string name="video_thumbnail">影片縮圖</string>
     <string name="play">播放</string>
     <string name="video_preview">影片預覽</string>
+    <string name="video_playback_failed">無法播放此影片。檔案可能已遺失或損毀。</string>
 
     <!-- Local Chat Provider -->
     <string name="local_chat_models">本機聊天模型</string>
@@ -649,8 +653,9 @@
     <string name="shell_confirm_allow">允許一次</string>
     <string name="shell_confirm_always">總是允許此伺服器</string>
     <string name="shell_confirm_deny">拒絕</string>
-    <string name="shell_confirm_setting">確認遠端 Shell 操作</string>
-    <string name="shell_confirm_setting_desc">在助手於遠端 SSH/Conch 伺服器上執行命令或寫入檔案前詢問</string>
+    <string name="shell_confirm_setting">確認 Shell 操作</string>
+    <string name="shell_confirm_setting_desc">在助手執行命令或寫入檔案前詢問，包括本機 Linux 沙箱</string>
+    <string name="shell_confirm_detail_truncated">預覽已截斷，將寫入完整內容。</string>
     <string name="shell_confirm_notification_channel">命令審批</string>
     <string name="shell_confirm_notification_desc">Agora 於背景執行時，請求你允許或拒絕遠端命令</string>
     <string name="ask_user_title">助手正在提問</string>
@@ -723,6 +728,7 @@
     <string name="context_part_free">空閒</string>
     <string name="context_part_reserved">預留</string>
     <string name="context_part_used">已用</string>
+    <string name="ask_agora_action">詢問 Agora</string>
     <string name="context_compact_streaming">正在壓縮內容…</string>
     <string name="context_compact_error">壓縮出錯</string>
     <string name="context_compact_stopped">壓縮已停止</string>
@@ -988,4 +994,8 @@
     <string name="tool_todo_empty">待辦清單為空</string>
     <string name="tool_agents_empty">目前沒有子代理</string>
     <string name="tool_agent_results_empty">未傳回子代理結果</string>
+    <string name="markdown_link_file_missing">找不到檔案</string>
+    <string name="markdown_link_file_unavailable">無法開啟此檔案</string>
+    <string name="markdown_link_shared_storage_required">授予所有檔案存取權限以開啟共用儲存空間連結</string>
+    <string name="markdown_link_no_handler">沒有可開啟此連結的應用程式</string>
 </resources>

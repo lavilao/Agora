@@ -114,6 +114,7 @@ class ChatComposerState(
         scope.launch {
             val (attachment, errorRes) = withContext(Dispatchers.IO) {
                 val file = privateCameraFile(privatePath)
+                val sandbox = acceptsLocalSandboxAttachments()
                 when {
                     file == null || !captured || !file.isFile || file.length() <= 0L -> {
                         file?.let { runCatching { it.delete() } }
@@ -130,6 +131,9 @@ class ChatComposerState(
                             file,
                         ).toString(),
                         type = "image",
+                        storage = if (sandbox) {
+                            com.newoether.agora.model.AttachmentStorage.LOCAL_SANDBOX_PENDING
+                        } else com.newoether.agora.model.AttachmentStorage.APP_PRIVATE,
                         fileName = file.name,
                         mimeType = "image/jpeg",
                         fileSize = file.length(),
@@ -230,7 +234,7 @@ class ChatComposerState(
 
 @Composable
 fun rememberChatComposerState(
-    sandboxEnabled: Boolean = false,
+    sandboxEnabled: () -> Boolean = { false },
     isSandboxFlavor: Boolean = false,
 ): ChatComposerState {
     val context = LocalContext.current
@@ -242,7 +246,7 @@ fun rememberChatComposerState(
             context = context,
             haptics = haptics,
             scope = scope,
-            sandboxEnabled = { latestSandboxEnabled.value },
+            sandboxEnabled = { latestSandboxEnabled.value() },
             isSandboxFlavor = isSandboxFlavor,
         )
     }

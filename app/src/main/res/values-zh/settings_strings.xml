@@ -215,12 +215,14 @@
     <string name="web_search_kagi">Kagi</string>
     <string name="web_search_serper">Serper</string>
     <string name="web_search_tavily">Tavily</string>
+    <string name="web_search_exa">Exa</string>
     <string name="web_search_searxng">SearXNG</string>
     <string name="web_search_duckduckgo">DuckDuckGo</string>
     <string name="web_search_brave_desc">注重隐私的搜索 API。提供免费套餐。</string>
     <string name="web_search_kagi_desc">支持个性化结果的高级搜索 API，按量付费。</string>
     <string name="web_search_serper_desc">快速 Google 搜索 API。每月 2,500 次免费查询。</string>
     <string name="web_search_tavily_desc">面向 AI 优化的搜索 API。专为 LLM 代理构建。</string>
+    <string name="web_search_exa_desc">带页面摘录的神经搜索。可通过 Exa 的公共 MCP 端点免密钥使用。</string>
     <string name="web_search_searxng_desc">自托管元搜索引擎。建议使用自己的实例。</string>
     <string name="web_search_duckduckgo_desc">免费，无需 API Key。抓取 lite.duckduckgo.com。可能不稳定并触发反爬保护。</string>
     <string name="web_search_select_provider">选择搜索提供商</string>
@@ -231,7 +233,9 @@
     <string name="web_search_serper_key">Serper API 密钥</string>
     <string name="web_search_serper_key_hint">来自 serper.dev 的 API 密钥</string>
     <string name="web_search_tavily_key">Tavily API 密钥</string>
+    <string name="web_search_exa_key">Exa API 密钥（可选）</string>
     <string name="web_search_tavily_key_hint">来自 tavily.com 的 API 密钥</string>
+    <string name="web_search_exa_key_hint">可选。留空则使用 Exa 的免密钥公共端点。</string>
     <string name="web_search_num_results">最大结果数</string>
     <string name="web_search_num_results_desc">获取的结果数量：%1$d（1-10）</string>
     <string name="web_search_searxng_url">SearXNG 基础 URL</string>
@@ -269,7 +273,7 @@
     <!-- Settings - Linux Sandbox -->
     <string name="sandbox_title">本地沙箱</string>
     <string name="sandbox_enable">启用本地沙箱</string>
-    <string name="sandbox_enable_desc">在设备上运行隔离的 Alpine Linux 环境</string>
+    <string name="sandbox_enable_desc">在设备上的隔离 Linux 环境中运行命令</string>
     <string name="shell_device_host">SSH 主机</string>
     <string name="shell_device_host_hint">192.168.1.100</string>
     <string name="shell_device_port">端口</string>
@@ -296,12 +300,12 @@
     <string name="sandbox_package_name">包名</string>
     <string name="sandbox_quick_install">快速安装</string>
     <string name="sandbox_installed">已安装包</string>
-    <string name="sandbox_no_packages">未安装任何包，仅 Alpine 基础系统。</string>
+    <string name="sandbox_no_packages">未安装任何可显示的包。</string>
     <string name="sandbox_danger_zone">危险区域</string>
     <string name="sandbox_reset">重置环境</string>
     <string name="sandbox_reset_title">重置环境？</string>
-    <string name="sandbox_reset_desc">删除 Alpine rootfs 及所有包</string>
-    <string name="sandbox_reset_confirm">这将删除 Alpine Linux rootfs 和所有已安装的包。此操作不可撤销。</string>
+    <string name="sandbox_reset_desc">删除所选 Linux 系统及其已安装的包</string>
+    <string name="sandbox_reset_confirm">这将删除所选 Linux 系统及其已安装的包。共享 home 文件和其他发行版将保留。此操作不可撤销。</string>
     <string name="sandbox_not_supported">本地沙箱不可用</string>
     <string name="sandbox_snackbar_installed">已安装 %s</string>
     <string name="sandbox_snackbar_install_failed">安装失败: %s</string>
@@ -315,8 +319,18 @@
     <string name="sandbox_snackbar_error">错误: %s</string>
     <string name="sandbox_not_supported_desc">当前版本不支持此功能</string>
     <string name="sandbox_not_installed">未安装</string>
-    <string name="sandbox_extracting_rootfs">正在解压 Alpine rootfs…</string>
-    <string name="sandbox_downloading_rootfs">正在下载 Alpine rootfs… %d%%</string>
+    <string name="sandbox_extracting_rootfs">正在解压 Linux 系统…</string>
+    <string name="sandbox_downloading_rootfs">正在下载 Linux 系统… %d%%</string>
+    <string name="sandbox_downloading_rootfs_unknown">正在下载 Linux 系统…</string>
+    <string name="sandbox_verifying_rootfs">正在校验下载内容…</string>
+    <string name="sandbox_validating_rootfs">正在验证 Linux 系统…</string>
+    <string name="sandbox_preparing_rootfs">正在准备…</string>
+    <string name="sandbox_mirror">软件源</string>
+    <string name="sandbox_mirror_desc">从该源下载 Linux 系统和软件包</string>
+    <string name="sandbox_mirror_official">官方源</string>
+    <string name="sandbox_mirror_tuna">国内镜像（TUNA）</string>
+    <string name="sandbox_mirror_applied">软件源已更新</string>
+    <string name="sandbox_mirror_failed">无法更新软件源</string>
     <string name="sandbox_install_failed">安装失败</string>
     <string name="sandbox_installed_label">已安装</string>
     <string name="sandbox_failed_label">失败</string>
@@ -449,12 +463,10 @@
     <string name="tool_call_display_mode">思考与工具块</string>
     <string name="tool_call_display_mode_timeline">时间线</string>
     <string name="tool_call_display_mode_grouped_timeline">分组</string>
-    <string name="tool_call_display_mode_compact">紧凑</string>
     <string name="tool_call_display_mode_timeline_desc">按时间顺序显示回答、思考和工具块</string>
     <string name="tool_call_display_mode_grouped_timeline_desc">保留时间顺序，但合并连续的思考、工具和图片块</string>
     <string name="auto_expand_active_group">自动展开当前分组</string>
     <string name="auto_expand_active_group_desc">自动展开当前思考与工具分组，并在模型进入下一阶段时收起。</string>
-    <string name="tool_call_display_mode_compact_desc">将思考和工具块聚合显示在回答上方</string>
     <string name="interaction_feedback">交互反馈</string>
     <string name="stick_to_bottom">始终贴底</string>
     <string name="stick_to_bottom_desc">回复生成期间自动跟随新增内容。</string>
@@ -559,4 +571,6 @@
     <string name="install_guide_run_command">复制并执行命令</string>
     <string name="conch_guide_finish">用安装程序给出的服务地址和 API 密钥添加设备。</string>
     <string name="filo_guide_finish">按提示选择 Windows 账户和来源，然后用安装程序给出的服务 URL 和访问令牌添加设备。</string>
+    <string name="tool_call_display_mode_compact">紧凑</string>
+    <string name="tool_call_display_mode_compact_desc">将思考和工具块聚合显示在回答上方</string>
 </resources>

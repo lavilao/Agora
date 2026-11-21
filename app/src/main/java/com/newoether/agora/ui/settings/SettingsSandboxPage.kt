@@ -4,11 +4,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -19,31 +15,26 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.newoether.agora.ui.motion.MotionAwareCircularProgressIndicator as CircularProgressIndicator
-import com.newoether.agora.ui.motion.MotionAwareLinearProgressIndicator
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -54,8 +45,11 @@ import com.newoether.agora.R
 import com.newoether.agora.sandbox.AlpineArchitecture
 import com.newoether.agora.sandbox.openSandboxRoot
 import com.newoether.agora.sandbox.SandboxManager
+import com.newoether.agora.sandbox.SandboxMirror
 import com.newoether.agora.sandbox.SandboxSharedStorageAccess
 import com.newoether.agora.util.DebugLog
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,12 +60,14 @@ fun SettingsSandboxPage(
     showDocFab: Boolean = false,
     sharedStorageEnabled: Boolean = false,
     onSharedStorageEnabledChange: (Boolean) -> Unit = {},
+    mirror: SandboxMirror = SandboxMirror.DEFAULT,
+    onMirrorChange: (SandboxMirror) -> Unit = {},
+    onSnackbar: (String) -> Unit,
 ) {
     val motionPolicy = LocalAgoraMotionPolicy.current
     val scope = rememberCoroutineScope()
     val listState = rememberSettingsLazyListState()
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val installFailedMessage = stringResource(R.string.sandbox_install_failed)
     var sharedStorageAccessGranted by remember {
         mutableStateOf(SandboxSharedStorageAccess.isGranted(ctx))
     }
@@ -96,77 +92,89 @@ fun SettingsSandboxPage(
         }
     }
 
-    // Core state — use fast sync check for instant first paint, confirm async
-    var available by remember { mutableStateOf(sandboxManager.isAvailableSync()) }
-    var backendPackagesLoading by remember { mutableStateOf(false) }
-    var attemptedInstall by remember { mutableStateOf(false) } // set when user taps Install (this session)
-    var installError by remember { mutableStateOf<String?>(null) }
-    var installPkg by rememberSaveable { mutableStateOf(sandboxManager.pendingPkgName) }
-    var lastInstallResult by remember { mutableStateOf<Boolean?>(null) } // local: success/fail for button state
-    var deleteConfirm by remember { mutableStateOf<String?>(null) }
-    var resetConfirm by remember { mutableStateOf(false) }
-    // Sync persisted text field back to sandbox manager
+    // Each distribution owns a fresh dashboard snapshot; the manager owns persisted selection.
+    val distribution by sandboxManager.distribution.collectAsState()
+    var available by remember(distribution) { mutableStateOf(sandboxManager.isAvailableSync()) }
+    var backendPackagesLoading by remember(distribution) {
+        mutableStateOf(sandboxManager.packageList.value.isEmpty())
+    }
+    var selectingDistribution by remember { mutableStateOf(false) }
+    var installRequests by remember(distribution) { mutableIntStateOf(0) }
+    val selectionFailedMessage = stringResource(R.string.sandbox_distribution_switch_failed)
+    val showSnackbar by rememberUpdatedState(onSnackbar)
+    var installPkg by rememberSaveable(distribution.id) { mutableStateOf(sandboxManager.pendingPkgName) }
+    var lastInstallResult by remember(distribution) { mutableStateOf<Boolean?>(null) }
+    var deleteConfirm by remember(distribution) { mutableStateOf<String?>(null) }
+    var resetConfirm by remember(distribution) { mutableStateOf(false) }
     LaunchedEffect(installPkg) { sandboxManager.pendingPkgName = installPkg }
 
-    // Collected from sandbox manager backend
     val terminalOutput by sandboxManager.terminalOutput.collectAsState()
     val isBusy by sandboxManager.isBusy.collectAsState()
-    // Rootfs install runs on the manager's own scope, so its state survives leaving/re-entering.
+    // Rootfs installation belongs to the manager and survives navigation.
     val installingRootfs by sandboxManager.isInstallingRootfs.collectAsState()
     val downloadProgress by sandboxManager.downloadProgress.collectAsState()
+    val rootfsPhase by sandboxManager.rootfsPhase.collectAsState()
+    val canManage = !isBusy && !installingRootfs && !selectingDistribution
+    // Reset must stay available while a mutation runs: it cancels the running operation and
+    // deletes the rootfs, which is the only recovery from a stuck install or package command.
+    val canReset = !selectingDistribution
     val showTerminal = terminalOutput.isNotBlank()
 
-    fun clearAllState() { installPkg = ""; installError = null; deleteConfirm = null; lastInstallResult = null }
+    fun chooseMirror(selected: SandboxMirror) {
+        if (!canManage || selected == mirror) return
+        onMirrorChange(selected)
+        // Persist first, then rewrite the installed guest so its next package operation uses it.
+        if (available) {
+            scope.launch { sandboxManager.applyMirror(selected) }
+        }
+    }
+
+    fun clearPackageState() {
+        installPkg = ""
+        deleteConfirm = null
+        lastInstallResult = null
+    }
 
     fun installPackage(name: String) {
-        if (isBusy) return
+        if (!canManage) return
         installPkg = name; lastInstallResult = null; sandboxManager.installPackage(name)
     }
 
     fun upgradePackages() {
-        if (isBusy) return
+        if (!canManage) return
         lastInstallResult = null
         sandboxManager.upgradePackages()
     }
 
-    LaunchedEffect(Unit) {
+    // Recheck on page entry, selection or an Install tap, even if the running state is too brief to draw.
+    // The backend emits install failures independently; this check only updates the dashboard.
+    LaunchedEffect(distribution, installRequests, isBusy) {
+        // A package operation owns the mutation boundary; refreshing now would only queue behind it
+        // and leave the page spinning forever. The cached snapshot stays on screen instead.
+        if (isBusy) return@LaunchedEffect
         try {
-            val confirmed = sandboxManager.isAvailable()
-            if (available != confirmed) available = confirmed
+            sandboxManager.isInstallingRootfs.first { !it }
+            available = sandboxManager.isAvailable()
             if (available) sandboxManager.refreshPackageList()
-        } catch (_: Exception) {}
-    }
-
-    // When a user-initiated rootfs install finishes, re-check availability and surface any error.
-    LaunchedEffect(installingRootfs) {
-        if (!installingRootfs && attemptedInstall) {
-            attemptedInstall = false
-            try {
-                available = sandboxManager.isAvailable()
-                if (available) { installError = null; sandboxManager.refreshPackageList() }
-                else installError = sandboxManager.lastError ?: installFailedMessage
-            } catch (e: Exception) { installError = e.message }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            DebugLog.w("SettingsSandboxPage", "Failed to refresh sandbox environment", e)
+        } finally {
+            backendPackagesLoading = false
         }
     }
 
-    // Package list comes directly from backend — always live
-    val backendPackages by sandboxManager.packageList.collectAsState()
-
-    val quickPkgs = listOf("python3", "git", "curl", "wget", "openssh", "nodejs", "build-base", "htop")
+    val packageSnapshot by sandboxManager.packageList.collectAsState()
+    val backendPackages = if (backendPackagesLoading) emptyList() else packageSnapshot
+    val quickPkgs = distribution.quickPackages
     val pkgCount = backendPackages.size
-    var diskUsageMB by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(backendPackages.size) {
-        try { diskUsageMB = sandboxManager.getDiskUsageMB() } catch (_: Exception) {}
+    var diskUsageMB by remember(distribution) { mutableLongStateOf(0L) }
+    LaunchedEffect(distribution, backendPackages.size, available, isBusy) {
+        if (!isBusy) {
+            try { diskUsageMB = sandboxManager.getDiskUsageMB() } catch (_: Exception) {}
+        }
     }
-    val diskUsageProgress by animateFloatAsState(
-        targetValue = (diskUsageMB.toFloat() / 2048f).coerceIn(0f, 1f),
-        animationSpec = if (motionPolicy.allowSpatialTransitions) {
-            tween(durationMillis = 500, easing = FastOutSlowInEasing)
-        } else {
-            snap()
-        },
-        label = "sandboxDiskUsageProgress",
-    )
 
     CollapsingSettingsLazyScaffold(
         title = stringResource(R.string.sandbox_mgmt_title),
@@ -176,121 +184,74 @@ fun SettingsSandboxPage(
     ) {
             // ═══ Dashboard ═══
                 item {
-                    SettingsGroup(title = stringResource(R.string.sandbox_env), items = listOf({
-                        if (!available) {
-                            // Not installed
+                    SettingsGroup(
+                        title = stringResource(R.string.sandbox_env),
+                        items = if (available) listOf({
                             SettingsItem(
-                                headlineContent = {
-                                    Text(
-                                        stringResource(R.string.sandbox_alpine_version),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                },
+                                headlineContent = { Text("${distribution.displayName} ${distribution.versionLabel}") },
                                 supportingContent = {
                                     Column {
-                                        Text(stringResource(R.string.sandbox_not_installed), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        if (installingRootfs) {
-                                            Spacer(Modifier.height(8.dp))
-                                            val p = downloadProgress
-                                            if (p != null) {
-                                                LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth().height(4.dp))
-                                            } else {
-                                                MotionAwareLinearProgressIndicator(
-                                                    modifier = Modifier.fillMaxWidth().height(4.dp),
-                                                )
-                                            }
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                if (p != null) stringResource(R.string.sandbox_downloading_rootfs, (p * 100).toInt())
-                                                else stringResource(R.string.sandbox_extracting_rootfs),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        installError?.let { err ->
-                                            Spacer(Modifier.height(8.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.errorContainer
-                                            ) {
-                                                Text(
-                                                    err,
-                                                    modifier = Modifier.padding(12.dp),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                leadingContent = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_alpine_linux),
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                },
-                                trailingContent = {
-                                    if (!installingRootfs && !isBusy) {
-                                        TextButton(onClick = {
-                                            clearAllState()
-                                            attemptedInstall = true
-                                            sandboxManager.installRootfs()
-                                        }) { Text(stringResource(R.string.sandbox_install), style = MaterialTheme.typography.labelMedium) }
-                                    }
-                                }
-                            )
-                        } else {
-                            // Ready dashboard
-                            SettingsItem(
-                                headlineContent = {
-                                    Text(
-                                        stringResource(R.string.sandbox_alpine_version),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                },
-                                supportingContent = {
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            LinearProgressIndicator(
-                                                progress = { diskUsageProgress },
-                                                modifier = Modifier.weight(0.3f).height(6.dp),
-                                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-                                            Text(
-                                                if (diskUsageMB < 1000) stringResource(R.string.sandbox_disk_usage_mb, diskUsageMB.coerceAtLeast(1))
-                                                else stringResource(R.string.sandbox_disk_usage_gb, diskUsageMB / 1024f),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                                        Text(
+                                            if (diskUsageMB < 1024) stringResource(R.string.sandbox_disk_usage_mb, diskUsageMB)
+                                            else stringResource(R.string.sandbox_disk_usage_gb, diskUsageMB / 1024f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
                                         Spacer(Modifier.height(2.dp))
                                         Text(
                                             stringResource(R.string.sandbox_dashboard_summary, pkgCount, AlpineArchitecture.alpineArch),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 },
-                                leadingContent = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_alpine_linux),
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                },
+                                leadingContent = { SandboxDistributionIcon(distribution) },
                                 trailingContent = {
-                                    TextButton(
+                                    Button(
                                         onClick = { upgradePackages() },
-                                        enabled = !isBusy
+                                        enabled = canManage,
                                     ) {
-                                        Text(stringResource(R.string.sandbox_upgrade), style = MaterialTheme.typography.labelMedium)
+                                        Text(stringResource(R.string.sandbox_upgrade))
+                                    }
+                                },
+                            )
+                        }, {
+                            SettingsSandboxMirrorItem(mirror, canManage, ::chooseMirror)
+                        }) else listOf({
+                            SettingsSandboxDistributionItem(distribution, enabled = canManage) { selected ->
+                                selectingDistribution = true
+                                scope.launch {
+                                    try {
+                                        if (sandboxManager.selectDistribution(selected)) {
+                                            clearPackageState()
+                                            resetConfirm = false
+                                        } else {
+                                            showSnackbar(sandboxManager.lastError?.takeIf(String::isNotBlank) ?: selectionFailedMessage)
+                                        }
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        showSnackbar(e.message?.takeIf(String::isNotBlank) ?: selectionFailedMessage)
+                                    } finally {
+                                        selectingDistribution = false
                                     }
                                 }
+                            }
+                        }, {
+                            SettingsSandboxInstallItem(
+                                distribution = distribution,
+                                enabled = canManage,
+                                installing = installingRootfs,
+                                phase = rootfsPhase,
+                                downloadProgress = downloadProgress,
+                                onInstall = {
+                                    clearPackageState()
+                                    sandboxManager.installRootfs()
+                                    installRequests++
+                                },
                             )
-                        }
-                    }))
+                        }, {
+                            SettingsSandboxMirrorItem(mirror, canManage, ::chooseMirror)
+                        }),
+                    )
                 }
 
                 if (available) {
@@ -438,7 +399,7 @@ fun SettingsSandboxPage(
                                     val installDone = installPkg.isNotBlank() && lastInstallResult != null && !isBusy
                                     val btnBgColor by animateColorAsState(
                                         targetValue = when {
-                                            isBusy || installPkg.isBlank() -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                            !canManage || installPkg.isBlank() -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                             lastInstallResult == true -> MaterialTheme.colorScheme.secondaryContainer
                                             lastInstallResult == false -> MaterialTheme.colorScheme.errorContainer
                                             else -> MaterialTheme.colorScheme.primary
@@ -447,7 +408,7 @@ fun SettingsSandboxPage(
                                     )
                                     val btnContentColor by animateColorAsState(
                                         targetValue = when {
-                                            isBusy || installPkg.isBlank() -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                            !canManage || installPkg.isBlank() -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                             lastInstallResult == true -> MaterialTheme.colorScheme.onSecondaryContainer
                                             lastInstallResult == false -> MaterialTheme.colorScheme.onErrorContainer
                                             else -> MaterialTheme.colorScheme.onPrimary
@@ -455,8 +416,8 @@ fun SettingsSandboxPage(
                                         animationSpec = tween(400)
                                     )
                                     Button(
-                                        onClick = { if (installPkg.isNotBlank() && !isBusy && lastInstallResult == null) installPackage(installPkg.trim()) },
-                                        enabled = true,
+                                        onClick = { installPackage(installPkg.trim()) },
+                                        enabled = canManage && installPkg.isNotBlank() && lastInstallResult == null,
                                         shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 28.dp, bottomEnd = 28.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = btnBgColor,
@@ -503,7 +464,7 @@ fun SettingsSandboxPage(
                                     }
                                     val terminalFg = MaterialTheme.colorScheme.onSurface
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(20.dp),
                                         color = MaterialTheme.colorScheme.surface,
                                         tonalElevation = 4.dp,
                                         modifier = Modifier.padding(top = 16.dp).fillMaxWidth().height(260.dp)
@@ -545,7 +506,7 @@ fun SettingsSandboxPage(
                                         FilterChip(
                                             selected = false,
                                             onClick = { installPackage(pkg) },
-                                            enabled = !isBusy,
+                                            enabled = canManage,
                                             label = { Text(pkg, style = MaterialTheme.typography.labelSmall) }
                                         )
                                     }
@@ -623,7 +584,7 @@ fun SettingsSandboxPage(
                                     },
                                     leadingContent = { Icon(Icons.Default.Inventory2, null, tint = MaterialTheme.colorScheme.primary) },
                                     trailingContent = {
-                                        IconButton(onClick = { deleteConfirm = pkg.name }, enabled = !isBusy, modifier = Modifier.size(32.dp)) {
+                                        IconButton(onClick = { deleteConfirm = pkg.name }, enabled = canManage, modifier = Modifier.size(32.dp)) {
                                             Icon(Icons.Default.Close, stringResource(R.string.sandbox_remove_content_desc), modifier = Modifier.size(16.dp))
                                         }
                                     }
@@ -657,7 +618,7 @@ fun SettingsSandboxPage(
                                         tint = MaterialTheme.colorScheme.error
                                     )
                                 },
-                                modifier = Modifier.clickable { resetConfirm = true }
+                                modifier = Modifier.clickable(enabled = canReset) { resetConfirm = true }
                             )
                         }))
                         Spacer(Modifier.height(16.dp))
@@ -680,12 +641,11 @@ fun SettingsSandboxPage(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (isBusy) return@TextButton
-                        scope.launch {
-                            deleteConfirm = null
-                            sandboxManager.removePackage(pkgName)
-                        }
+                        if (!canManage) return@TextButton
+                        deleteConfirm = null
+                        sandboxManager.removePackage(pkgName)
                     },
+                    enabled = canManage,
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text(stringResource(R.string.delete)) }
             },
@@ -705,12 +665,16 @@ fun SettingsSandboxPage(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch {
-                            sandboxManager.reset(); available = false
-                            clearAllState()
-                        }
+                        if (!canReset) return@TextButton
                         resetConfirm = false
+                        scope.launch {
+                            if (sandboxManager.reset()) {
+                                available = false
+                                clearPackageState()
+                            }
+                        }
                     },
+                    enabled = canReset,
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text(stringResource(R.string.delete)) }
             },

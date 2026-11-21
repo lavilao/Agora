@@ -434,7 +434,7 @@ class ShellClient(
         val after: List<String> = emptyList(),
     )
 
-    private suspend fun encryptedPost(
+    internal suspend fun encryptedPost(
         path: String,
         payload: String,
         callTimeoutMillis: Long? = null,
@@ -455,7 +455,7 @@ class ShellClient(
                     mapOf("Content-Type" to "application/json"),
                     callTimeoutMillis,
                     replaySafe = ConchNetwork.isReadOnly(path),
-                    maxRetries = if (ConchNetwork.isReadOnly(path)) 0 else NetworkRetryPolicy.MAX_RETRIES,
+                    maxRetries = if (ConchNetwork.isReadOnly(path)) 0 else ConchNetwork.MAX_RETRIES,
                 )
             } catch (e: Exception) {
                 NetworkRetryPolicy.throwIfCancelled(e)
@@ -508,7 +508,7 @@ class ShellClient(
                 headers,
                 callTimeoutMillis,
                 replaySafe = ConchNetwork.isReadOnly(path),
-                maxRetries = if (ConchNetwork.isReadOnly(path)) 0 else NetworkRetryPolicy.MAX_RETRIES,
+                maxRetries = if (ConchNetwork.isReadOnly(path)) 0 else ConchNetwork.MAX_RETRIES,
             )
         } catch (e: Exception) {
             NetworkRetryPolicy.throwIfCancelled(e)
@@ -766,13 +766,14 @@ class ShellClient(
         command: String,
         timeoutMs: Int,
         workdir: String,
+        description: String = "",
     ): String = encryptedPost(
         "/jobs/start",
-        buildJsonBody(command, timeoutMs, workdir),
+        shellJobStartBody(command, timeoutMs, workdir, description),
     )
 
-    suspend fun listJobs(): String =
-        encryptedPost("/jobs/list", "{}")
+    suspend fun listJobs(offset: Int = 0, limit: Int = 100): String =
+        encryptedPost("/jobs/list", shellJobListBody(offset, limit))
 
     suspend fun getJob(jobId: String): String =
         encryptedPost("/jobs/get", buildJsonObject { put("job_id", jobId) }.toString())

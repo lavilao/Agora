@@ -14,7 +14,9 @@ internal class GenerationContextAccounting(
         if (config.lowContextModeEnabled) emptyList() else toolDefinitions.definitions(context)
 
     fun fixedContextTokenCost(config: GenerationConfig, context: GenerationContext): Int =
-        ContextTokenEstimator.forModel(config.modelId).estimateFixed(
+        ContextTokenEstimator.forModel(
+            config.modelId, com.newoether.agora.api.LocalModelRuntime::exactTokenCountOrNull,
+        ).estimateFixed(
             systemPrompt = config.effectiveSystemPrompt,
             tools = definitions(config, context),
             initialUserPrompt = config.initialUserPrompt,
@@ -26,7 +28,9 @@ internal class GenerationContextAccounting(
     fun fixedContextComposition(
         config: GenerationConfig,
         context: GenerationContext,
-    ): FixedContextComposition = ContextTokenEstimator.forModel(config.modelId).estimateFixedComposition(
+    ): FixedContextComposition = ContextTokenEstimator.forModel(
+        config.modelId, com.newoether.agora.api.LocalModelRuntime::exactTokenCountOrNull,
+    ).estimateFixedComposition(
         systemPrompt = config.effectiveSystemPrompt,
         tools = definitions(config, context),
         initialUserPrompt = config.initialUserPrompt,
@@ -57,12 +61,14 @@ internal class GenerationContextAccounting(
             googleSearchEnabled = config.googleSearchEnabled,
             openAiWebSearchEnabled = config.openAiWebSearchEnabled,
             tools = tools,
-            includeImages = !context.imageTranscriptionEnabled,
+            includeImages = true,
             includeAssistantReasoning = includesAssistantReasoning(config, context),
             requestResolver = resolver,
         )
         val resolvedRequest = providerConfig.resolveRequest(emptyList())
-        return ContextTokenEstimator.forModel(config.modelId).estimateFixed(
+        return ContextTokenEstimator.forModel(
+            config.modelId, com.newoether.agora.api.LocalModelRuntime::exactTokenCountOrNull,
+        ).estimateFixed(
             systemPrompt = resolvedRequest.systemPrompt,
             tools = tools,
             initialUserPrompt = config.initialUserPrompt,

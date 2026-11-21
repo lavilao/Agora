@@ -126,6 +126,7 @@
     <string name="info">Información</string>
     <string name="more">Más</string>
     <string name="arguments_label">Argumentos:</string>
+    <string name="tool_search_provider">Proveedor: %1$s</string>
     <string name="result_label">Resultado:</string>
     <string name="cost_tokens">Coste %1$d tokens</string>
     <string name="token_usage_with_label">Uso de tokens: %1$d tokens</string>
@@ -271,6 +272,8 @@
     <string name="conversation_read_empty">No hay mensajes en la rama seleccionada.</string>
     <string name="conversation_read_page">Página: mensajes %1$d-%2$d</string>
     <string name="conversation_read_more">Usa un desplazamiento mayor para ver más mensajes.</string>
+    <string name="conversation_tools_more">Hay más llamadas a herramientas disponibles para este mensaje (tool_offset: %1$d).</string>
+    <string name="conversation_details_error">No se pudieron leer los detalles almacenados del mensaje (%1$s).</string>
 
     <!-- General -->
     <string name="back">Atrás</string>
@@ -280,6 +283,7 @@
     <string name="video_thumbnail">Miniatura del vídeo</string>
     <string name="play">Reproducir</string>
     <string name="video_preview">Vista previa del vídeo</string>
+    <string name="video_playback_failed">No se puede reproducir este vídeo. Puede que falte el archivo o esté dañado.</string>
     <string name="total_tokens">Total: %1$d tokens</string>
     <string name="welcome_to_agora">Bienvenido a Agora.</string>
     <string name="database_incompatible">Base de datos incompatible</string>
@@ -607,8 +611,9 @@
     <string name="shell_confirm_allow">Permitir una vez</string>
     <string name="shell_confirm_always">Permitir siempre este servidor</string>
     <string name="shell_confirm_deny">Denegar</string>
-    <string name="shell_confirm_setting">Confirmar acciones de shell remoto</string>
-    <string name="shell_confirm_setting_desc">Preguntar antes de que el asistente ejecute comandos o escriba archivos en servidores SSH/Conch remotos</string>
+    <string name="shell_confirm_setting">Confirmar acciones de shell</string>
+    <string name="shell_confirm_setting_desc">Preguntar antes de que el asistente ejecute comandos o escriba archivos, incluido el entorno Linux local</string>
+    <string name="shell_confirm_detail_truncated">Vista previa truncada; se escribirá el contenido completo.</string>
     <string name="shell_confirm_notification_channel">Aprobación de comandos</string>
     <string name="shell_confirm_notification_desc">Pide permitir o denegar un comando remoto mientras Agora está en segundo plano</string>
     <string name="ask_user_title">El asistente pregunta</string>
@@ -720,6 +725,7 @@
     <string name="context_part_free">Libre</string>
     <string name="context_part_reserved">Reservado</string>
     <string name="context_part_used">Usado</string>
+    <string name="ask_agora_action">Preguntar a Agora</string>
     <string name="context_compact_streaming">Compactando contexto…</string>
     <string name="context_compact_error">Error de compactación</string>
     <string name="context_compact_stopped">Compactación detenida</string>
@@ -985,4 +991,8 @@
     <string name="tool_todo_empty">La lista de tareas está vacía</string>
     <string name="tool_agents_empty">No hay subagentes</string>
     <string name="tool_agent_results_empty">No se devolvieron resultados de subagentes</string>
+    <string name="markdown_link_file_missing">Archivo no encontrado</string>
+    <string name="markdown_link_file_unavailable">No se puede abrir este archivo</string>
+    <string name="markdown_link_shared_storage_required">Concede acceso a todos los archivos para abrir enlaces de almacenamiento compartido</string>
+    <string name="markdown_link_no_handler">Ninguna aplicación puede abrir este enlace</string>
 </resources>

@@ -9,6 +9,20 @@ shared streaming Markdown message UI implementation. That implementation owns th
 incremental append-only scan, stable/live block split, off-main parsing, long-document update
 cadence, and stream-to-terminal renderer continuity. A caller must not keep a second streaming
 Markdown algorithm or switch to a different terminal renderer merely because streaming ended.
+
+Native reference definitions are document metadata. Definitions parsed in a later live or stable
+block resolve references in earlier stable text without reparsing that text's AST. Definition labels
+use the parser's case/whitespace normalization; the first definition wins. Inline/autolink annotation
+must not overwrite that document lookup. A non-append reset clears the old definitions, while a
+partial live destination updates only the current tail's metadata. Closed blocks are inspected once.
+Normal, prepared, virtualized and incremental roots share the same definition-free render projection.
+Definitions and their trailing structural separators contribute no rows, text or height, including
+inside lists and quotes; separators between visible paragraphs retain their existing spacing.
+Projection must preserve the original source, stable ASTs, source offsets, parent relationships and
+full glyph birth timeline. Stream-to-terminal settlement keeps the same message subtree and links.
+Regression coverage uses the real message component to verify URI activation and equal message
+height with 48 trailing definitions, plus prepared and virtualized detail paths, split definitions,
+duplicates, reset, fenced literals, nested metadata and ordinary paragraph geometry.
 The browser Compact detail uses the existing `DetailSheet` and `Markdown`, with authoritative
 running state, thought typography and App Reduced Motion passed into the shared renderer.
 The shared browser Markdown accepts an optional emptyStreamingText input. Compact passes the native
@@ -23,6 +37,28 @@ one formula node and cannot duplicate surrounding prose or emit HTML attribute f
 `ChatMarkdownCodeBlock` also renders standalone raw code with the same code background, padding,
 typography and wrapping. Its copy header stays enabled by default. A host that already owns a guarded
 copy action may omit that header without changing other consumers or duplicating the code renderer.
+Native fenced and standalone code share `ChatCodeBlockSurface`, `ChatCodeBlockHeader` and
+`ChatCodeBlockAction` in ChatMarkdownCode. This Material 3 Expressive presentation uses a 24 dp
+rounded surfaceContainerLow shell with the same background on its header and body, and no legacy
+hairline divider. An absent, empty or whitespace-only language displays the literal `CODE`; a
+nonblank language keeps its existing uppercase label. The language uses theme labelMedium with the app's default font and single-line ellipsis; it
+yields width to the end-aligned actions. Single-row headers are 40 dp high with no vertical
+padding. Uncontained IconButtons occupy independent 40 dp squares with 16 dp glyphs and the
+standard Material indication. Secondary actions use onSurfaceVariant; Source/Run uses primary.
+At narrow widths whole actions wrap without overlapping or shrinking their layout bounds.
+The same shared shell/header/actions surround fullscreen HTML. Existing code typography, content
+padding, search/source offsets, horizontal scrolling, selection and copy guards stay authoritative.
+The shared native renderers carry this styling into their current callers, including source-only
+Remote and detail views. Browser WebUI uses the same tonal roles, 24 px code shell, default-font
+language label, 40 px header/copy control and 16 px icon. Its code body remains monospace and
+retains exact copy and optional horizontal scrolling. Both native Markdown table paths and WebUI
+tables use 24 dp/px rounded backgrounds without changing cells, search or scrolling.
+Completed native and WebUI HTML fences additionally follow [interactive-html.md](interactive-html.md).
+The shared code leaf retains source/search/copy ownership; preview admission uses the existing AST
+and explicit streaming state. Standalone raw-code components and Remote remain source-only.
+Code headers, controls and popup menus are excluded from message text selection. The entire native
+fullscreen HTML window is isolated from its ancestor message selection host; body selection and
+exact source copy in the ordinary code leaf are unchanged.
 
 Native release builds must preserve JLaTeXMath's `NewCommandMacro` class, public zero-argument
 constructor and `executeMacro(TeXParser, String[])` method. Environment expansion, including
@@ -32,20 +68,26 @@ R8 retention. The minified release must also pass the reported matrix's parsing 
 Standalone/display LaTeX uses that same shared Markdown component graph. It remains start-aligned and
 renders at its intrinsic formula width inside a message-width horizontal viewport. A formula wider
 than that viewport scrolls horizontally so all content remains inspectable; a formula that fits has
-no effective scroll range. Every formula on its own line (display, height-promoted, or an inline
-formula wider than 80% of its paragraph width, decided at display time from that paragraph's width)
-renders as one single-line selectable Text holding one inline placeholder, so a covering selection
-highlights the whole formula. Every formula's alternate text is its exact original source slice,
+no effective scroll range. Every formula on its own line (display, or an inline formula that cannot
+fit the full paragraph width or exceeds the block height threshold) renders as one single-line
+selectable Text holding one inline placeholder, so a covering selection highlights the whole
+formula. A formula that merely looks wide stays inline and wraps like a long word; it is never
+pulled out of its sentence. A promoted inline formula is re-encoded as display math, so the block
+uses display style. Every formula's alternate text is its exact original source slice,
 delimiters included, carried in its `latex://` link, so selection copies the original text and never
 a URL. Copied text must equal the original message text. Because a placeholder cannot lay out
 alternate text with line breaks, a source's `\n` and `\r` are stored in the alternate text as
 U+E000 and U+E001; the chat selection host's clipboard (`FormulaSourceClipboard`) restores them on
 copy, and the source parser restores them before resolving the formula. System text actions other
-than copy (for example Translate or Speak) receive the stored marks. Formula bitmaps render at `20 sp` and are padded with transparent rows so the TeX math axis
-sits on the bitmap's vertical center, which `TextCenter` placeholder alignment puts on the text
-center. Other inline LaTeX and ordinary Markdown images retain their existing layout; once a paragraph
-splits for a wide formula, its other images use their block presentation and search positions are
-not reported for that paragraph.
+than copy (for example Translate or Speak) receive the stored marks. Formula bitmaps render at `20 sp`
+in the style its delimiter selects: inline formulas use TeX text style (compact fractions and
+side-set limits), display formulas use display style. An inline bitmap is padded with transparent
+rows below its baseline by exactly the formula's descender depth, and its `AboveBaseline`
+placeholder alignment puts that baseline on the surrounding text baseline. A display bitmap is
+padded so the TeX math axis sits on the bitmap's vertical center, and `TextCenter` alignment puts
+the axis on the text center. Other inline LaTeX and ordinary Markdown images retain their existing
+layout; once a paragraph splits because a formula cannot fit, its other images use their block
+presentation and search positions are not reported for that paragraph.
 During active streaming, display-formula scrolling uses the same interaction commit gate as code-block
 scrolling so an in-progress gesture is not replaced by a newer parsed Markdown snapshot.
 
@@ -64,7 +106,7 @@ animation merely because they share typography.
 `ToolSummaryText` uses the canonical `ToolPresentationState` as its only whole-summary Crossfade
 identity. Argument, subject, progress, output, and other incremental summary changes inside one state
 render directly through the shared muted-tail streaming text; they must not restart a whole-row
-Crossfade. A Crossfade is allowed only when the resolved Tool lifecycle state changes. Compact/grouped
+Crossfade. A Crossfade is allowed only when the resolved Tool lifecycle state changes. Grouped
 and individual Timeline rows use this same owner and contract.
 
 The fade is draw-only. One unchanged full AnnotatedString/Text layout owns shaping, kerning, wrapping,
@@ -193,6 +235,13 @@ text-to-terminal separation is exactly 8 dp. Timeline mode derives adjacency fro
 segment; the mere existence of an earlier card does not add spacing. Compact capsule error/stopped
 chrome and detail-sheet defaults are independent and unchanged.
 
+Stopping during Retry preserves the last actual retry error in the existing error segment while the
+durable message remains STOPPED. The shared presentation renders that nonblank detail using the
+ordinary error text and suppresses the additional `Generation Stopped` label. An ordinary Stop with
+no nonblank error retains its usual stopped label; answer text and blank error segments are never
+promoted into an error. Pending retry errors are not terminal content while generation is active,
+and resumed Provider output clears the pending retry error through the generation owner.
+
 Generation activity and terminal presentation are resolved from one current assistant-message
 snapshot. Body content, Thought/Tool/Transcription visibility, pre-output activity, answer-tail
 activity, stopping, stopped, and error state must never be computed from separately collected or
@@ -222,8 +271,11 @@ inline presenter retains its 24 dp minimum slot until terminal content takes own
 keep these same slots in its existing message presenter without a parallel freeze, extra settlement
 delay, compensating scroll, or duplicate Markdown subtree. Their alpha-bearing graphics layers use
 `CompositingStrategy.ModulateAlpha`, set `clip = false`, and never rasterize a breathing circle into
-tight rectangular bounds. Continuous-motion policy may own breathing; it never owns placement or
-layout geometry.
+tight rectangular bounds. The pre-output/Retry handoff to stopped or error text fades the dot and
+Retry glyph paint colors directly, without an alpha-bearing activity wrapper or default Crossfade.
+The outgoing dot retains its circular outline at every breathing scale and fade frame; it must never
+become a clipped square after Stop. Only the terminal content measures the slot during this handoff.
+Continuous-motion policy may own breathing; it never owns placement or layout geometry.
 
 Retry still fades its label in by Unicode grapheme at 27 ms per grapheme, bounded to
 225-600 ms, with the fast-start, slow-finish `LinearOutSlowInEasing` curve. The entrance plays only
@@ -377,14 +429,19 @@ remain unchanged. The detail-page circular back button alone overrides the share
 `CircularBackButton` container with `surfaceVariant.copy(alpha = 0.25f)`; its foreground and the
 global component defaults remain unchanged.
 
+Tool-call display has only Timeline (`timeline`) and Grouped (`grouped_timeline`, default).
+The retired `compact` preference normalizes to Grouped. A DataStore migration persists that change
+before Settings publication; old `.agora` imports use the same normalized write. Native chat,
+Remote and WebUI consume this shared policy. The shared Thinking card and Context Compact capsule,
+summary generation and detail presentation remain available under their existing contracts.
 The Thinking segment Card/Bottom Sheet setting is visible and effective only while Tool-call display
-mode is Grouped or Compact. Timeline ignores a persisted Bottom Sheet preference and retains ordinary
+mode is Grouped. Timeline ignores a persisted Bottom Sheet preference and retains ordinary
 inline Timeline presentation; the stored value remains untouched and becomes effective again after
-switching back to Grouped or Compact. Auto-Expand Active Group is visible and effective only for the
+switching back to Grouped. Auto-Expand Active Group is visible and effective only for the
 exact Grouped + Card combination. One shared pure display policy owns these applicability decisions so
 Settings visibility and message rendering cannot drift. Regardless of that setting, selecting any
 ordinary Timeline card or grouped Timeline row always opens the selected segment detail directly.
-Only a Grouped/Compact card that is actually presented in Bottom Sheet mode opens the segment-list
+Only a Grouped card that is actually presented in Bottom Sheet mode opens the segment-list
 page first; click intent is passed explicitly and is never recomputed from the raw stored preference.
 
 Slash-qualified MCP/tool display titles preserve `/` and capitalize the following initial,
@@ -399,8 +456,10 @@ history display without querying the live registry; protocol tool names and argu
 Failed and stopped tool-detail content inside the shared Thinking/Tool bottom-sheet path reuses the
 same neutral gray body-text terminal presentation as ordinary message content. Failed text remains
 selectable and full-width, but neither state may introduce a `Surface`, rounded background, card, or
-Thinking-specific typography. A failed MCP detail renders only that terminal failure; its raw text
-and structured result must not be rendered again beneath it. EMPTY/COMPLETED MCP details continue to
+Thinking-specific typography. A failed MCP detail keeps its terminal failure and exposes stored raw
+text/structured evidence through the shared supplemental JSON presentation defined in
+[tool-presentation.md](tool-presentation.md), without changing its lifecycle or duplicating the exact
+error text. Stopped MCP details remain stopped-only. EMPTY/COMPLETED MCP details continue to
 render their ordinary result content. Web Search follows this shared Tool terminal contract; only its
 EMPTY/COMPLETED result content uses the specialized search-result presentation. Message-level errors
 remain owned by the Assistant message and must not be copied into every Segment detail. Destructive
@@ -425,7 +484,93 @@ up to 300 dp and constrained by the current content width. The same dimensions
 remain through pending, failed and decoded states. A known intrinsic viewport
 lets the shared Markdown renderer measure images as blocks instead of allowing
 large images to escape a text line's height. Each image keeps its rounded corners
-and the existing fading circular overlay. Load local attachments as files.
+and the existing fading circular overlay. Inline image corners are 16 dp/px in native and WebUI.
+Load local attachments as files.
 Regression coverage must decode real images and compare the entire message and
 both image rectangles before, between and after asynchronous loads at phone density
 and narrow large-font width; failed placeholders alone do not qualify this behavior.
+
+Agora-owned answers may reference device images as `shell://<server>/<absolute path>`
+(owner request 2026-10-29). Server and path are percent-decoded as UTF-8; a path
+starting with a drive (`F:/…`) stays a Windows path, anything else is rooted at `/`.
+`Local Sandbox` reads the host file through the sandbox path resolver and its mount
+rules; any other name selects a configured Conch device and uses `/file/image`
+(images only, 20 MB). SSH devices, videos and plain local paths are not image destinations.
+
+Markdown video destinations are cards, not images. A `![](...)` destination, a
+`shell://Local Sandbox/home/agora/…` path, or a local path under a readable root
+(`/home/agora/…`, `/mnt/shared/…`, `/storage/emulated/0/…`, `/storage/self/primary/…`)
+whose file name names a video container (mp4, m4v, webm, mov, mkv, avi, 3gp, ogv) renders a
+16:9 card (300 dp block width, 160×90 dp inline) with a play affordance and the file name.
+The card shows one display-only poster frame decoded from the resolved file with
+`MediaMetadataRetriever` and cached only in memory (16 entries, at most 512 px wide); no frame
+artifact is written and the stored-media set is unchanged. Readable local files play through the app
+FileProvider; HTTP(S) URLs stream directly. Other
+shell servers and paths outside those roots remain inert text. A line whose entire content is
+one such path becomes the card too; fenced or four-space code, inline code, prose containing
+the path, and existing links or images keep their text. A destination whose poster cannot be
+decoded keeps the play affordance without a frame, and the tap opens the existing full-screen
+player, which reports a playback failure instead of staying black. Long-pressing the card or its player opens the same
+modal actions sheet as an image, offering save to the gallery, share, and file info for the
+video. Videos never consume an image
+ordinal, never enter `filesDir/markdown-media`, and are excluded from the native occurrence set that
+WebUI image reads use.
+
+Markdown links are tappable in Agora-owned messages. `http://`, `https://` and `mailto:` leave
+through the platform handler. `/home/agora/…` and `shell://Local Sandbox/home/agora/…` resolve under
+the sandbox home; `/mnt/shared/…`, `/storage/emulated/0/…` and `/storage/self/primary/…` resolve to
+shared storage only while all-files access is granted, and otherwise the tap explains the missing
+permission. Bare paths written in prose follow the same rules, ending at whitespace, brackets or
+sentence punctuation. Images and videos open in the in-app viewer and player through the app
+FileProvider; other files open through the system chooser. `file:`, `content:`, `intent:`,
+`javascript:` and paths outside those roots stay inert. A tap counts only within touch slop and is
+consumed before the platform text-link handler so one tap opens once.
+Ordinary HTTP(S) Markdown images use the same per-occurrence snapshot store as shell images.
+Their first read uses the shared bounded HTTP client (20 MiB), validates the raster bytes and
+persists them without model preparation. Native and WebUI count only valid shell destinations
+and absolute HTTP(S) destinations with a nonempty authority in the same parsed-image ordinal set;
+invalid shell links, ordinary links and code do not consume an ordinal. HTTP identity retains the
+parsed URL spelling. HTML code-fence previews retain their disposable shell-only resource cache.
+`ShellMarkdownMedia` starts reads for parsed occurrences, including images below the current
+viewport. Admitted reads survive streaming reparses and row disposal within their owning scope.
+Each message/document/image ordinal plus destination owns an immutable first-successful-read
+snapshot under `filesDir/markdown-media`. Repeated destinations at different positions are independent;
+native full, incremental and timeline rendering and authenticated WebUI use the same identity.
+A small durable receipt records the local artifact and a SHA-256 resource marker. Reopening reads
+that receipt and local bytes without contacting or revalidating the source or recomputing its hash.
+Snapshots have no age, count or size eviction. Missing committed bytes show a broken image; they
+must not be replaced with newer remote bytes. Failed uncommitted reads can retry on re-entry.
+These display snapshots stay separate from Provider image processing and its no-digest contract.
+They currently remain app-local: native conversation archives and forks do not transport this
+sidecar snapshot store. Deleting a conversation does not reclaim these explicitly retained snapshots.
+Native chat provides the loader around its Markdown. WebUI serves authenticated, same-origin image
+reads through the same store. A browser request identifies the owning conversation/message,
+document and image ordinal, and the destination must match that exact parsed occurrence; it cannot
+proxy arbitrary paths. Percent-encoded server names, POSIX and Windows paths retain native semantics.
+WebUI reserves the same square loading/failure viewport and opens AttachmentViewer on a loaded image.
+The bytes and receipts never enter Provider context, Room or the message graph; Remote sessions keep
+their own images.
+
+Only native and WebUI user-message bodies taller than 320 dp/px start with a collapsed viewport.
+The localized Expand/Collapse control is a full capsule, physically left-aligned in both LTR and RTL.
+The bottom 64 dp/px gradient and 48 dp/px Expand control area are draw overlays. Neither
+contributes width or height to text/bubble measurement or changes text wrapping. Their shared
+opacity decreases linearly from 1 to 0 during expansion and increases linearly from 0 to 1 during
+collapse, completing in 180ms so the mask and controls clear or appear before the height motion
+settles. The Collapse capsule uses the same 180ms linear fade and follows the full body in normal
+layout, contributing its footer height to the expanded target; it remains visible when expanded. User disclosure follows the existing
+Thinking card's 400ms vertical reveal/collapse curve and interruption behavior in both clients.
+The reveal alone animates actual occupied height while keeping the full text mounted at its stable
+layout size. Following messages and the existing MessageList scroll owner follow each measured frame;
+there is no target-height jump, end-of-animation scroll correction, or second scroll owner. The same
+layout-mutation start/settled admission used by Thinking cards brackets user disclosure. Reversal starts
+from current geometry and alpha. First layout is settled; Reduced Motion snaps spatial changes while
+retaining the Thinking card's opacity behavior. The outer user-bubble size animation must not duplicate
+this reveal animation.
+Short bodies have neither a mask nor a disclosure control. Assistant output,
+including HTML previews, Thinking/Tool cards and terminal labels, is never wrapped in this viewport.
+The complete user body remains mounted through disclosure changes; collapsing never truncates
+durable text, Provider input, action copy, source mapping or media identity. Active search temporarily
+reveals the complete body without replacing the user's disclosure choice. Input attachment strips
+and message actions retain their existing presentation outside the text viewport. Subagent completion
+summaries and full detail sheets retain their existing visibility rules.

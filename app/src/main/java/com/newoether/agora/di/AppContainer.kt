@@ -2,6 +2,7 @@ package com.newoether.agora.di
 
 import android.app.Application
 import android.content.Context
+import com.newoether.agora.PHONE_USE_SUPPORTED
 import com.newoether.agora.data.MemoryManager
 import com.newoether.agora.data.SkillManager
 import com.newoether.agora.data.SettingsManager
@@ -95,6 +96,7 @@ class AppContainer(
         ConversationRepository(
             chatDao = chatDao,
             database = database,
+            snapshotContext = appContext,
             subagentGenerationIds = conversationExecutionCoordinator.admittedGenerationIds,
             generationErrorFormatter = { raw ->
                 com.newoether.agora.viewmodel.normalizePersistedGenerationErrorText(
@@ -214,8 +216,20 @@ class AppContainer(
     }
 
     /** Foreground generation slots survive Activity/ViewModel recreation within this process. */
+    private val phoneLease by lazy { com.newoether.agora.phone.PhoneControlLease(
+        recordRelease = { release -> com.newoether.agora.util.DebugLog.phoneRelease(
+            release.reason, release.epoch, release.heldMs, release.mode) },
+        now = android.os.SystemClock::elapsedRealtime,
+    ) }
+    internal val phoneUse by lazy {
+        com.newoether.agora.phone.PhoneUseRuntime(appContext, settingsRepository, phoneLease,
+            askUserController, conversationStateRegistry, conversationRepository, appScope)
+    }
     val conversationStateRegistry: ConversationStateRegistry by lazy {
-        ConversationStateRegistry { attachments ->
+        ConversationStateRegistry(
+            onRunStateChanged = phoneLease::onRunStateChanged,
+            onRunHandoffFinished = phoneLease::finishHandoff,
+        ) { attachments ->
             appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 conversationRepository.deleteUnreferencedDraftAttachmentFiles(attachments)
             }
@@ -287,7 +301,14 @@ class AppContainer(
             askUser = askUserController,
             generationRegistry = conversationStateRegistry,
             pauseConversationLoop = { conversationId -> loopManager.stopLoop(conversationId) },
-            additionalTools = { listOf(automationToolProvider, subagentToolProvider) },
+            additionalTools = {
+                listOfNotNull(
+                    automationToolProvider,
+                    subagentToolProvider,
+                    if (PHONE_USE_SUPPORTED) phoneUse.provider else null,
+                )
+            },
+            phoneReady = { PHONE_USE_SUPPORTED && phoneUse.readiness(it) },
         )
     }
 
@@ -383,23 +404,62 @@ class AppContainer(
             memoryManager = memoryManager,
             skillManager = skillManager,
             sandboxFactory = sandboxManagerFactory,
-            automationToolProvider = automationToolProvider,
-            subagentToolProvider = subagentToolProvider,
-            subagentManager = subagentManager,
-            mcpToolProvider = mcpToolProvider,
-            askUser = askUserController,
-            shellConfirmation = shellConfirmationController,
+            additionalToolProviders = run {
+                // Capture the same process owners now; build the list and Ask User wrapper lazily.
+                val phone = if (PHONE_USE_SUPPORTED) phoneUse.provider else null
+                val automation = automationToolProvider
+                val subagent = subagentToolProvider
+                val mcp = mcpToolProvider
+                val askUser = askUserController
+                return@run {
+                    listOfNotNull(
+                        phone,
+                        automation,
+                        subagent,
+                        mcp,
+                        com.newoether.agora.tool.AskUserToolProvider(askUser),
+                    )
+                }
+            },
+            phoneReady = { PHONE_USE_SUPPORTED && phoneUse.readiness(it) },
+            onConversationOpened = subagentManager::conversationOpened,
+            onConversationIdle = subagentManager::conversationIdle,
+            onConfirmShellCommand = { server, summary, conversationId, detail ->
+                shellConfirmationController.confirm(server, summary, conversationId, detail)
+            },
             registry = conversationStateRegistry,
             providerRegistry = providerRegistry,
             localProvider = localProvider,
             executionCoordinator = conversationExecutionCoordinator,
-            loopManager = loopManager,
-            taskExecutionEngine = taskExecutionEngine,
+            stopConversationLoop = { loopManager.stopLoop(it) },
             scope = appScope,
-        )
+        ).also { runtime ->
+            // Capture this completed runtime; do not re-enter the chatRuntime lazy initializer.
+            com.newoether.agora.viewmodel.ForegroundAutomationBridgeController(
+                isConversationOpen = runtime.clients::isConversationOpen,
+                send = { conversationId, userText, modelId, requestKind ->
+                    runtime.messageGeneration.sendMessageFromAutomationAwaitingCompletion(
+                        conversationId,
+                        userText,
+                        modelId,
+                        requestKind,
+                    )
+                },
+                loadMessage = conversationRepository::getMessage,
+                attach = taskExecutionEngine::attachForegroundSendBridge,
+                detach = taskExecutionEngine::detachForegroundSendBridge,
+            ).start()
+        }
     }
     // WebUI remote control: settings, authentication and the embedded server.
     internal val webUi: WebUiController by lazy {
+        val previewMedia = com.newoether.agora.ui.chat.message.ShellMarkdownMedia(
+            context = appContext,
+            devices = { settingsRepository.shellDevices.value },
+            sandboxEnabled = { settingsRepository.sandboxEnabled.value },
+            sandbox = { sandboxManagerFactory?.takeIf { it.isAvailable() }?.create() },
+            scope = appScope,
+        )
         WebUiController(
             appContext = appContext,
             store = WebUiSettingsStore(appContext.dataStore),
@@ -419,13 +479,20 @@ class AppContainer(
             toolImages = com.newoether.agora.webui.WebUiToolImages(
                 directory = java.io.File(appContext.filesDir, "tool-media"),
                 attachmentDirectory = appContext.filesDir,
+                markdownImage = previewMedia::previewImage,
                 loadMessage = { conversationId, messageId ->
-                    com.newoether.agora.viewmodel.ConversationMessagePayloadHydration(
-                        conversations = conversationRepository,
-                        appContext = appContext,
-                    ).loadMessages(conversationId, listOf(messageId)).singleOrNull()
+                    val persisted = conversationRepository.getMessagesByIds(listOf(messageId))
+                        .any { it.id == messageId && it.conversationId == conversationId }
+                    if (persisted) conversationStateRegistry.get(conversationId)?.generationSnapshot?.value
+                        ?.streamingMessage?.takeIf { it.id == messageId }
+                        ?: com.newoether.agora.viewmodel.ConversationMessagePayloadHydration(
+                            conversations = conversationRepository,
+                            appContext = appContext,
+                        ).loadMessages(conversationId, listOf(messageId)).singleOrNull()
+                    else null
                 },
             ),
+            htmlPreviewImage = { previewMedia.previewImage(it) },
         )
     }
     // Built on the first browser connection, so app start never touches conversation data here.
@@ -465,6 +532,7 @@ class AppContainer(
             shellConfirmation = shellConfirmationController,
             contextAccounting = com.newoether.agora.webui.WebUiContextAccounting(
                 conversations = conversationRepository,
+                appContext = appContext,
                 requestBuilder = chatRuntime.requestBuilder,
                 generationManager = { chatRuntime.generationManager },
                 generationErrorFormatter = { raw ->

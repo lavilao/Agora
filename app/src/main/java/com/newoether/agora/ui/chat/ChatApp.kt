@@ -38,6 +38,7 @@ import com.newoether.agora.TopLevelPresentation
 import com.newoether.agora.api.DebugProvider
 import com.newoether.agora.data.forDisplay
 import com.newoether.agora.util.gradientBlur
+import com.newoether.agora.ui.chat.message.chatMediaGallery
 import com.newoether.agora.ui.chat.bottombar.CHAT_BOTTOM_BAR_OUTER_SHAPE
 import com.newoether.agora.ui.chat.bottombar.ChatBottomBar
 import com.newoether.agora.ui.chat.bottombar.LoopStatusBackdrop
@@ -75,7 +76,9 @@ fun ChatApp(
     onInitPdfSelection: ((Set<Int>) -> Unit)? = null,
     fullScreenViewerUrls: List<String>? = null,
     topLevelPresentation: TopLevelPresentation = TopLevelPresentation.CHAT,
-    onSnackbarOffsetChanged: (androidx.compose.ui.unit.Dp) -> Unit = {}
+    onSnackbarOffsetChanged: (androidx.compose.ui.unit.Dp) -> Unit = {},
+    processTextRequest: com.newoether.agora.ProcessTextRequest? = null,
+    onProcessTextConsumed: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -272,10 +275,9 @@ fun ChatApp(
     val shareSelectionBarSpace = if (shareSelectionActive) 68.dp else 0.dp
     val conversationSearchMatches = conversationInteraction.searchMatches
     val textFieldState = rememberSaveable(saver = androidx.compose.foundation.text.input.TextFieldState.Saver) { androidx.compose.foundation.text.input.TextFieldState() }
-    val sandboxEnabled by viewModel.settings.sandboxEnabled.collectAsState()
     val composer = com.newoether.agora.ui.chat.bottombar.rememberChatComposerState(
-        sandboxEnabled,
-        viewModel.isSandboxFlavor,
+        sandboxEnabled = { viewModel.sandboxAttachmentReady },
+        isSandboxFlavor = viewModel.isSandboxFlavor,
     )
     val inputFocusRequester = remember { FocusRequester() }
     var showLaunchContent by remember { mutableStateOf(false) }
@@ -306,6 +308,17 @@ fun ChatApp(
         controller = viewModel.conversationComposer,
         viewModel = viewModel,
         textFieldState = textFieldState,
+    )
+    ProcessTextComposerEffect(
+        ownerId = composerOwnerId,
+        draftLoaded = composerSnapshot.loaded,
+        switching = isSwitching,
+        request = processTextRequest,
+        textFieldState = textFieldState,
+        onConsumed = onProcessTextConsumed,
+        persistText = viewModel.conversationComposer::persistIngressText,
+        ingressRetryVersion = composerSnapshot.ingressRetryVersion,
+        newChatOnly = true,
     )
 
     val animatedScrollRequest by viewModel.scrollRequests.request.collectAsState()
@@ -568,7 +581,12 @@ fun ChatApp(
                                     conversationInteraction.toggleShareMessage(messageId)
                                 },
                                 onMediaClick = { urls, index ->
-                                    onMediaClick(urls, index)
+                                    // Open the viewer on the whole chat, not just the tapped message,
+                                    // so a swipe reaches every other image in the conversation.
+                                    val gallery = chatMediaGallery(displayMessagesState.value)
+                                    val at = urls.getOrNull(index)?.let { gallery.indexOf(it) } ?: -1
+                                    if (at >= 0 && gallery.size > 1) onMediaClick(gallery, at)
+                                    else onMediaClick(urls, index)
                                 },
                                 onFileContentClick = onFileContentClick?.let { open ->
                                     { name, content ->

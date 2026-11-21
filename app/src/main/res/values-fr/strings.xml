@@ -126,6 +126,7 @@
     <string name="info">Infos</string>
     <string name="more">Plus</string>
     <string name="arguments_label">Arguments :</string>
+    <string name="tool_search_provider">Fournisseur : %1$s</string>
     <string name="result_label">Résultat :</string>
     <string name="cost_tokens">Coût %1$d tokens</string>
     <string name="token_usage_with_label">Utilisation des tokens : %1$d tokens</string>
@@ -271,6 +272,8 @@
     <string name="conversation_read_empty">Aucun message dans la branche sélectionnée.</string>
     <string name="conversation_read_page">Page : messages %1$d-%2$d</string>
     <string name="conversation_read_more">Utilisez un décalage plus élevé pour voir plus de messages.</string>
+    <string name="conversation_tools_more">D\'autres appels d\'outils sont disponibles pour ce message (tool_offset : %1$d).</string>
+    <string name="conversation_details_error">Impossible de lire les détails enregistrés du message (%1$s).</string>
 
     <!-- General -->
     <string name="back">Retour</string>
@@ -280,6 +283,7 @@
     <string name="video_thumbnail">Miniature de la vidéo</string>
     <string name="play">Lire</string>
     <string name="video_preview">Aperçu de la vidéo</string>
+    <string name="video_playback_failed">Impossible de lire cette vidéo. Le fichier est peut-être manquant ou endommagé.</string>
     <string name="total_tokens">Total : %1$d tokens</string>
     <string name="welcome_to_agora">Bienvenue sur Agora.</string>
     <string name="database_incompatible">Base de données incompatible</string>
@@ -607,8 +611,9 @@
     <string name="shell_confirm_allow">Autoriser une fois</string>
     <string name="shell_confirm_always">Toujours autoriser ce serveur</string>
     <string name="shell_confirm_deny">Refuser</string>
-    <string name="shell_confirm_setting">Confirmer les actions du shell distant</string>
-    <string name="shell_confirm_setting_desc">Demander avant que l\'assistant n\'exécute des commandes ou n\'écrive des fichiers sur des serveurs SSH/Conch distants</string>
+    <string name="shell_confirm_setting">Confirmer les actions du shell</string>
+    <string name="shell_confirm_setting_desc">Demander avant que l\'assistant n\'exécute des commandes ou n\'écrive des fichiers, y compris dans le bac à sable Linux local</string>
+    <string name="shell_confirm_detail_truncated">Aperçu tronqué ; le contenu complet sera écrit.</string>
     <string name="shell_confirm_notification_channel">Approbation des commandes</string>
     <string name="shell_confirm_notification_desc">Demande à autoriser ou refuser une commande distante pendant qu\'Agora est en arrière-plan</string>
     <string name="ask_user_title">L\'assistant vous demande</string>
@@ -720,6 +725,7 @@
     <string name="context_part_free">Libre</string>
     <string name="context_part_reserved">Réservé</string>
     <string name="context_part_used">Utilisé</string>
+    <string name="ask_agora_action">Demander à Agora</string>
     <string name="context_compact_streaming">Compactage du contexte…</string>
     <string name="context_compact_error">Erreur de compactage</string>
     <string name="context_compact_stopped">Compactage arrêté</string>
@@ -985,4 +991,8 @@
     <string name="tool_todo_empty">La liste de tâches est vide</string>
     <string name="tool_agents_empty">Aucun sous-agent</string>
     <string name="tool_agent_results_empty">Aucun résultat de sous-agent renvoyé</string>
+    <string name="markdown_link_file_missing">Fichier introuvable</string>
+    <string name="markdown_link_file_unavailable">Impossible d’ouvrir ce fichier</string>
+    <string name="markdown_link_shared_storage_required">Accordez l’accès à tous les fichiers pour ouvrir les liens de stockage partagé</string>
+    <string name="markdown_link_no_handler">Aucune application ne peut ouvrir ce lien</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.newoether.agora.ui.chat.message
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -36,6 +37,7 @@ import com.newoether.agora.R
 import com.newoether.agora.util.noOpBringIntoView
 import com.newoether.agora.model.AttachmentItem
 import com.newoether.agora.model.ChatMessage
+import com.newoether.agora.model.ImageArtifact
 import com.newoether.agora.model.MessageSource
 import com.newoether.agora.model.subagentResultDisplay
 import com.newoether.agora.ui.chat.AttachmentThumbnailItem
@@ -45,6 +47,7 @@ import com.newoether.agora.ui.chat.resolveAttachmentType
 import com.newoether.agora.ui.common.LocalAgoraHaptics
 import com.newoether.agora.ui.motion.LocalAgoraMotionPolicy
 import com.newoether.agora.ui.theme.ChatType
+import com.newoether.agora.ui.theme.chatCompactWidth
 import com.newoether.agora.ui.components.AgoraDropdownMenu
 import com.newoether.agora.ui.components.AgoraDropdownMenuItem
 
@@ -64,19 +67,43 @@ internal data class StoredMediaOccurrenceProjection(
     val indexByDisplayItem: List<Int?>,
 )
 
+private fun storedMediaUnavailable(
+    imagePath: String,
+    item: AttachmentItem?,
+    imageArtifacts: Map<String, ImageArtifact>,
+): Boolean {
+    val occurrences = item?.imageArtifacts.orEmpty()
+    val browsesSavedFrames = item?.type == "video" && item.storage.isLocalSandbox
+    if ((item?.type == "pdf" || browsesSavedFrames) && occurrences.isNotEmpty()) {
+        return occurrences.all { it.unavailable || it.path.isBlank() }
+    }
+    if (item?.unavailable == true) return true
+    return if (occurrences.isNotEmpty()) {
+        occurrences.any(ImageArtifact::unavailable)
+    } else imageArtifacts[imagePath]?.unavailable == true
+}
+
 internal fun projectStoredMediaOccurrences(
     displayItems: List<Pair<String, AttachmentItem?>>,
+    imageArtifacts: Map<String, ImageArtifact> = emptyMap(),
 ): StoredMediaOccurrenceProjection {
     val urls = mutableListOf<String>()
     val indices = displayItems.map { (imagePath, item) ->
+        val unavailable = storedMediaUnavailable(imagePath, item, imageArtifacts)
         val url = when (resolveAttachmentType(imagePath, item)) {
             "image" -> imagePath.takeIf {
-                it.isNotEmpty() && item?.unavailable != true
+                it.isNotEmpty() && !unavailable
             }
+            // The playable copy is the original file, including for Local Sandbox videos: their
+            // frames are a Provider projection, not a video, and a frame-only list leaves the
+            // viewer with nothing to play. Frames stay as the last resort.
             "video" -> item
-                ?.takeUnless(AttachmentItem::unavailable)
+                ?.takeUnless { unavailable }
                 ?.originalUri
                 ?.takeIf(String::isNotBlank)
+                ?: item?.imageArtifacts
+                    ?.firstOrNull { !it.unavailable && it.path.isNotBlank() }
+                    ?.path
             else -> null
         }
         url?.let {
@@ -85,6 +112,32 @@ internal fun projectStoredMediaOccurrences(
         }
     }
     return StoredMediaOccurrenceProjection(urls, indices)
+}
+
+/**
+ * Metadata owns attachment order. Images not claimed by metadata are legacy entries and are
+ * appended in their stored order. The leading value is the metadata sort key, unused by renderers.
+ */
+internal fun storedMediaDisplayItems(
+    message: ChatMessage,
+): List<Triple<Int, String, AttachmentItem?>> {
+    val claimedImageIndices = mutableSetOf<Int>()
+    val metadataItems = message.attachmentMeta?.items.orEmpty().map { item ->
+        val start = item.imageIndex
+        if (start != null) {
+            val count = item.pageCount?.coerceAtLeast(1) ?: 1
+            claimedImageIndices += start until start + count
+        }
+        Triple(
+            start ?: -1,
+            start?.let(message.images::getOrNull).orEmpty(),
+            item,
+        )
+    }
+    val legacyItems = message.images.mapIndexedNotNull { index, path ->
+        if (index in claimedImageIndices) null else Triple(index, path, null)
+    }
+    return metadataItems + legacyItems
 }
 
 @Composable
@@ -115,6 +168,8 @@ internal fun UserMessageBubble(
     onShowDelete: () -> Unit,
     searchHighlight: SearchHighlightSpec?,
     allowMutations: Boolean = true,
+    onLayoutMutationStarted: (String) -> Unit = {},
+    onLayoutMutationSettled: (String) -> Unit = {},
 ) {
     @Suppress("DEPRECATION")
     val clipboardManager = LocalClipboardManager.current
@@ -126,6 +181,7 @@ internal fun UserMessageBubble(
         message.source?.subagentResultDisplay(message.text)
     }
     var showMenu by remember { mutableStateOf(false) }
+    var disclosureAnimating by remember(message.id) { mutableStateOf(false) }
     val editFocusRequester = remember(message.id) { FocusRequester() }
     LaunchedEffect(showEditor, editFocusRequester) {
         if (showEditor) editFocusRequester.requestFocus()
@@ -134,8 +190,12 @@ internal fun UserMessageBubble(
     Column(
         horizontalAlignment = Alignment.End,
         modifier = Modifier.then(
-            if (userBubbleSizeAnimationEnabled(sizeAnimationReady, allowSpatialTransitions)) {
-                Modifier.animateContentSize(animationSpec = tween(durationMillis = 500))
+            if (!disclosureAnimating &&
+                userBubbleSizeAnimationEnabled(sizeAnimationReady, allowSpatialTransitions)
+            ) {
+                Modifier.animateContentSize(
+                    animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+                )
             } else {
                 Modifier
             },
@@ -149,7 +209,7 @@ internal fun UserMessageBubble(
             shape = shape,
             color = backgroundColor,
             modifier = Modifier
-                .widthIn(min = USER_BUBBLE_MIN_WIDTH, max = 300.dp)
+                .widthIn(min = USER_BUBBLE_MIN_WIDTH, max = USER_BUBBLE_MAX_WIDTH)
                 .then(contextAlpha)
                 .clip(shape)
                 .combinedClickable(
@@ -220,36 +280,16 @@ internal fun UserMessageBubble(
                 ) {
                     val hasMetaItems = message.attachmentMeta?.items?.isNotEmpty() == true
                 if (message.images.isNotEmpty() || hasMetaItems) {
-                        val meta = remember(message.attachmentMeta) {
-                            message.attachmentMeta
-                        }
-                        // Metadata owns attachment order. Images not claimed by metadata are legacy
-                        // entries and are appended in their stored order.
-                        val displayItems = remember(message.images, meta) {
-                            val claimedImageIndices = mutableSetOf<Int>()
-                            val metadataItems = meta?.items.orEmpty().map { item ->
-                                val start = item.imageIndex
-                                if (start != null) {
-                                    val count = item.pageCount?.coerceAtLeast(1) ?: 1
-                                    claimedImageIndices += start until start + count
-                                }
-                                Triple(
-                                    start ?: -1,
-                                    start?.let(message.images::getOrNull).orEmpty(),
-                                    item,
-                                )
-                            }
-                            val legacyItems = message.images.mapIndexedNotNull { index, path ->
-                                if (index in claimedImageIndices) null else Triple(index, path, null)
-                            }
-                            metadataItems + legacyItems
+                        val displayItems = remember(message.images, message.attachmentMeta) {
+                            storedMediaDisplayItems(message)
                         }
 
-                        val mediaProjection = remember(displayItems) {
+                        val mediaProjection = remember(displayItems, message.imageArtifacts) {
                             projectStoredMediaOccurrences(
                                 displayItems.map { (_, imagePath, metaItem) ->
                                     imagePath to metaItem
                                 },
+                                message.imageArtifacts,
                             )
                         }
                         val allMediaUrls = mediaProjection.urls
@@ -269,7 +309,12 @@ internal fun UserMessageBubble(
                                     metaItem?.imageIndex?.let { start ->
                                         val count = metaItem.pageCount ?: 1
                                         val end = (start + count).coerceAtMost(message.images.size)
-                                        if (start in 0 until message.images.size) message.images.subList(start, end) else emptyList()
+                                        if (start in 0 until message.images.size) {
+                                            message.images.subList(start, end).mapIndexed { index, path ->
+                                                val artifact = metaItem.imageArtifacts.getOrNull(index) ?: message.imageArtifacts[path]
+                                                path.takeUnless { artifact?.unavailable == true } ?: ""
+                                            }
+                                        } else emptyList()
                                     } ?: emptyList()
                                 } else emptyList()
 
@@ -278,11 +323,16 @@ internal fun UserMessageBubble(
 
                                 AttachmentThumbnailItem(
                                     type = type,
-                                    imagePath = imagePath,
+                                    imagePath = if (type == "video" && metaItem?.storage?.isLocalSandbox == true) {
+                                        metaItem.imageArtifacts.firstOrNull { !it.unavailable && it.path.isNotBlank() }?.path
+                                            ?: imagePath
+                                    } else imagePath,
                                     fileName = fileName,
                                     originalUri = metaItem?.originalUri,
                                     textContent = metaItem?.textContent,
-                                    unavailable = metaItem?.unavailable == true,
+                                    unavailable = storedMediaUnavailable(
+                                        imagePath, metaItem, message.imageArtifacts,
+                                    ),
                                     pdfPages = pdfPages,
                                     allMediaUrls = allMediaUrls,
                                     mediaIndex = mediaIndex,
@@ -292,8 +342,9 @@ internal fun UserMessageBubble(
                                         onPdfClick = onPdfPagesClick
                                     )
                                 )
-                                if (type == "pdf" && metaItem?.warning != null) {
-                                    Text(metaItem.warning, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                val warning = metaItem?.warning
+                                if (type == "pdf" && warning != null) {
+                                    Text(warning, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -302,20 +353,38 @@ internal fun UserMessageBubble(
                     if (subagentResult != null) {
                         SubagentResultSummary(result = subagentResult, textColor = textColor)
                     } else if (askUser != null) {
-                        AskUserAnswerBlocks(
-                            source = askUser,
-                            unansweredLabel = stringResource(R.string.message_source_unanswered),
-                            bodyStyle = ChatType.userBody,
-                            textColor = textColor,
-                            searchHighlight = searchHighlight,
-                        )
+                        CollapsibleMessageBody(
+                            messageKey = message.id,
+                            searchActive = !searchHighlight?.query.isNullOrBlank(),
+                            sizeAnimationReady = sizeAnimationReady,
+                            onLayoutMutationStarted = onLayoutMutationStarted,
+                            onLayoutMutationSettled = onLayoutMutationSettled,
+                            onMotionChanged = { disclosureAnimating = it },
+                        ) {
+                            AskUserAnswerBlocks(
+                                source = askUser,
+                                unansweredLabel = stringResource(R.string.message_source_unanswered),
+                                bodyStyle = ChatType.userBody,
+                                textColor = textColor,
+                                searchHighlight = searchHighlight,
+                            )
+                        }
                     } else if (message.text.isNotEmpty()) {
-                        SearchHighlightedPlainText(
-                            text = message.text,
-                            style = ChatType.userBody,
-                            color = textColor,
-                            spec = searchHighlight,
-                        )
+                        CollapsibleMessageBody(
+                            messageKey = message.id,
+                            searchActive = !searchHighlight?.query.isNullOrBlank(),
+                            sizeAnimationReady = sizeAnimationReady,
+                            onLayoutMutationStarted = onLayoutMutationStarted,
+                            onLayoutMutationSettled = onLayoutMutationSettled,
+                            onMotionChanged = { disclosureAnimating = it },
+                        ) {
+                            SearchHighlightedPlainText(
+                                text = message.text,
+                                style = ChatType.userBody,
+                                color = textColor,
+                                spec = searchHighlight,
+                            )
+                        }
                     }
                 }
                 }
@@ -427,5 +496,7 @@ internal fun UserMessageBubble(
 private val EDIT_BOTTOM_INSET = 4.dp
 
 /** Width of a single-line bubble's height (15dp padding twice plus one 24.2sp line), so the
- * shortest message is a circle rather than a pinched capsule. */
-private val USER_BUBBLE_MIN_WIDTH = 54.dp
+ * shortest message is a circle rather than a pinched capsule. Compact: 30 dp + 23.2 sp * 15/16. */
+private val USER_BUBBLE_MIN_WIDTH get() = if (chatCompactWidth) 52.dp else 54.dp
+// Narrow windows (see CHAT_COMPACT_WIDTH_DP) cap the bubble at roughly three quarters of the width.
+private val USER_BUBBLE_MAX_WIDTH get() = if (chatCompactWidth) 256.dp else 300.dp

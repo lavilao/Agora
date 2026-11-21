@@ -4,6 +4,7 @@ import com.newoether.agora.tool.BuiltInToolNames
 import java.util.Locale
 
 object DefaultSystemPrompt {
+    internal const val BUILT_IN_MIGRATION_VERSION = 1
     private const val ENGLISH_TITLE = "Default"
     private const val ARABIC_TITLE = "\u0627\u0641\u062a\u0631\u0627\u0636\u064a"
     private const val FRENCH_TITLE = "Par d\u00e9faut"
@@ -54,7 +55,32 @@ object DefaultSystemPrompt {
             systemItems = currentSystemItems(),
             userItems = userItems(),
             assistantItems = assistantItems(),
+            builtInMigrationVersion = BUILT_IN_MIGRATION_VERSION,
         )
+
+    /** Exact default that shipped before the HTML preview guidance item. */
+    internal fun versionBeforeHtmlPreviewForMigration(
+        locale: Locale = Locale.getDefault(),
+    ): SystemPromptEntry = SystemPromptEntry(
+        title = titleForLocale(locale),
+        systemItems = systemItemsBeforeHtmlPreview(),
+        userItems = userItems(),
+        assistantItems = assistantItems(),
+    )
+
+    /** Exact default that shipped with the HTML preview guidance as its own text item. */
+    internal fun versionWithSeparateHtmlPreviewForMigration(
+        locale: Locale = Locale.getDefault(),
+    ): SystemPromptEntry = SystemPromptEntry(
+        title = titleForLocale(locale),
+        systemItems = systemItemsWithSeparateHtmlPreview(),
+        userItems = userItems(),
+        assistantItems = assistantItems(),
+    )
+
+    /** True for the shipped default whose text blocks were split by item boundaries. */
+    internal fun isUnmergedDefault(entry: SystemPromptEntry): Boolean =
+        entry.sameTemplateAs(versionWithSeparateHtmlPreviewForMigration())
 
     /** Exact default shipped with seven conditional guide variables. */
     internal fun versionWithToolGuidesForMigration(
@@ -145,12 +171,14 @@ object DefaultSystemPrompt {
     )
 
     internal fun isUnmodifiedPreviousVersion(entry: SystemPromptEntry): Boolean =
-        (entry.title in BUILT_IN_TITLES || entry.title.equals(ENGLISH_TITLE, ignoreCase = true)) &&
+        entry.builtInMigrationVersion < BUILT_IN_MIGRATION_VERSION &&
+            (entry.title in BUILT_IN_TITLES || entry.title.equals(ENGLISH_TITLE, ignoreCase = true)) &&
             (entry.sameTemplateAs(previousVersionForMigration()) ||
                 entry.sameTemplateAs(versionBeforeMathRuleForMigration()) ||
                 entry.sameTemplateAs(versionBeforeToolRenameForMigration()) ||
                 entry.sameTemplateAs(versionBeforeToolGuidesForMigration()) ||
-                entry.sameTemplateAs(versionWithToolGuidesForMigration()))
+                entry.sameTemplateAs(versionWithToolGuidesForMigration()) ||
+                entry.sameTemplateAs(versionBeforeHtmlPreviewForMigration()))
 
     private fun SystemPromptEntry.sameTemplateAs(other: SystemPromptEntry): Boolean =
         resolvedSystemItems.sameTemplateItems(other.resolvedSystemItems) &&
@@ -163,7 +191,32 @@ object DefaultSystemPrompt {
         left.type == right.type && left.value == right.value
     }
 
-    private fun currentSystemItems(): List<PromptTemplateItem> = listOf(
+    private fun currentSystemItems(): List<PromptTemplateItem> =
+        mergeAdjacentText(systemItemsWithSeparateHtmlPreview())
+
+    private fun systemItemsWithSeparateHtmlPreview(): List<PromptTemplateItem> {
+        val previous = systemItemsBeforeHtmlPreview()
+        return listOf(previous.first(), HtmlPreviewGuidance.item()) + previous.drop(1)
+    }
+
+    /**
+     * Adjacent text items render as one text run. Merging them keeps the shipped default readable
+     * in the editor without changing the compiled prompt.
+     */
+    private fun mergeAdjacentText(items: List<PromptTemplateItem>): List<PromptTemplateItem> {
+        val merged = ArrayList<PromptTemplateItem>(items.size)
+        for (item in items) {
+            val last = merged.lastOrNull()
+            if (item.type == PromptItemType.CUSTOM && last?.type == PromptItemType.CUSTOM) {
+                merged[merged.lastIndex] = last.copy(value = last.value + item.value)
+            } else {
+                merged += item
+            }
+        }
+        return merged
+    }
+
+    private fun systemItemsBeforeHtmlPreview(): List<PromptTemplateItem> = listOf(
         custom(
             """
             You are an assistant in Agora, a personal AI client.

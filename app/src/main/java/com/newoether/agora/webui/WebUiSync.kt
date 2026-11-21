@@ -6,6 +6,9 @@ import com.newoether.agora.data.ConversationSettings
 import com.newoether.agora.data.forDisplay
 import com.newoether.agora.data.local.MessageEntity
 import com.newoether.agora.data.repository.ConversationRepository
+import com.newoether.agora.data.repository.observeDrawerGeneratingConversationIds
+import com.newoether.agora.ui.chat.observeDrawerInteractions
+import com.newoether.agora.ui.chat.drawerInteraction
 import com.newoether.agora.data.repository.recoverOpenedConversationFamily
 import com.newoether.agora.data.replaceCustomProviderIdsForDisplay
 import com.newoether.agora.model.ChatConversation
@@ -131,9 +134,15 @@ internal class WebUiSync(
                 listLimit.flatMapLatest { limit ->
                     conversations.observeDrawerConversations(limit + 1).map { limit to it }
                 },
-                registry.activeConversationIds,
-            ) { (limit, items), active ->
-                WebSyncEvent.Conversations(items.take(limit).map { it.toWeb(it.id in active) }, items.size > limit, limit)
+                conversations.observeDrawerGeneratingConversationIds(
+                    foregroundIds = registry.activeConversationIds,
+                    automationIds = executionCoordinator.activeAutomationConversationIds,
+                ),
+                conversations.observeDrawerInteractions(askUser.requests, shellConfirmation.pendingShellCommand),
+            ) { (limit, items), active, interactions ->
+                WebSyncEvent.Conversations(items.take(limit).map {
+                    it.toWeb(it.id in active).copy(interaction = interactions.drawerInteraction(it.id)?.name?.lowercase())
+                }, items.size > limit, limit)
             }
             val displayContext = display.distinctUntilChanged()
                 .shareIn(this, SharingStarted.Eagerly, replay = 1)
@@ -270,7 +279,7 @@ internal class WebUiSync(
                                                     put("intervalMs", attachment.sliceIntervalMs)
                                                     put("staged", attachment.localPath != null)
                                                     if (attachment.type == "file" && attachment.importState == com.newoether.agora.model.AttachmentImportState.READY &&
-                                                        attachment.storage == com.newoether.agora.model.AttachmentStorage.APP_PRIVATE && !attachment.unavailable) {
+                                                        !attachment.unavailable) {
                                                         put("text", attachment.preparedText)
                                                     }
                                                     attachment.selectedPages?.let { pages ->
@@ -331,7 +340,7 @@ internal class WebUiSync(
                                                 put("contextLabels", JsonArray(com.newoether.agora.model.ContextBudget.PRESETS.map { value -> JsonPrimitive(com.newoether.agora.model.ContextBudget.compactLabel(value)) }))
                                                 put("contextOverrideLabel", it.generationParameters.contextWindow?.let { value -> com.newoether.agora.model.ContextBudget.compactLabel(com.newoether.agora.model.ContextBudget.normalize(value)) })
                                                 put("contextDefaultLabel", com.newoether.agora.model.ContextBudget.compactLabel(com.newoether.agora.model.ContextBudget.normalize(it.generationDefaults.contextWindow)))
-                                                put("maxTokensPresets", JsonArray(com.newoether.agora.ui.chat.advancedMaxTokensPresets.map(::JsonPrimitive)))
+                                                put("maxTokensPresets", JsonArray(com.newoether.agora.presentation.advancedMaxTokensPresets.map(::JsonPrimitive)))
                                             },
                                             it.compactDefaults?.let { request -> buildJsonObject {
                                                 put("modelId", request.model)
@@ -347,6 +356,7 @@ internal class WebUiSync(
                                                     put("title", prompt.title)
                                                 } }))
                                             },
+                                            sandboxAttachments = it.sandboxAttachments,
                                         )
                                     }.distinctUntilChanged().collect { outbound.send(it) }
                             }

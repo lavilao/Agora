@@ -17,7 +17,7 @@ import java.util.Locale
 import kotlinx.coroutines.flow.map
 
 internal val Context.dataStore by preferencesDataStore(
-    name = "settings", produceMigrations = { listOf(modelProviderNamesMigration) },
+    name = "settings", produceMigrations = { listOf(modelProviderNamesMigration, toolCallDisplayModeMigration) },
 )
 
 class SettingsManager(private val context: Context) {
@@ -128,6 +128,7 @@ class SettingsManager(private val context: Context) {
     val webSearchBaseUrl: Flow<String> = context.dataStore.data.map { it[WEB_SEARCH_BASE_URL] ?: "" }
 
     // ── Image generation ──────────────────────────────────────
+    val imageQuality = ImageQualitySettingsStore(context.dataStore)
     val imageGenEnabled: Flow<Boolean> = context.dataStore.data.map { it[IMAGE_GEN_ENABLED] ?: false }
     // Selected image model "Provider:modelId" (null = none chosen). Creds reused from that provider.
     val imageGenModel: Flow<String?> = context.dataStore.data.map { it[IMAGE_GEN_MODEL] }
@@ -148,8 +149,9 @@ class SettingsManager(private val context: Context) {
     val autoUpdateCheck: Flow<Boolean> = context.dataStore.data.map { it[AUTO_UPDATE_CHECK] ?: true }
     val lastUpdateCheckTime: Flow<Long> = context.dataStore.data.map { it[LAST_UPDATE_CHECK_TIME] ?: 0L }
     val localChatModels: Flow<List<LocalChatModelConfig>> = modelPreferenceStore.localChatModels
-    val localModelIdleRetentionMinutes: Flow<Int> = context.dataStore.data.map { normalizeLocalModelIdleRetentionMinutes(it[LOCAL_MODEL_IDLE_RETENTION_MINUTES]) }
-    val localLowContextModeEnabled: Flow<Boolean> = context.dataStore.data.map { it[LOCAL_LOW_CONTEXT_MODE_ENABLED] ?: DEFAULT_LOCAL_LOW_CONTEXT_MODE_ENABLED }
+    val phoneUse = com.newoether.agora.phone.PhoneUseSettingsStore(context.dataStore)
+    val localModelIdleRetentionMinutes: Flow<Int> = modelPreferenceStore.localModelIdleRetentionMinutes
+    val localLowContextModeEnabled: Flow<Boolean> = modelPreferenceStore.localLowContextModeEnabled
     val localRuntimePreference: Flow<String> = context.dataStore.data.map { normalizeLocalRuntimePreference(it[LOCAL_RUNTIME_PREFERENCE]) }
     /** Engine capability switches as one atomic snapshot; see [LocalEngineTuning]. */
     val localEngineTuning: Flow<LocalEngineTuning> = engineTuningStore.localEngineTuning
@@ -212,6 +214,7 @@ class SettingsManager(private val context: Context) {
     val sandboxEnabled: Flow<Boolean> = context.dataStore.data.map { it[SANDBOX_ENABLED] ?: false }
     val sandboxSharedStorageEnabled: Flow<Boolean> =
         context.dataStore.data.map { it[SANDBOX_SHARED_STORAGE_ENABLED] ?: false }
+    val sandboxMirror: Flow<String> = context.dataStore.data.map { it[SANDBOX_MIRROR].orEmpty() }
 
     val themeMode: Flow<String> = context.dataStore.data.map { it[THEME_MODE] ?: "FOLLOW_DEVICE" }
     val amoledEnabled: Flow<Boolean> = context.dataStore.data.map { it[AMOLED_ENABLED] ?: false }
@@ -439,14 +442,11 @@ class SettingsManager(private val context: Context) {
     suspend fun saveLocalChatModels(models: List<LocalChatModelConfig>) =
         modelPreferenceStore.saveLocalChatModels(models)
 
-    suspend fun saveLocalModelIdleRetentionMinutes(minutes: Int) {
-        context.dataStore.edit {
-            it[LOCAL_MODEL_IDLE_RETENTION_MINUTES] =
-                normalizeLocalModelIdleRetentionMinutes(minutes)
-        }
-    }
+    suspend fun saveLocalModelIdleRetentionMinutes(minutes: Int) =
+        modelPreferenceStore.saveLocalModelIdleRetentionMinutes(minutes)
 
-    suspend fun saveLocalLowContextModeEnabled(enabled: Boolean) { context.dataStore.edit { it[LOCAL_LOW_CONTEXT_MODE_ENABLED] = enabled } }
+    suspend fun saveLocalLowContextModeEnabled(enabled: Boolean) =
+        modelPreferenceStore.saveLocalLowContextModeEnabled(enabled)
 
     suspend fun saveLocalRuntimePreference(preference: String) {
         context.dataStore.edit {
@@ -597,20 +597,51 @@ class SettingsManager(private val context: Context) {
                 com.newoether.agora.util.SecretCrypto.encrypt(json.encodeToString(servers))
         }
     }
-    suspend fun saveSandboxEnabled(enabled: Boolean) { context.dataStore.edit { it[SANDBOX_ENABLED] = enabled } }
-    suspend fun saveSandboxSharedStorageEnabled(enabled: Boolean) { context.dataStore.edit { it[SANDBOX_SHARED_STORAGE_ENABLED] = enabled } }
-    suspend fun saveThemeMode(mode: String) { context.dataStore.edit { it[THEME_MODE] = mode } }
-    suspend fun saveAmoledEnabled(enabled: Boolean) { context.dataStore.edit { it[AMOLED_ENABLED] = enabled } }
-    suspend fun saveColorScheme(scheme: String) { context.dataStore.edit { it[COLOR_SCHEME] = scheme } }
-    suspend fun saveDynamicColor(enabled: Boolean) { context.dataStore.edit { it[DYNAMIC_COLOR] = enabled } }
-    suspend fun saveBlurEffectsEnabled(enabled: Boolean) { context.dataStore.edit { it[BLUR_EFFECTS_ENABLED] = enabled } }
-    suspend fun saveReduceMotion(enabled: Boolean) { context.dataStore.edit { it[REDUCE_MOTION] = enabled } }
-    suspend fun saveStickToBottom(enabled: Boolean) { context.dataStore.edit { it[STICK_TO_BOTTOM] = enabled } }
-    suspend fun saveParseInlineDollarMath(enabled: Boolean) { context.dataStore.edit { it[PARSE_INLINE_DOLLAR_MATH] = enabled } }
-    suspend fun saveAutoWrapCodeBlocks(enabled: Boolean) { context.dataStore.edit { it[AUTO_WRAP_CODE_BLOCKS] = enabled } }
-    suspend fun saveHapticsEnabled(enabled: Boolean) { context.dataStore.edit { it[HAPTICS_ENABLED] = enabled } }
-    suspend fun saveDetailedTokenUsage(enabled: Boolean) { context.dataStore.edit { it[DETAILED_TOKEN_USAGE] = enabled } }
-    suspend fun saveToolCallDisplayMode(mode: String) { context.dataStore.edit { it[TOOL_CALL_DISPLAY_MODE] = ToolCallDisplayModes.normalize(mode) } }
+    suspend fun saveSandboxEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[SANDBOX_ENABLED] = enabled }
+    }
+    suspend fun saveSandboxSharedStorageEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[SANDBOX_SHARED_STORAGE_ENABLED] = enabled }
+    }
+    suspend fun saveSandboxMirror(id: String) {
+        context.dataStore.edit { it[SANDBOX_MIRROR] = id }
+    }
+    suspend fun saveThemeMode(mode: String) {
+        context.dataStore.edit { it[THEME_MODE] = mode }
+    }
+    suspend fun saveAmoledEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[AMOLED_ENABLED] = enabled }
+    }
+    suspend fun saveColorScheme(scheme: String) {
+        context.dataStore.edit { it[COLOR_SCHEME] = scheme }
+    }
+    suspend fun saveDynamicColor(enabled: Boolean) {
+        context.dataStore.edit { it[DYNAMIC_COLOR] = enabled }
+    }
+    suspend fun saveBlurEffectsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[BLUR_EFFECTS_ENABLED] = enabled }
+    }
+    suspend fun saveReduceMotion(enabled: Boolean) {
+        context.dataStore.edit { it[REDUCE_MOTION] = enabled }
+    }
+    suspend fun saveStickToBottom(enabled: Boolean) {
+        context.dataStore.edit { it[STICK_TO_BOTTOM] = enabled }
+    }
+    suspend fun saveParseInlineDollarMath(enabled: Boolean) {
+        context.dataStore.edit { it[PARSE_INLINE_DOLLAR_MATH] = enabled }
+    }
+    suspend fun saveAutoWrapCodeBlocks(enabled: Boolean) {
+        context.dataStore.edit { it[AUTO_WRAP_CODE_BLOCKS] = enabled }
+    }
+    suspend fun saveHapticsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[HAPTICS_ENABLED] = enabled }
+    }
+    suspend fun saveDetailedTokenUsage(enabled: Boolean) {
+        context.dataStore.edit { it[DETAILED_TOKEN_USAGE] = enabled }
+    }
+    suspend fun saveToolCallDisplayMode(mode: String) {
+        context.dataStore.edit { it[TOOL_CALL_DISPLAY_MODE] = ToolCallDisplayModes.normalize(mode) }
+    }
     suspend fun saveThinkingSegmentDisplayMode(mode: String) {
         context.dataStore.edit {
             it[THINKING_SEGMENT_DISPLAY_MODE] = ThinkingSegmentDisplayModes.normalize(mode)

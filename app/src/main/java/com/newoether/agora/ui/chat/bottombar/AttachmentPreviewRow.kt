@@ -49,9 +49,11 @@ import coil.compose.rememberAsyncImagePainter
 import com.newoether.agora.R
 import com.newoether.agora.model.AttachmentImportState
 import com.newoether.agora.model.SelectedAttachment
+import com.newoether.agora.model.previewImagePath
 import com.newoether.agora.ui.chat.FileThumbnail
 import com.newoether.agora.ui.chat.MEDIA_LOADING_INDICATOR_STROKE_WIDTH
 import com.newoether.agora.ui.chat.MediaLoadPresentation
+import com.newoether.agora.ui.chat.VideoPosterThumbnail
 import com.newoether.agora.ui.chat.rememberMediaLoadingVisible
 import com.newoether.agora.ui.chat.toMediaLoadPresentation
 import com.newoether.agora.ui.common.LocalAgoraHaptics
@@ -113,11 +115,19 @@ internal fun AttachmentPreviewRow(
                 (it.type == "image" || it.type == "video")
         }
     }
+    // Every media attachment contributes exactly one playable destination. A sliced frame list is
+    // not a video and cannot be played, and a Local Sandbox video keeps its staged host copy, so
+    // the tap below always opens the file the viewer can actually read.
     val allMediaUrls = remember(mediaAttachments) {
-        mediaAttachments.map { it.localPath ?: it.uri }
+        mediaAttachments.map { attachment ->
+            if (attachment.type == "image") attachment.previewImagePath ?: attachment.uri
+            else attachment.localPath ?: attachment.uri
+        }
     }
     val mediaIndexById = remember(mediaAttachments) {
-        mediaAttachments.mapIndexed { index, attachment -> attachment.localId to index }.toMap()
+        mediaAttachments.withIndex().associate { (index, attachment) ->
+            attachment.localId to index
+        }
     }
     LazyRow(
         modifier = Modifier
@@ -131,17 +141,23 @@ internal fun AttachmentPreviewRow(
             val isPdf = attachment.type == "pdf"
             val isFile = attachment.type == "file"
             val isReady = attachment.importState == AttachmentImportState.READY
+            val pdfPages = if (isPdf) attachment.preRenderedPaths.orEmpty().mapIndexed { index, path ->
+                path.takeUnless { attachment.imageArtifacts.getOrNull(index)?.unavailable == true } ?: ""
+            } else emptyList()
+            val firstPdfPage = pdfPages.indexOfFirst(String::isNotBlank)
+            val unavailable = if (isPdf && attachment.imageArtifacts.isNotEmpty()) firstPdfPage < 0
+                else attachment.unavailable
             val mediaIndex = mediaIndexById[attachment.localId]
             val mediaModel = when {
-                attachment.unavailable || !isReady -> null
+                unavailable || !isReady -> null
                 isVideo -> attachment.processedFrames?.firstOrNull()
                 isFile || isPdf -> null
-                else -> attachment.localPath ?: uriString
+                else -> attachment.previewImagePath ?: uriString
             }
             val mediaPainter = rememberAsyncImagePainter(model = mediaModel)
             val mediaLoadState = mediaPainter.state.toMediaLoadPresentation()
             val targetPresentation = attachmentPreviewPresentation(
-                unavailable = attachment.unavailable,
+                unavailable = unavailable,
                 importState = attachment.importState,
                 type = attachment.type,
                 hasVideoFrame = attachment.processedFrames?.isNotEmpty() == true,
@@ -169,15 +185,16 @@ internal fun AttachmentPreviewRow(
             ) {
                 Box {
                     val clickableModifier = when {
-                        attachment.unavailable || !isReady -> Modifier
+                        unavailable || !isReady -> Modifier
                         isFile -> {
-                            if (!attachment.storage.canPreview || attachment.preparedText == null) {
+                            val preparedText = attachment.preparedText
+                            if (!attachment.storage.canPreview || preparedText == null) {
                                 Modifier
                             } else if (onFileContentClick != null) {
                                 Modifier.clickable {
                                     onFileContentClick(
                                         attachment.fileName ?: uriString,
-                                        attachment.preparedText,
+                                        preparedText,
                                     )
                                 }
                             } else {
@@ -185,9 +202,9 @@ internal fun AttachmentPreviewRow(
                             }
                         }
                         isPdf -> {
-                            if (onPdfPagesClick != null) {
+                            if (onPdfPagesClick != null && attachment.storage.canPreview && firstPdfPage >= 0) {
                                 Modifier.clickable {
-                                    onPdfPagesClick(attachment.preRenderedPaths.orEmpty(), 0)
+                                    onPdfPagesClick(pdfPages, firstPdfPage)
                                 }
                             } else {
                                 Modifier
@@ -307,11 +324,11 @@ private fun AttachmentPresentationContent(
                 modifier = Modifier.fillMaxSize(),
                 fallbackLabel = attachment.type.uppercase().take(4).ifEmpty { "FILE" },
             )
-            AttachmentPreviewPresentation.READY_VIDEO_PLACEHOLDER -> Icon(
-                Icons.Default.Videocam,
-                stringResource(R.string.video),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(28.dp),
+            AttachmentPreviewPresentation.READY_VIDEO_PLACEHOLDER -> VideoPosterThumbnail(
+                source = attachment.localPath ?: attachment.uri,
+                contentDescription = stringResource(R.string.video),
+                modifier = Modifier.fillMaxSize(),
+                shape = shape,
             )
             AttachmentPreviewPresentation.IMPORT_LOADING -> {
                 AttachmentTypePlaceholder(attachment)

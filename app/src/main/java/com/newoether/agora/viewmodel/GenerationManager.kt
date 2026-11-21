@@ -54,7 +54,12 @@ class GenerationManager(
 
     /** User-confirmation gate for remote shell mutations. Set by the ViewModel.
      *  Returns true to proceed, false to deny. */
-    var onConfirmShellCommand: (suspend (server: String, summary: String, conversationId: String?) -> Boolean)? = null
+    var onConfirmShellCommand: (suspend (
+        server: String,
+        summary: String,
+        conversationId: String?,
+        detail: ShellActionDetail?,
+    ) -> Boolean)? = null
 
     private val toolExecutor = GenerationToolExecutor.createDefault(
         app = app,
@@ -64,8 +69,8 @@ class GenerationManager(
         sandboxFactory = sandboxFactory,
         additionalProviders = additionalToolProviders,
         generatingConversationIds = generatingConversationIds,
-        confirmShellCommand = { server, summary, conversationId ->
-            onConfirmShellCommand?.invoke(server, summary, conversationId) ?: true
+        confirmShellCommand = { server, summary, conversationId, detail ->
+            onConfirmShellCommand?.invoke(server, summary, conversationId, detail) ?: true
         },
     )
     private val contextAccounting = GenerationContextAccounting(toolExecutor)
@@ -75,6 +80,7 @@ class GenerationManager(
     private val runFinalizationExecutor = GenerationRunFinalizationExecutor(conversations)
     private val apiPathBuilder = GenerationApiPathBuilder(
         conversations = conversations,
+        appContext = context,
         generationErrorFormatter = { raw ->
             normalizePersistedGenerationErrorText(context, raw)
         },
@@ -406,7 +412,9 @@ class GenerationManager(
                                     publishRetrySnapshot = {
                                         val projected = projectOutput(modelMessage())
                                         onStreamUpdate(projected)
-                                        if (event is StreamEvent.Retrying && event.resetCurrentAttempt) {
+                                        if (event is StreamEvent.Retrying &&
+                                            (event.resetCurrentAttempt || event.error != null)
+                                        ) {
                                             checkpoints.persist(projected, force = true)
                                         }
                                     },
@@ -461,6 +469,7 @@ class GenerationManager(
                     assistantPrepend = config.assistantPrepend,
                     assistantPostpend = config.assistantPostpend,
                     initialUserPrompt = config.initialUserPrompt,
+                    phoneMaxScreenshots = config.phoneMaxScreenshots,
                 )
             }
             requestTrace?.mark("provider_dispatch")
@@ -563,6 +572,7 @@ class GenerationManager(
                         userPostpend = config.userPostpend,
                         assistantPrepend = config.assistantPrepend,
                         assistantPostpend = config.assistantPostpend,
+                        phoneMaxScreenshots = config.phoneMaxScreenshots,
                     )
                 }
                 acceptProviderPass(collectProviderRequest(apiToolPath))
@@ -664,7 +674,8 @@ class GenerationManager(
                         val terminalDisposition = generationTerminalDisposition(
                             messageStatus = output.currentStatus,
                             hasPendingGuidance =
-                                callbacks.hasQueuedSends() || endedAtGuidanceBoundary || endedForFollowUp,
+                                callbacks.hasQueuedSends() || callbacks.hasPendingContinuation ||
+                                    endedAtGuidanceBoundary || endedForFollowUp,
                             conversationVisible = terminalConversationVisible,
                         )
                         val finalizationIdentity = RunEffectIdentity(
@@ -722,7 +733,7 @@ class GenerationManager(
                     foregroundLeaseAcquired = foregroundLeaseAcquired,
                     isContextCompact = modelMessageId.startsWith(Constants.COMPACT_MSG_PREFIX),
                     conversationVisible = terminalConversationVisible,
-                    hasPendingContinuation = endedForFollowUp,
+                    hasPendingContinuation = endedForFollowUp || callbacks.hasPendingContinuation,
                 ),
                 callbacks = callbacks.completionEffectsCallbacks(onMessagePersisted),
             )

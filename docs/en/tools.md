@@ -15,6 +15,10 @@ Depending on settings, build, and provider support, tools include:
 - remote Conch/SSH commands, durable job management, file operations, and `file_view_image`
 - the F-Droid Alpine sandbox
 
+## Phone Use
+
+In Settings → Tools → Phone Use, **Max Screenshots** defaults to 5. The slider offers 1 to 16 images, with **Unlimited** to the right of 16. A numeric limit sends only the most recent images from built-in phone tools; Unlimited removes that count limit. Changes apply to new generations. Neither option deletes screenshots from the conversation or affects user attachments, generated images, or images from other tools.
+
 ## Ask User
 
 Interaction settings control whether the model can ask you a question. Blocking questions wait for your answer for five minutes by default. The Timeout slider has seven presets: 1, 2, 5, 10, 15, 30, and 60 minutes, and saves when you release it. A question set shares one timeout. When it expires, submitted answers are kept and the other questions return unanswered. Non-blocking questions remain available while the model continues working. Changes apply to new generations.

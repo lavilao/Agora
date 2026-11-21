@@ -42,6 +42,8 @@ import com.newoether.agora.data.SettingsManager
 import com.newoether.agora.service.AgoraForegroundService
 import com.newoether.agora.service.AppForegroundTracker
 import com.newoether.agora.ui.chat.ChatApp
+import com.newoether.agora.ui.chat.message.LocalShellMarkdownMedia
+import androidx.compose.runtime.CompositionLocalProvider
 import com.newoether.agora.ui.chat.FullScreenMediaPreviewDialog
 import com.newoether.agora.ui.chat.MediaPreviewTarget
 import com.newoether.agora.ui.onboarding.WelcomeScreen
@@ -62,6 +64,7 @@ private fun fullScreenPreviewExitTransition(allowSpatialTransitions: Boolean): E
 class MainActivity : ComponentActivity() {
 
     private val notificationConversationId = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    private val processTextInbox = ProcessTextInbox()
 
     companion object {
         const val EXTRA_CONVERSATION_ID = "com.newoether.agora.extra.CONVERSATION_ID"
@@ -81,6 +84,10 @@ class MainActivity : ComponentActivity() {
         var startupReady = false
         splashScreen.setKeepOnScreenCondition { !startupReady }
         super.onCreate(savedInstanceState)
+        val restoredProcessText = savedStateRegistry.consumeRestoredStateForKey(ProcessTextInbox.SAVED_STATE_KEY)
+        processTextInbox.restore(restoredProcessText)
+        savedStateRegistry.registerSavedStateProvider(ProcessTextInbox.SAVED_STATE_KEY, processTextInbox::save)
+        if (restoredProcessText == null) processTextInbox.receive(intent)
         handleNavigationIntent(intent)
 
         com.newoether.agora.util.DebugLog.init(this)
@@ -224,6 +231,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         false -> {
+                            val processTextRequests by processTextInbox.requests.collectAsState()
                             MainNavigation(
                                 viewModel = viewModel,
                                 settingsManager = settingsManager,
@@ -232,6 +240,8 @@ class MainActivity : ComponentActivity() {
                                     consumeNotificationTarget(notificationConversationId, expectedId)
                                 },
                                 screenshotDestination = intent?.getStringExtra(EXTRA_SCREENSHOT_DESTINATION),
+                                processTextRequest = processTextRequests.firstOrNull(),
+                                onProcessTextConsumed = processTextInbox::consume,
                             )
                         }
                     }
@@ -260,6 +270,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        processTextInbox.receive(intent)
         handleNavigationIntent(intent)
     }
 
@@ -280,6 +291,8 @@ fun MainNavigation(
     notificationConversationId: kotlinx.coroutines.flow.StateFlow<String?>,
     onNotificationConversationConsumed: (String) -> Unit,
     screenshotDestination: String? = null,
+    processTextRequest: ProcessTextRequest? = null,
+    onProcessTextConsumed: (String) -> Unit = {},
 ) {
     val appContext = LocalContext.current.applicationContext
     val motionPolicy = LocalAgoraMotionPolicy.current
@@ -374,7 +387,23 @@ fun MainNavigation(
         pdfViewerSelection = selection
     }
     var pdfPreviewFromDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(processTextRequest?.id) {
+        if (processTextRequest != null) {
+            // Selected text always starts its own conversation, never the one already open.
+            viewModel.createNewChat()
+            showSettings = false
+            showRemote = false
+            showTasks = false
+            taskToOpen = null
+            taskEditorSession.clear()
+            viewModel.mediaPreview.clear()
+            mediaPreviewTarget = null
+            pdfPreviewFromDialog = false
+            topLevelPresentation.present(TopLevelPresentation.CHAT)
+        }
+    }
     val hapticsEnabled by viewModel.settings.hapticsEnabled.collectAsState()
+    val autoWrapCodeBlocks by viewModel.settings.autoWrapCodeBlocks.collectAsState()
     val pdfPages by viewModel.mediaPreview.pdfPages.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarVersionState = remember { mutableIntStateOf(0) }
@@ -458,72 +487,77 @@ fun MainNavigation(
         color = MaterialTheme.colorScheme.background
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            ChatApp(
-                viewModel = viewModel,
-                initialComposerFocusReady = initialComposerFocusReady,
-                onNavigateBack = subagentParentId?.takeIf { !isNewChatMode }?.let { parent ->
-                    { viewModel.selectConversation(parent); Unit }
-                } ?: taskHistoryPreview.backTaskId(currentConversationId, isNewChatMode)
-                    ?.let { taskId ->
-                        {
-                            taskToOpen = taskId
-                            taskEditorSession.requestHistoryReturn()
-                            taskEditorSession.beginHistoryReturnRestore { restore, onRestoreFailure ->
-                                if (restore.originWasNewChat) {
-                                    viewModel.restoreNewChatDestination(onRestoreFailure)
-                                } else {
-                                    restore.originConversationId?.let { origin ->
-                                        viewModel.restoreConversationDestination(origin, onRestoreFailure)
+            // Only native chat resolves shell:// Markdown images; Remote stays outside this provider.
+            CompositionLocalProvider(LocalShellMarkdownMedia provides viewModel.shellMarkdownMedia) {
+                ChatApp(
+                    viewModel = viewModel,
+                    initialComposerFocusReady = initialComposerFocusReady,
+                    processTextRequest = processTextRequest,
+                    onProcessTextConsumed = onProcessTextConsumed,
+                    onNavigateBack = subagentParentId?.takeIf { !isNewChatMode }?.let { parent ->
+                        { viewModel.selectConversation(parent); Unit }
+                    } ?: taskHistoryPreview.backTaskId(currentConversationId, isNewChatMode)
+                        ?.let { taskId ->
+                            {
+                                taskToOpen = taskId
+                                taskEditorSession.requestHistoryReturn()
+                                taskEditorSession.beginHistoryReturnRestore { restore, onRestoreFailure ->
+                                    if (restore.originWasNewChat) {
+                                        viewModel.restoreNewChatDestination(onRestoreFailure)
+                                    } else {
+                                        restore.originConversationId?.let { origin ->
+                                            viewModel.restoreConversationDestination(origin, onRestoreFailure)
+                                        }
                                     }
                                 }
+                                topLevelPresentation.present(TopLevelPresentation.TASKS)
+                                showTasks = true
                             }
-                            topLevelPresentation.present(TopLevelPresentation.TASKS)
-                            showTasks = true
-                        }
+                        },
+                    drawerEnabled = taskHistoryPreview.backTaskId(currentConversationId, isNewChatMode) == null,
+                    openDrawerOnStart = screenshotDestination == "drawer",
+                    initialScrollToTop = screenshotDestination == "chat",
+                    onOpenSettings = {
+                        topLevelPresentation.present(TopLevelPresentation.SETTINGS)
+                        showSettings = true
                     },
-                drawerEnabled = taskHistoryPreview.backTaskId(currentConversationId, isNewChatMode) == null,
-                openDrawerOnStart = screenshotDestination == "drawer",
-                initialScrollToTop = screenshotDestination == "chat",
-                onOpenSettings = {
-                    topLevelPresentation.present(TopLevelPresentation.SETTINGS)
-                    showSettings = true
-                },
-                onOpenRemote = {
-                    topLevelPresentation.present(TopLevelPresentation.REMOTE)
-                    showRemote = true
-                },
-                onOpenTasks = { taskId ->
-                    taskToOpen = taskId
-                    topLevelPresentation.present(TopLevelPresentation.TASKS)
-                    showTasks = true
-                },
-                onMediaClick = openMediaPreview,
-                onFileContentClick = { name, content ->
-                    focusManager.clearFocus()
-                    topLevelPresentation.present(TopLevelPresentation.TEXT_PREVIEW)
-                    viewModel.mediaPreview.showFile(name, content)
-                },
-                onPdfPagesClick = { pages, idx ->
-                    focusManager.clearFocus()
-                    viewModel.mediaPreview.showPdf(pages, idx)
-                    mediaPreviewTarget = MediaPreviewTarget(pages, idx)
-                    pdfPreviewFromDialog = false
-                    topLevelPresentation.present(TopLevelPresentation.MEDIA_PREVIEW)
-                },
-                onPdfPreviewSelect = { pages, idx ->
-                    focusManager.clearFocus()
-                    viewModel.mediaPreview.showPdf(pages, idx)
-                    mediaPreviewTarget = MediaPreviewTarget(pages, idx)
-                    pdfPreviewFromDialog = true
-                    topLevelPresentation.present(TopLevelPresentation.MEDIA_PREVIEW)
-                },
-                pdfViewerSelection = pdfViewerSelection,
-                onTogglePdfSelection = onTogglePdfSelection,
-                onInitPdfSelection = onInitPdfSelection,
-                fullScreenViewerUrls = mediaPreviewTarget?.urls,
-                topLevelPresentation = topLevelPresentation.owner,
-                onSnackbarOffsetChanged = { chatSnackbarOffset = it }
-            )
+                    onOpenRemote = {
+                        topLevelPresentation.present(TopLevelPresentation.REMOTE)
+                        showRemote = true
+                    },
+                    onOpenTasks = { taskId ->
+                        taskToOpen = taskId
+                        topLevelPresentation.present(TopLevelPresentation.TASKS)
+                        showTasks = true
+                    },
+                    onMediaClick = openMediaPreview,
+                    onFileContentClick = { name, content ->
+                        focusManager.clearFocus()
+                        topLevelPresentation.present(TopLevelPresentation.TEXT_PREVIEW)
+                        viewModel.mediaPreview.showFile(name, content)
+                    },
+                    onPdfPagesClick = { pages, idx ->
+                        focusManager.clearFocus()
+                        viewModel.mediaPreview.showPdf(pages, idx)
+                        mediaPreviewTarget = MediaPreviewTarget(pages, idx)
+                        pdfPreviewFromDialog = false
+                        topLevelPresentation.present(TopLevelPresentation.MEDIA_PREVIEW)
+                    },
+                    onPdfPreviewSelect = { pages, idx ->
+                        focusManager.clearFocus()
+                        viewModel.mediaPreview.showPdf(pages, idx)
+                        mediaPreviewTarget = MediaPreviewTarget(pages, idx)
+                        pdfPreviewFromDialog = true
+                        topLevelPresentation.present(TopLevelPresentation.MEDIA_PREVIEW)
+                    },
+                    pdfViewerSelection = pdfViewerSelection,
+                    onTogglePdfSelection = onTogglePdfSelection,
+                    onInitPdfSelection = onInitPdfSelection,
+                    fullScreenViewerUrls = mediaPreviewTarget?.urls,
+                    topLevelPresentation = topLevelPresentation.owner,
+                    onSnackbarOffsetChanged = { chatSnackbarOffset = it }
+                )
+            }
 
             com.newoether.agora.ui.remote.RemoteOverlay(
                 visible = showRemote, settings = viewModel.settings,
@@ -658,7 +692,12 @@ fun MainNavigation(
                 exit = fullScreenPreviewExitTransition(motionPolicy.allowSpatialTransitions)
             ) {
                 if (savedContent != null && savedName != null) {
-                    com.newoether.agora.ui.chat.TextFileViewer(content = savedContent!!, fileName = savedName!!, onClose = { viewModel.mediaPreview.clear() })
+                    com.newoether.agora.ui.chat.TextFileViewer(
+                        content = savedContent!!,
+                        fileName = savedName!!,
+                        onClose = { viewModel.mediaPreview.clear() },
+                        autoWrapCodeBlocks = autoWrapCodeBlocks,
+                    )
                 }
             }
 

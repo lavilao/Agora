@@ -102,7 +102,7 @@ class ShellToolProviderTest {
             )
         )
         val defs = provider.definitions(ctx)
-        assertEquals(13, defs.size)
+        assertEquals(14, defs.size)
         val names = defs.map { it.function.name }.toSet()
         assertEquals(
             setOf(
@@ -114,6 +114,7 @@ class ShellToolProviderTest {
                 "shell_job_stop",
                 "file_read",
                 "file_write",
+                "file_transfer",
                 "file_edit",
                 "file_multi_edit",
                 "file_glob",
@@ -124,8 +125,16 @@ class ShellToolProviderTest {
         )
         val command = defs.single { it.function.name == "shell_exec" }
         assertTrue(command.function.parameters.properties.containsKey("background"))
+        assertTrue(command.function.parameters.properties.containsKey("head_lines"))
+        assertTrue(command.function.parameters.properties.containsKey("tail_lines"))
+        defs.filter { it.function.name.startsWith("shell_") }.forEach {
+            assertTrue(it.function.parameters.properties.containsKey("description"))
+            assertTrue(it.function.parameters.required.contains("description"))
+        }
+        val listJobs = defs.single { it.function.name == "shell_job_list" }
+        assertTrue(listJobs.function.parameters.properties.keys.containsAll(listOf("offset", "limit")))
         val getJob = defs.single { it.function.name == "shell_job_get" }
-        assertEquals(listOf("job_id"), getJob.function.parameters.required)
+        assertEquals(listOf("job_id", "description"), getJob.function.parameters.required)
         val edit = defs.single { it.function.name == "file_edit" }.function.parameters
         assertTrue("edits" !in edit.properties)
         assertTrue(edit.required.containsAll(listOf("old_string", "new_string")))
@@ -147,7 +156,7 @@ class ShellToolProviderTest {
         val cmdTool = defs.find { it.function.name == "shell_exec" }
         assertNotNull(cmdTool)
         assertEquals(
-            listOf("command", "server", "timeout_ms"),
+            listOf("description", "command", "server", "timeout_ms"),
             cmdTool!!.function.parameters.required,
         )
     }
@@ -162,7 +171,7 @@ class ShellToolProviderTest {
         )
         val defs = provider.definitions(ctx)
         val cmdTool = defs.single { it.function.name == "shell_exec" }
-        assertEquals(listOf("command", "timeout_ms"), cmdTool.function.parameters.required)
+        assertEquals(listOf("description", "command", "timeout_ms"), cmdTool.function.parameters.required)
         assertTrue(
             cmdTool.function.parameters.properties.getValue("timeout_ms").description
                 .contains("never killed or restarted")

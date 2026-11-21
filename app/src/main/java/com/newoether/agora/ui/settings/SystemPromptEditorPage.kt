@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.History
@@ -291,7 +292,7 @@ fun SystemPromptEditorPage(
                                     PromptTemplateItem(type = PromptItemType.CUSTOM, value = "")
                                 )
                             },
-                            onInsertVariable = { insertAtIndex = i; showVariablePicker = true }
+                            onInsertVariable = { insertAtIndex = i; showVariablePicker = true },
                         )
 
                         TemplateItemRow(
@@ -324,7 +325,7 @@ fun SystemPromptEditorPage(
                         },
                         onInsertVariable = {
                             insertAtIndex = currentItems.size; showVariablePicker = true
-                        }
+                        },
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -414,7 +415,7 @@ fun SystemPromptEditorPage(
 @Composable
 private fun InsertBetweenButton(
     onInsertText: () -> Unit,
-    onInsertVariable: () -> Unit
+    onInsertVariable: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(

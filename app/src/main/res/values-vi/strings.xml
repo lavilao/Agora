@@ -129,6 +129,7 @@
     <string name="info">Thông tin</string>
     <string name="more">Thêm</string>
     <string name="arguments_label">Đối số:</string>
+    <string name="tool_search_provider">Nhà cung cấp: %1$s</string>
     <string name="result_label">Kết quả:</string>
     <string name="cost_tokens">Tiêu tốn %1$d token</string>
     <string name="token_usage_with_label">Mức sử dụng token: %1$d token</string>
@@ -274,6 +275,8 @@
     <string name="conversation_read_empty">Không có tin nhắn nào trong nhánh đã chọn.</string>
     <string name="conversation_read_page">Trang: tin nhắn từ %1$d-%2$d</string>
     <string name="conversation_read_more">Sử dụng giá trị offset lớn hơn để xem thêm tin nhắn.</string>
+    <string name="conversation_tools_more">Có thêm lời gọi công cụ cho tin nhắn này (tool_offset: %1$d).</string>
+    <string name="conversation_details_error">Không thể đọc chi tiết tin nhắn đã lưu (%1$s).</string>
 
     <!-- General -->
     <string name="back">Quay lại</string>
@@ -283,6 +286,7 @@
     <string name="video_thumbnail">Ảnh thu nhỏ video</string>
     <string name="play">Phát</string>
     <string name="video_preview">Xem trước video</string>
+    <string name="video_playback_failed">Không thể phát video này. Tệp có thể bị thiếu hoặc hỏng.</string>
     <string name="total_tokens">Tổng cộng: %1$d token</string>
     <string name="welcome_to_agora">Chào mừng đến với Agora.</string>
     <string name="database_incompatible">Cơ sở dữ liệu không tương thích</string>
@@ -616,8 +620,9 @@
     <string name="shell_confirm_allow">Cho phép một lần</string>
     <string name="shell_confirm_always">Luôn cho phép máy chủ này</string>
     <string name="shell_confirm_deny">Từ chối</string>
-    <string name="shell_confirm_setting">Xác nhận các hành động shell từ xa</string>
-    <string name="shell_confirm_setting_desc">Hỏi trước khi trợ lý chạy các lệnh hoặc ghi tệp trên các máy chủ SSH/Conch từ xa</string>
+    <string name="shell_confirm_setting">Xác nhận các hành động shell</string>
+    <string name="shell_confirm_setting_desc">Hỏi trước khi trợ lý chạy lệnh hoặc ghi tệp, kể cả trong hộp cát Linux cục bộ</string>
+    <string name="shell_confirm_detail_truncated">Bản xem trước đã rút gọn; toàn bộ nội dung sẽ được ghi.</string>
     <string name="shell_confirm_notification_channel">Phê duyệt lệnh</string>
     <string name="shell_confirm_notification_desc">Yêu cầu cho phép hoặc từ chối lệnh từ xa khi Agora chạy ngầm</string>
     <string name="ask_user_title">Trợ lý đang hỏi</string>
@@ -726,6 +731,7 @@
     <string name="context_part_free">Còn trống</string>
     <string name="context_part_reserved">Dự trữ</string>
     <string name="context_part_used">Đã dùng</string>
+    <string name="ask_agora_action">Hỏi Agora</string>
     <string name="context_compact_streaming">Đang thu gọn ngữ cảnh…</string>
     <string name="context_compact_error">Lỗi thu gọn</string>
     <string name="context_compact_stopped">Đã dừng thu gọn</string>
@@ -991,4 +997,8 @@
     <string name="tool_todo_empty">Danh sách việc cần làm trống</string>
     <string name="tool_agents_empty">Không có tác nhân phụ</string>
     <string name="tool_agent_results_empty">Không có kết quả nào từ tác nhân phụ được trả về</string>
+    <string name="markdown_link_file_missing">Không tìm thấy tệp</string>
+    <string name="markdown_link_file_unavailable">Không thể mở tệp này</string>
+    <string name="markdown_link_shared_storage_required">Cấp quyền truy cập tất cả tệp để mở liên kết bộ nhớ chia sẻ</string>
+    <string name="markdown_link_no_handler">Không có ứng dụng nào có thể mở liên kết này</string>
 </resources>

@@ -200,12 +200,10 @@
     <string name="tool_call_display_mode">Blocs de réflexion et d\'outils</string>
     <string name="tool_call_display_mode_timeline">Chronologie</string>
     <string name="tool_call_display_mode_grouped_timeline">Groupé</string>
-    <string name="tool_call_display_mode_compact">Compact</string>
     <string name="tool_call_display_mode_timeline_desc">Afficher la réponse, la réflexion et les blocs d\'outils dans l\'ordre chronologique</string>
     <string name="tool_call_display_mode_grouped_timeline_desc">Conserver la chronologie mais fusionner les blocs consécutifs de réflexion, d\'outils et d\'images</string>
     <string name="auto_expand_active_group">Développer automatiquement le groupe actif</string>
     <string name="auto_expand_active_group_desc">Développe automatiquement le groupe de réflexion et d’outils actuel, puis le réduit lorsque le modèle poursuit.</string>
-    <string name="tool_call_display_mode_compact_desc">Regrouper les blocs de réflexion et d\'outils au-dessus de la réponse</string>
     <string name="interaction_feedback">Retour d\'interaction</string>
     <string name="stick_to_bottom">Rester en bas</string>
     <string name="stick_to_bottom_desc">Suivre automatiquement le nouveau contenu pendant la génération de la réponse.</string>
@@ -220,11 +218,13 @@
     <string name="web_search_brave">Brave</string>
     <string name="web_search_serper">Serper</string>
     <string name="web_search_tavily">Tavily</string>
+    <string name="web_search_exa">Exa</string>
     <string name="web_search_searxng">SearXNG</string>
     <string name="web_search_duckduckgo">DuckDuckGo</string>
     <string name="web_search_brave_desc">API de recherche axée sur la confidentialité. Offre gratuite disponible.</string>
     <string name="web_search_serper_desc">API Google Search rapide. 2 500 requêtes gratuites par mois.</string>
     <string name="web_search_tavily_desc">API de recherche optimisée pour l\'IA. Conçue pour les agents LLM.</string>
+    <string name="web_search_exa_desc">Recherche neuronale avec extraits de pages. Fonctionne sans clé via l\'endpoint MCP public d\'Exa.</string>
     <string name="web_search_searxng_desc">Moteur de métarecherche auto-hébergé. À utiliser de préférence avec votre propre instance.</string>
     <string name="web_search_duckduckgo_desc">Gratuit, sans clé API. Scraping de lite.duckduckgo.com. Peut être instable et déclencher une protection anti-bot.</string>
     <string name="web_search_select_provider">Sélectionner un fournisseur de recherche</string>
@@ -233,7 +233,9 @@
     <string name="web_search_serper_key">Clé d\'API Serper</string>
     <string name="web_search_serper_key_hint">Clé d\'API depuis serper.dev</string>
     <string name="web_search_tavily_key">Clé d\'API Tavily</string>
+    <string name="web_search_exa_key">Clé d\'API Exa (facultatif)</string>
     <string name="web_search_tavily_key_hint">Clé d\'API depuis tavily.com</string>
+    <string name="web_search_exa_key_hint">Facultatif. Laissez vide pour utiliser l\'endpoint public sans clé d\'Exa.</string>
     <string name="web_search_num_results">Résultats max</string>
     <string name="web_search_num_results_desc">Nombre de résultats à récupérer : %1$d (1-10)</string>
     <string name="web_search_searxng_fallback_desc">Les instances publiques sont souvent limitées en débit. L\'auto-hébergement est recommandé pour une utilisation fiable.</string>
@@ -271,7 +273,7 @@
     <!-- Settings - Linux Sandbox -->
     <string name="sandbox_title">Bac à sable local</string>
     <string name="sandbox_enable">Activer le bac à sable local</string>
-    <string name="sandbox_enable_desc">Exécuter des commandes dans un Alpine Linux isolé sur l\'appareil</string>
+    <string name="sandbox_enable_desc">Exécuter des commandes dans un environnement Linux isolé sur l\'appareil</string>
     <string name="shell_device_host">Hôte SSH</string>
     <string name="shell_device_host_hint">192.168.1.100</string>
     <string name="shell_device_port">Port</string>
@@ -297,12 +299,12 @@
     <string name="sandbox_package_name">Nom du paquet</string>
     <string name="sandbox_quick_install">Installation rapide</string>
     <string name="sandbox_installed">Paquets installés</string>
-    <string name="sandbox_no_packages">Aucun paquet installé. Base Alpine uniquement.</string>
+    <string name="sandbox_no_packages">Aucun paquet installé à afficher.</string>
     <string name="sandbox_danger_zone">Zone de danger</string>
     <string name="sandbox_reset">Réinitialiser l\'environnement</string>
     <string name="sandbox_reset_title">Réinitialiser l\'environnement ?</string>
-    <string name="sandbox_reset_desc">Supprimer le rootfs Alpine et tous les paquets</string>
-    <string name="sandbox_reset_confirm">Cela supprimera le rootfs Alpine Linux et tous les paquets installés. Cette action est irréversible.</string>
+    <string name="sandbox_reset_desc">Supprimer le système Linux sélectionné et ses paquets installés</string>
+    <string name="sandbox_reset_confirm">Le système Linux sélectionné et ses paquets installés seront supprimés. Les fichiers du dossier personnel partagé et les autres distributions seront conservés. Cette action est irréversible.</string>
     <string name="sandbox_not_supported">Bac à sable local non pris en charge</string>
     <string name="sandbox_snackbar_installed">%s installé</string>
     <string name="sandbox_snackbar_install_failed">Échec de l\'installation de %s</string>
@@ -316,8 +318,18 @@
     <string name="sandbox_snackbar_error">Erreur : %s</string>
     <string name="sandbox_not_supported_desc">Cette fonctionnalité n\'est pas disponible dans la version actuelle</string>
     <string name="sandbox_not_installed">Non installé</string>
-    <string name="sandbox_extracting_rootfs">Extraction du rootfs Alpine...</string>
-    <string name="sandbox_downloading_rootfs">Téléchargement du rootfs Alpine… %d%%</string>
+    <string name="sandbox_extracting_rootfs">Extraction du système Linux...</string>
+    <string name="sandbox_downloading_rootfs">Téléchargement du système Linux… %d%%</string>
+    <string name="sandbox_downloading_rootfs_unknown">Téléchargement du système Linux…</string>
+    <string name="sandbox_verifying_rootfs">Vérification du téléchargement…</string>
+    <string name="sandbox_validating_rootfs">Validation du système Linux…</string>
+    <string name="sandbox_preparing_rootfs">Préparation…</string>
+    <string name="sandbox_mirror">Source des logiciels</string>
+    <string name="sandbox_mirror_desc">Télécharger le système Linux et les paquets depuis cette source</string>
+    <string name="sandbox_mirror_official">Officielle</string>
+    <string name="sandbox_mirror_tuna">Miroir chinois (TUNA)</string>
+    <string name="sandbox_mirror_applied">Sources de paquets mises à jour</string>
+    <string name="sandbox_mirror_failed">Impossible de mettre à jour les sources de paquets</string>
     <string name="sandbox_install_failed">Échec de l\'installation</string>
     <string name="sandbox_installed_label">Installé</string>
     <string name="sandbox_failed_label">Échec</string>
@@ -542,4 +554,6 @@
     <string name="install_guide_run_command">Copier et exécuter la commande</string>
     <string name="conch_guide_finish">Ajoutez l’appareil avec l’adresse du service et la clé API fournies par l’installateur.</string>
     <string name="filo_guide_finish">À l’invite, choisissez le compte Windows et les sources. Ajoutez ensuite l’appareil avec l’URL du service et le jeton d’accès fournis par l’installateur.</string>
+    <string name="tool_call_display_mode_compact">Compact</string>
+    <string name="tool_call_display_mode_compact_desc">Regrouper les blocs de réflexion et d\'outils au-dessus de la réponse</string>
 </resources>

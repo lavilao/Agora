@@ -1,8 +1,13 @@
 package com.newoether.agora.ui.chat
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -19,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +55,8 @@ import com.newoether.agora.util.Constants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.net.URI
 
 fun resolveAttachmentType(
     path: String,
@@ -72,8 +81,9 @@ fun findMetaForIndex(meta: AttachmentMeta?, index: Int): AttachmentItem? {
     if (meta == null) return null
     meta.items.firstOrNull { it.imageIndex == index }?.let { return it }
     return meta.items.firstOrNull { m ->
-        m.imageIndex != null && (m.pageCount ?: 1) > 0 &&
-        index in m.imageIndex until m.imageIndex + (m.pageCount ?: 1)
+        val imageIndex = m.imageIndex
+        imageIndex != null && (m.pageCount ?: 1) > 0 &&
+        index in imageIndex until imageIndex + (m.pageCount ?: 1)
     }
 }
 
@@ -155,6 +165,22 @@ fun AttachmentThumbnailItem(
         .size(120.dp, 90.dp)
         .clip(shape)
 
+    if (unavailable && type == "image") {
+        Box(
+            modifier = thumbModifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.BrokenImage,
+                contentDescription = androidx.compose.ui.res.stringResource(
+                    com.newoether.agora.R.string.attachment_copy_failed_image,
+                ),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        return
+    }
     if (unavailable) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -182,7 +208,7 @@ fun AttachmentThumbnailItem(
                     com.newoether.agora.R.string.attachment_unavailable,
                 ),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                 maxLines = 1,
             )
         }
@@ -220,9 +246,9 @@ fun AttachmentThumbnailItem(
             }
         }
         "pdf" -> {
-            val hasPages = pdfPages.isNotEmpty()
-            val clickMod = if (hasPages && handlers.onPdfClick != null)
-                Modifier.clip(shape).clickable { handlers.onPdfClick(pdfPages, 0) } else Modifier
+            val firstPage = pdfPages.indexOfFirst(String::isNotBlank)
+            val clickMod = if (firstPage >= 0 && handlers.onPdfClick != null)
+                Modifier.clip(shape).clickable { handlers.onPdfClick(pdfPages, firstPage) } else Modifier
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(72.dp)) {
                 FileThumbnail(fileName = null, isPdf = true, modifier = Modifier.size(64.dp).then(clickMod), shape = shape)
                 if (showFileName && fileName != null) {
@@ -231,13 +257,45 @@ fun AttachmentThumbnailItem(
             }
         }
         "video" -> {
-            val clickMod = if (originalUri != null && handlers.onMediaClick != null)
-                Modifier.clip(shape).clickable { handlers.onMediaClick(allMediaUrls, mediaIndex) } else Modifier
-            Box(modifier = clickMod) {
-                MessageMediaThumbnail(
-                    imagePath = imagePath,
-                    modifier = thumbModifier,
-                    showPlay = true,
+            val actionSource = originalUri?.takeIf(String::isNotBlank)
+                ?: imagePath.takeIf(String::isNotBlank)
+            var actionsVisible by remember(actionSource) { mutableStateOf(false) }
+            Box(
+                modifier = Modifier.clip(shape).combinedClickable(
+                    onClick = {
+                        if (originalUri != null) handlers.onMediaClick?.invoke(allMediaUrls, mediaIndex)
+                    },
+                    onLongClick = {
+                        haptics.longPress()
+                        if (actionSource != null) actionsVisible = true
+                    },
+                    hapticFeedbackEnabled = false,
+                ),
+            ) {
+                // A stored frame artifact (Local Sandbox slicing) already is an image. Plain videos
+                // have none, so the poster is decoded from the video bytes at display time.
+                if (imagePath.isNotBlank()) {
+                    MessageMediaThumbnail(
+                        imagePath = imagePath,
+                        modifier = thumbModifier,
+                        showPlay = true,
+                    )
+                } else {
+                    VideoPosterThumbnail(
+                        source = originalUri,
+                        contentDescription = null,
+                        modifier = thumbModifier,
+                        shape = shape,
+                    )
+                }
+            }
+            if (actionsVisible && actionSource != null) {
+                VideoActionsSheet(
+                    url = actionSource,
+                    onMessage = { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    },
+                    onDismiss = { actionsVisible = false },
                 )
             }
         }
@@ -358,11 +416,115 @@ private fun MessageMediaThumbnail(
                         contentDescription = androidx.compose.ui.res.stringResource(
                             com.newoether.agora.R.string.attachment_copy_failed_image,
                         ),
-                        tint = MaterialTheme.colorScheme.error,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                         modifier = Modifier.size(32.dp),
                     )
                 }
             }
+        }
+    }
+}
+
+private const val VIDEO_POSTER_CACHE_ENTRIES = 16
+private const val VIDEO_POSTER_MAX_WIDTH_PX = 512
+
+/** Display-only video frames. Nothing is persisted: attachment artifacts stay the only media. */
+private val videoPosterCache =
+    object : android.util.LruCache<String, Bitmap>(VIDEO_POSTER_CACHE_ENTRIES) {}
+
+private fun loadVideoPoster(context: Context, source: String): Bitmap? {
+    videoPosterCache.get(source)?.let { return it }
+    val retriever = MediaMetadataRetriever()
+    return try {
+        when {
+            source.startsWith("/") -> retriever.setDataSource(source)
+            source.startsWith("file:", ignoreCase = true) -> retriever.setDataSource(URI(source).path)
+            else -> retriever.setDataSource(context.applicationContext, Uri.parse(source))
+        }
+        val durationMs = retriever.extractMetadata(
+            MediaMetadataRetriever.METADATA_KEY_DURATION,
+        )?.toLongOrNull() ?: 0L
+        // Skip a possibly black opening second, but stay near the head of the clip.
+        val frameUs = (durationMs * 100L).coerceIn(0L, 2_000_000L)
+        retriever.getFrameAtTime(frameUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            ?.let(::scaledPoster)
+    } catch (_: Exception) {
+        null
+    } catch (_: OutOfMemoryError) {
+        null
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
+private fun scaledPoster(bitmap: Bitmap): Bitmap {
+    if (bitmap.width <= VIDEO_POSTER_MAX_WIDTH_PX) return bitmap
+    val height = (bitmap.height.toLong() * VIDEO_POSTER_MAX_WIDTH_PX / bitmap.width)
+        .toInt()
+        .coerceAtLeast(1)
+    val scaled = Bitmap.createScaledBitmap(bitmap, VIDEO_POSTER_MAX_WIDTH_PX, height, true)
+    if (scaled !== bitmap) bitmap.recycle()
+    return scaled
+}
+
+/** Decodes one frame of [source] for a poster; the result never leaves memory. */
+@Composable
+internal fun rememberVideoPoster(source: String?): Bitmap? {
+    val context = LocalContext.current
+    var poster by remember(source) {
+        mutableStateOf(source?.takeIf(String::isNotBlank)?.let(videoPosterCache::get))
+    }
+    LaunchedEffect(source) {
+        val key = source?.takeIf(String::isNotBlank) ?: return@LaunchedEffect
+        if (poster != null) return@LaunchedEffect
+        val loaded = withContext(Dispatchers.IO) { loadVideoPoster(context.applicationContext, key) }
+        if (loaded != null) {
+            videoPosterCache.put(key, loaded)
+            poster = loaded
+        }
+    }
+    return poster
+}
+
+/** Video cell with a real first frame; the camera glyph stays only while nothing decodes. */
+@Composable
+internal fun VideoPosterThumbnail(
+    source: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(8.dp),
+    showPlay: Boolean = true,
+) {
+    val poster = rememberVideoPoster(source)
+    Box(
+        modifier = modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (poster != null) {
+            Image(
+                bitmap = poster.asImageBitmap(),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (showPlay) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .padding(4.dp),
+                )
+            }
+        } else {
+            Icon(
+                Icons.Default.Videocam,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp),
+            )
         }
     }
 }

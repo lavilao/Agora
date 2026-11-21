@@ -107,6 +107,10 @@
     <string name="tool_read_file_empty">Read %1$s · empty</string>
     <string name="tool_found_no_matches">No matches found</string>
     <string name="file_path_unknown">Unknown file</string>
+    <string name="markdown_link_file_missing">File not found</string>
+    <string name="markdown_link_file_unavailable">Cannot open this file</string>
+    <string name="markdown_link_shared_storage_required">Grant all-files access to open shared storage links</string>
+    <string name="markdown_link_no_handler">No app can open this link</string>
     <string name="tool_exit_code">Exit %1$d</string>
     <string name="tool_exit">Exit</string>
     <string name="tool_shell_returned_code">Command returned %1$d</string>
@@ -163,6 +167,7 @@
     <string name="info">Info</string>
     <string name="more">More</string>
     <string name="arguments_label">Arguments:</string>
+    <string name="tool_search_provider">Provider: %1$s</string>
     <string name="result_label">Result:</string>
     <string name="cost_tokens">Cost %1$d tokens</string>
     <string name="token_usage_with_label">Token usage: %1$d tokens</string>
@@ -308,6 +313,8 @@
     <string name="conversation_read_empty">No messages in the selected branch.</string>
     <string name="conversation_read_page">Page: messages %1$d-%2$d</string>
     <string name="conversation_read_more">Use a higher offset to see more messages.</string>
+    <string name="conversation_tools_more">More tool calls are available for this message (tool_offset: %1$d).</string>
+    <string name="conversation_details_error">Could not read stored message details (%1$s).</string>
 
     <!-- General -->
     <string name="back">Back</string>
@@ -319,6 +326,7 @@
     <string name="video_thumbnail">Video thumbnail</string>
     <string name="play">Play</string>
     <string name="video_preview">Video preview</string>
+    <string name="video_playback_failed">This video can\'t be played. The file may be missing or damaged.</string>
     <string name="total_tokens">Total: %1$d tokens</string>
     <string name="welcome_to_agora">Welcome to Agora.</string>
     <string name="database_incompatible">Database Incompatible</string>
@@ -654,8 +662,9 @@
     <string name="shell_confirm_allow">Allow once</string>
     <string name="shell_confirm_always">Always allow this server</string>
     <string name="shell_confirm_deny">Deny</string>
-    <string name="shell_confirm_setting">Confirm Remote Shell Actions</string>
-    <string name="shell_confirm_setting_desc">Ask before the assistant runs commands or writes files on remote SSH/Conch servers</string>
+    <string name="shell_confirm_setting">Confirm Shell Actions</string>
+    <string name="shell_confirm_setting_desc">Ask before the assistant runs commands or writes files, including on the local Linux sandbox</string>
+    <string name="shell_confirm_detail_truncated">Preview truncated; the full content will be written.</string>
     <string name="shell_confirm_notification_channel">Command approval</string>
     <string name="shell_confirm_notification_desc">Asks you to allow or deny a remote command while Agora is in the background</string>
     <string name="ask_user_title">The assistant is asking</string>
@@ -705,6 +714,7 @@
     <string name="context_part_free">Free</string>
     <string name="context_part_reserved">Reserved</string>
     <string name="context_part_used">Used</string>
+    <string name="ask_agora_action">Ask Agora</string>
     <string name="context_compact_streaming">Context compacting…</string>
     <string name="context_compact_error">Compact error</string>
     <string name="context_compact_stopped">Compact stopped</string>

@@ -209,12 +209,10 @@
     <string name="tool_call_display_mode">Thinking &amp; Tool Blocks</string>
     <string name="tool_call_display_mode_timeline">Timeline</string>
     <string name="tool_call_display_mode_grouped_timeline">Grouped</string>
-    <string name="tool_call_display_mode_compact">Compact</string>
     <string name="tool_call_display_mode_timeline_desc">Show answer, thinking, and tool blocks in chronological order</string>
     <string name="tool_call_display_mode_grouped_timeline_desc">Keep timeline order but merge consecutive thinking, tool, and image blocks</string>
     <string name="auto_expand_active_group">Auto-Expand Active Group</string>
     <string name="auto_expand_active_group_desc">Automatically expand the current thinking and tool group, then collapse it when the model moves on.</string>
-    <string name="tool_call_display_mode_compact_desc">Group thinking and tool blocks above the answer</string>
 
     <!-- Settings - Web Search Page -->
     <string name="web_search_title">Web Search</string>
@@ -225,12 +223,14 @@
     <string name="web_search_kagi">Kagi</string>
     <string name="web_search_serper">Serper</string>
     <string name="web_search_tavily">Tavily</string>
+    <string name="web_search_exa">Exa</string>
     <string name="web_search_searxng">SearXNG</string>
     <string name="web_search_duckduckgo">DuckDuckGo</string>
     <string name="web_search_brave_desc">Privacy-focused search API. Free tier available.</string>
     <string name="web_search_kagi_desc">Premium search API with personalized results. Pay per use.</string>
     <string name="web_search_serper_desc">Fast Google Search API. 2,500 free queries/month.</string>
     <string name="web_search_tavily_desc">AI-optimized search API. Built for LLM agents.</string>
+    <string name="web_search_exa_desc">Neural search with page highlights. Works without a key through Exa\'s public MCP endpoint.</string>
     <string name="web_search_searxng_desc">Self-hosted metasearch engine. Best used with your own instance.</string>
     <string name="web_search_duckduckgo_desc">Free, no API key. Web scraping lite.duckduckgo.com. May be unstable and trigger anti-bot protection.</string>
     <string name="web_search_select_provider">Select Search Provider</string>
@@ -241,7 +241,9 @@
     <string name="web_search_serper_key">Serper API Key</string>
     <string name="web_search_serper_key_hint">API key from serper.dev</string>
     <string name="web_search_tavily_key">Tavily API Key</string>
+    <string name="web_search_exa_key">Exa API Key (optional)</string>
     <string name="web_search_tavily_key_hint">API key from tavily.com</string>
+    <string name="web_search_exa_key_hint">Optional. Leave blank to use Exa\'s keyless public endpoint.</string>
     <string name="web_search_num_results">Max Results</string>
     <string name="web_search_num_results_desc">Number of results to fetch: %1$d (1-10)</string>
     <string name="web_search_searxng_fallback_desc">Public instances are often rate-limited. Self-hosting is recommended for reliable use.</string>
@@ -279,7 +281,7 @@
     <!-- Settings - Linux Sandbox -->
     <string name="sandbox_title">Local Sandbox</string>
     <string name="sandbox_enable">Enable Local Sandbox</string>
-    <string name="sandbox_enable_desc">Run commands in isolated Alpine Linux on-device</string>
+    <string name="sandbox_enable_desc">Run commands in an isolated Linux environment on-device</string>
     <string name="shell_device_host">SSH Host</string>
     <string name="shell_device_host_hint">192.168.1.100</string>
     <string name="shell_device_port">Port</string>
@@ -306,12 +308,12 @@
     <string name="sandbox_package_name">Package name</string>
     <string name="sandbox_quick_install">Quick Install</string>
     <string name="sandbox_installed">Installed Packages</string>
-    <string name="sandbox_no_packages">No packages installed. Alpine base only.</string>
+    <string name="sandbox_no_packages">No installed packages to show.</string>
     <string name="sandbox_danger_zone">Danger Zone</string>
     <string name="sandbox_reset">Reset Environment</string>
     <string name="sandbox_reset_title">Reset Environment?</string>
-    <string name="sandbox_reset_desc">Remove Alpine rootfs and all packages</string>
-    <string name="sandbox_reset_confirm">This will delete the Alpine Linux rootfs and all installed packages. This action cannot be undone.</string>
+    <string name="sandbox_reset_desc">Delete the selected Linux system and its installed packages</string>
+    <string name="sandbox_reset_confirm">This will delete the selected Linux system and its installed packages. Shared home files and other distributions will remain. This action cannot be undone.</string>
     <string name="sandbox_not_supported">Local Sandbox Not Supported</string>
     <string name="sandbox_snackbar_installed">Installed %s</string>
     <string name="sandbox_snackbar_install_failed">Failed to install %s</string>
@@ -325,8 +327,18 @@
     <string name="sandbox_snackbar_error">Error: %s</string>
     <string name="sandbox_not_supported_desc">This feature is not available in the current build</string>
     <string name="sandbox_not_installed">Not installed</string>
-    <string name="sandbox_extracting_rootfs">Extracting Alpine rootfs...</string>
-    <string name="sandbox_downloading_rootfs">Downloading Alpine rootfs… %d%%</string>
+    <string name="sandbox_extracting_rootfs">Extracting Linux system...</string>
+    <string name="sandbox_downloading_rootfs">Downloading Linux system… %d%%</string>
+    <string name="sandbox_downloading_rootfs_unknown">Downloading Linux system…</string>
+    <string name="sandbox_verifying_rootfs">Verifying download…</string>
+    <string name="sandbox_validating_rootfs">Validating Linux system…</string>
+    <string name="sandbox_preparing_rootfs">Preparing…</string>
+    <string name="sandbox_mirror">Software source</string>
+    <string name="sandbox_mirror_desc">Download the Linux system and packages from this source</string>
+    <string name="sandbox_mirror_official">Official</string>
+    <string name="sandbox_mirror_tuna">China mirror (TUNA)</string>
+    <string name="sandbox_mirror_applied">Package sources updated</string>
+    <string name="sandbox_mirror_failed">Could not update package sources</string>
     <string name="sandbox_install_failed">Install failed</string>
     <string name="sandbox_installed_label">Installed</string>
     <string name="sandbox_failed_label">Failed</string>
@@ -559,4 +571,6 @@
     <string name="install_guide_run_command">Copy and Run the Command</string>
     <string name="conch_guide_finish">Add the device with the service address and API key shown by the installer.</string>
     <string name="filo_guide_finish">Choose the Windows account and sources when prompted. Then add the device with the service URL and access token shown by the installer.</string>
+    <string name="tool_call_display_mode_compact">Compact</string>
+    <string name="tool_call_display_mode_compact_desc">Group thinking and tool blocks above the answer</string>
 </resources>

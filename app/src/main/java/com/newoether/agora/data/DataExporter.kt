@@ -500,18 +500,13 @@ class DataExporter(
 
                         if (message.images.isNotEmpty()) {
                             val oldToNewImageIndex = mutableMapOf<Int, Int>()
-                            archivedImagesByMessage[message.id] = buildList {
-                                message.images.forEachIndexed { oldIndex, source ->
-                                    copySource(
-                                        source,
-                                        NativeBackupFormat.IMAGE_MEDIA_PREFIX,
-                                        referencedMedia,
-                                    )?.let { entry ->
-                                        oldToNewImageIndex[oldIndex] = size
-                                        add(entry)
-                                        imagesExported++
-                                    }
-                                }
+                            archivedImagesByMessage[message.id] = message.images.mapIndexed { index, source ->
+                                oldToNewImageIndex[index] = index
+                                copySource(
+                                    source,
+                                    NativeBackupFormat.IMAGE_MEDIA_PREFIX,
+                                    referencedMedia,
+                                )?.also { imagesExported++ }.orEmpty()
                             }
                             attachmentMetaByMessage[message.id] =
                                 NativeBackupMediaPolicy.rewriteAttachmentMetaForExport(
@@ -570,6 +565,7 @@ class DataExporter(
                             toolCallJson = NativeBackupMediaPolicy.rewriteToolImagePathsForExport(
                                 raw = message.toolCallJson,
                                 archiveEntryForSource = trackedLookup(referencedMedia),
+                                onMissingResource = { missingResourceCount++ },
                             ),
                             attachmentMeta = if (message.id in attachmentMetaByMessage) {
                                 attachmentMetaByMessage[message.id]

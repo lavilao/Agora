@@ -74,6 +74,71 @@ layout, states, density, or interaction design has been approved.
   relay-owned caching, negotiate relay policy, add block-level breakpoints, or retry with altered
   cache parameters. Provider settings must reach every applicable request caller.
 
+## Generation image quality
+- Generation places its immediate-save Image Quality group last, after generation parameters.
+  Its whole-row Quality Mode SettingsItem has a leading image icon, title,
+  effective longest-edge/JPEG description and a trailing selected value. It opens the shared
+  Appearance-style dropdown with a selected-item checkmark and the existing menu surface treatment.
+- Modes are Light, Balanced, High and Custom. `image-processing.md` owns their numeric policy.
+  Only Custom shows the two controls Maximum Long Edge and JPEG Quality. Each control retains a
+  leading icon, title, supporting description and displayed value, and uses the existing persisted
+  slider feedback gate. A drag updates its local displayed value and commits once on release;
+  stale persistence emissions do not interrupt the gesture or overwrite its pending final value.
+  Maximum Long Edge uses seven discrete integer stops: 128, 256, 512, 1024, 2048, 4096 and 8192 px.
+  An existing off-stop integer remains displayed and persisted unchanged until the user selects
+  a stop. JPEG Quality retains its existing range and interaction.
+- Mode changes persist immediately, retain custom values and apply to newly processed images.
+  There is no Save action or save-on-exit draft. The existing Generation scaffold/navigation and
+  shared SettingsGroup own spacing and navigation. All supported locales define the complete copy.
+
+## Sandbox distributions
+
+The F-Droid sandbox supports Alpine, Debian and Ubuntu arm64 userlands. Existing installations
+remain on Alpine by default without moving or deleting their root filesystem. Each distribution
+retains its own root filesystem and installed packages; the existing `/home/agora` directory and
+optional `/mnt/shared` mount remain shared. Exactly one distribution is selected globally.
+Selection is device-local sandbox state and is not included in portable settings archives.
+
+Before the selected system is available, Environment shows Distribution and Install as whole-row
+SettingsItems with the same headline, supporting text and primary trailing-label hierarchy. Reuse
+Appearance's end-aligned value treatment, AgoraDropdownMenu and selected checkmark. The selector
+uses a list icon; the version row uses the selected distribution's brand mark. Selection
+applies immediately and does not start a download. Once the selected system is ready, show only
+its installed dashboard, with its own version, packages and quick-install suggestions. A completed
+reset returns to the setup rows. There is no Save action.
+
+Changing distribution clears stale operation output and package projections. Installation and
+package work disable selection; the backend also refuses a switch while shell jobs or filesystem
+mutations are active. A refused switch leaves the persisted selection unchanged and reports why.
+An uninstalled system is a normal state, not a failure. A failed Install operation emits one
+localized message with the actual failure reason through the existing app snackbar path. A
+background availability check or recomposition must not post or replace that outcome. Do not show
+an inline error block. When the operation settles without installing a system, Install is available
+again for an explicit retry.
+
+Reset deletes only the selected distribution's system and installed packages after existing job
+settlement. Its confirmation states that shared home files and other distributions remain intact.
+Installation verifies a pinned archive before extraction, stages a complete filesystem before
+publication, and never overwrites an existing system to recover from an error. The existing
+scaffold, groups, dashboard, storage display, file access and documentation entry remain owners.
+All supported locales define the choice, install, failure and reset copy. Focused verification covers
+matching setup row typography, disabled actions and progress during installation, hiding setup
+controls after success, restoring them after reset, and retry with exactly one failure snackbar.
+
+Package install, removal and upgrade stream each output line to the dashboard terminal while the
+process runs; the terminal must never wait for the process to exit before showing output. Streamed
+chunks are split into complete lines, carriage-return progress updates become separate lines, and
+the retained copy used for failure messages stays bounded. The terminal card keeps its fixed height,
+monospace body and bottom-following scroll inside a 20 dp rounded surface.
+
+## Sandbox storage usage
+
+The Sandbox dashboard displays approximate private regular-file usage from the root filesystem
+and the separate home directory, including attachments. It does not follow symbolic links or count
+`/mnt/shared`. Show the used size only; there is no enforced 2 GiB sandbox quota, capacity denominator
+or quota progress bar. Refresh on page entry and after package/backend operations settle. This is
+a best-effort file-size snapshot, not allocated filesystem blocks or a live storage meter.
+
 ## Appearance defaults
 
 - When no appearance preference has been persisted, the app uses the Forest color scheme with the
@@ -475,6 +540,9 @@ in the existing editor. Source links retain the established external-link icon a
   remain removable rows with the existing localized Unknown label and technical key underneath;
   preview compilation contributes no text for them. Opening or leaving the editor never deletes
   or rewrites those saved items. Save and unsaved Back behavior stay unchanged.
+- The explicit-save editor also offers an HTML Preview Guidance insertion as an ordinary CUSTOM text
+  item, following [interactive-html.md](interactive-html.md). It edits only the draft and remains fully
+  editable/removable; it is not a predefined tool variable or runtime prompt injection.
 - The existing variable picker keeps its title, SettingsItem rows, spacing and scroll behavior.
   Selection changes the draft only. Default copy describes response rules, tool guidance, the Skill
   catalog and Active Memory. Exact template ordering, migration and ownership follow

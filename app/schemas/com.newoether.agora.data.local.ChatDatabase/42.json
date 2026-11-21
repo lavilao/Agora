@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 42,
-    "identityHash": "4ed35d3f5c68726b5f2bf6ced24ac1cd",
+    "identityHash": "845956e8a007a725d7e79e3b56cc7028",
     "entities": [
       {
         "tableName": "conversations",
@@ -293,7 +293,7 @@
       },
       {
         "tableName": "messages",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `parentId` TEXT, `text` TEXT NOT NULL, `images` TEXT NOT NULL, `thoughts` TEXT, `thoughtTitle` TEXT, `tokenCount` INTEGER NOT NULL, `inputTokenCount` INTEGER, `cachedInputTokenCount` INTEGER, `cacheWriteInputTokenCount` INTEGER, `uncachedInputTokenCount` INTEGER, `outputTokenCount` INTEGER, `reasoningTokenCount` INTEGER, `generationDurationMs` INTEGER, `promptProcessingTokensPerSecond` REAL, `runtimeName` TEXT, `status` TEXT NOT NULL, `participant` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `thoughtTimeMs` INTEGER, `modelName` TEXT, `toolCallJson` TEXT, `attachmentMeta` TEXT, `runId` TEXT NOT NULL, `runSequence` INTEGER NOT NULL, `consumedAtPass` INTEGER, `sourceJson` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`runId`) REFERENCES `runs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `parentId` TEXT, `text` TEXT NOT NULL, `images` TEXT NOT NULL, `thoughts` TEXT, `thoughtTitle` TEXT, `tokenCount` INTEGER NOT NULL, `inputTokenCount` INTEGER, `cachedInputTokenCount` INTEGER, `cacheWriteInputTokenCount` INTEGER, `uncachedInputTokenCount` INTEGER, `outputTokenCount` INTEGER, `reasoningTokenCount` INTEGER, `generationDurationMs` INTEGER, `status` TEXT NOT NULL, `participant` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `thoughtTimeMs` INTEGER, `modelName` TEXT, `toolCallJson` TEXT, `attachmentMeta` TEXT, `runId` TEXT NOT NULL, `runSequence` INTEGER NOT NULL, `consumedAtPass` INTEGER, `sourceJson` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`runId`) REFERENCES `runs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -374,16 +374,6 @@
             "fieldPath": "generationDurationMs",
             "columnName": "generationDurationMs",
             "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "promptProcessingTokensPerSecond",
-            "columnName": "promptProcessingTokensPerSecond",
-            "affinity": "REAL"
-          },
-          {
-            "fieldPath": "runtimeName",
-            "columnName": "runtimeName",
-            "affinity": "TEXT"
           },
           {
             "fieldPath": "status",
@@ -1049,11 +1039,228 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "semantic_sources",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`messageId` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `eligible` INTEGER NOT NULL, `sourcePrefix` BLOB NOT NULL, `sourceFingerprint` TEXT, `searchLength` INTEGER NOT NULL, `historyEligible` INTEGER NOT NULL, PRIMARY KEY(`messageId`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "messageId",
+            "columnName": "messageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eligible",
+            "columnName": "eligible",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourcePrefix",
+            "columnName": "sourcePrefix",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceFingerprint",
+            "columnName": "sourceFingerprint",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "searchLength",
+            "columnName": "searchLength",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "historyEligible",
+            "columnName": "historyEligible",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "messageId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_semantic_sources_conversationId_messageId",
+            "unique": false,
+            "columnNames": [
+              "conversationId",
+              "messageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_semantic_sources_conversationId_messageId` ON `${TABLE_NAME}` (`conversationId`, `messageId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "conversations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "conversationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "semantic_conversations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`conversationId` TEXT NOT NULL, `sourceRevision` INTEGER NOT NULL, `eligibleCount` INTEGER NOT NULL, `cacheEligible` INTEGER NOT NULL, PRIMARY KEY(`conversationId`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceRevision",
+            "columnName": "sourceRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eligibleCount",
+            "columnName": "eligibleCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheEligible",
+            "columnName": "cacheEligible",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "conversationId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "conversations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "conversationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "semantic_model_conversations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`modelId` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `cachedCount` INTEGER NOT NULL, `indexedRevision` INTEGER NOT NULL, PRIMARY KEY(`modelId`, `conversationId`), FOREIGN KEY(`conversationId`) REFERENCES `conversations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "modelId",
+            "columnName": "modelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedCount",
+            "columnName": "cachedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "indexedRevision",
+            "columnName": "indexedRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "modelId",
+            "conversationId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_semantic_model_conversations_conversationId",
+            "unique": false,
+            "columnNames": [
+              "conversationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_semantic_model_conversations_conversationId` ON `${TABLE_NAME}` (`conversationId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "conversations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "conversationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "semantic_metadata_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `complete` INTEGER NOT NULL, `afterMessageId` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "complete",
+            "columnName": "complete",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "afterMessageId",
+            "columnName": "afterMessageId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4ed35d3f5c68726b5f2bf6ced24ac1cd')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '845956e8a007a725d7e79e3b56cc7028')"
     ]
   }
 }

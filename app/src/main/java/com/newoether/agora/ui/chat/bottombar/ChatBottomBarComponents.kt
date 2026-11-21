@@ -45,8 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.FastOutSlowInEasing
+import com.newoether.agora.ui.motion.IdentityLabelCrossfade
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
@@ -55,13 +54,16 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import com.newoether.agora.ui.motion.rememberIdentityClipWidth
 import com.newoether.agora.R
 import com.newoether.agora.ui.theme.ChatType
+import com.newoether.agora.ui.theme.chatCompactWidth
 import com.newoether.agora.ui.components.AgoraDropdownMenuItem
 import com.newoether.agora.ui.components.AgoraExposedDropdownMenu
 
 internal const val CHAT_DROPDOWN_MENU_ICON_SIZE_DP = 24
 
-private val MODEL_SELECTOR_HEIGHT = 38.dp
-private val MODEL_SELECTOR_PADDING = 8.dp
+// Stays concentric with the controls capsule: radius = capsule radius - 5 dp (38 dp regular, 34 dp compact).
+private val MODEL_SELECTOR_HEIGHT get() = COMPOSER_CONTROL_HEIGHT - 10.dp
+// Narrow windows (see CHAT_COMPACT_WIDTH_DP) tighten the label padding and size so the capsule narrows.
+private val MODEL_SELECTOR_PADDING get() = if (chatCompactWidth) 5.dp else 8.dp
 private val COMPOSER_SEND_BUTTON_GAP = 14.dp
 
 /**
@@ -137,11 +139,7 @@ internal fun RowScope.ComposerModelSelector(
                         .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = enabled),
                     contentPadding = PaddingValues(MODEL_SELECTOR_PADDING),
                 ) {
-                    Crossfade(
-                        targetState = displayText,
-                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-                        label = "composerModelSelector",
-                    ) { label ->
+                    IdentityLabelCrossfade(targetState = displayText) { label ->
                         // Each label keeps its own width while it fades, so an outgoing longer name is
                         // cut only by the moving clip; it ellipsizes only past the space left.
                         Text(

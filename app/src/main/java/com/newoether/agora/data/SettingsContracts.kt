@@ -19,32 +19,6 @@ data class ApiKeyEntry(
     val provider: String = Constants.PROVIDER_GOOGLE
 )
 
-const val SSH_AUTH_PASSWORD = "password"
-const val SSH_AUTH_PRIVATE_KEY = "private_key"
-@Serializable
-data class ShellDeviceConfig(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val description: String = "",
-    val type: String = "conch",          // "conch" | "ssh"
-    // Conch fields (type=conch)
-    val serverUrl: String = "",
-    val apiKey: String = "",
-    val conchPublicKey: String = "",
-    // SSH fields (type=ssh)
-    val sshHost: String = "",
-    val sshPort: Int = 22,
-    val sshUser: String = "root",
-    val sshPassword: String = "",
-    val sshAuthMode: String = SSH_AUTH_PASSWORD,
-    val sshPrivateKey: String = "",
-    val sshPrivateKeyName: String = "",
-    val sshKeyPassphrase: String = "",
-    // Pinned SSH host key (base64 of the server public-key blob). Blank = not yet
-    // pinned (trust-on-first-use); once set, connections must match or are rejected.
-    val sshHostKey: String = ""
-)
-
 @Serializable
 enum class McpTransportType {
     @SerialName("streamable_http")
@@ -77,6 +51,8 @@ data class SystemPromptEntry(
     // Legacy fields retained only so prompts saved before structured message templates deserialize.
     val userPrependItems: List<PromptTemplateItem> = emptyList(),
     val userPostpendItems: List<PromptTemplateItem> = emptyList(),
+    /** Completed built-in migration revision; absent legacy JSON starts at zero. Never prompt text. */
+    val builtInMigrationVersion: Int = 0,
 ) {
     val resolvedSystemItems: List<PromptTemplateItem>
         get() = if (systemItems.isNotEmpty()) systemItems
@@ -97,7 +73,7 @@ data class SystemPromptEntry(
 }
 
 internal val WEB_SEARCH_PROVIDERS = setOf(
-    "duckduckgo", "brave", "kagi", "serper", "tavily", "searxng",
+    "duckduckgo", "brave", "kagi", "serper", "tavily", "exa", "searxng",
 )
 
 internal fun normalizeWebSearchProvider(provider: String?): String =

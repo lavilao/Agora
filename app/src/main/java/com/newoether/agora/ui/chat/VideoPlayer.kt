@@ -9,7 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -30,22 +31,27 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.newoether.agora.R
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToLong
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoPlayer(
     uri: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    closing: Boolean = false
+    closing: Boolean = false,
+    onLongPress: (() -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var contentReady by remember { mutableStateOf(false) }
+    var playbackFailed by remember(uri) { mutableStateOf(false) }
     var internalClosing by remember { mutableStateOf(false) }
     val effectiveClosing = closing || internalClosing
     val alpha by animateFloatAsState(
@@ -84,7 +90,7 @@ fun VideoPlayer(
 
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.parse(uri)))
+            setMediaItem(MediaItem.fromUri(playableUri(uri)))
             prepare()
             playWhenReady = false
         }
@@ -101,6 +107,11 @@ fun VideoPlayer(
             }
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                // Without this the surface stays at alpha 0 and the dialog is a silent black
+                // rectangle: the reader cannot tell a missing file from a decoding failure.
+                playbackFailed = true
             }
             override fun onPositionDiscontinuity(old: Player.PositionInfo, new: Player.PositionInfo, reason: Int) {
                 currentPositionMs = new.positionMs.coerceAtLeast(0)
@@ -142,6 +153,25 @@ fun VideoPlayer(
 
     val progress = if (durationMs > 0) currentPositionMs.toFloat() / durationMs else 0f
 
+    if (playbackFailed) {
+        Box(
+            modifier = modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.video_playback_failed),
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = onClose) {
+                    Text(stringResource(R.string.provider_close), color = Color.White)
+                }
+            }
+        }
+        return
+    }
+
     fun formatTime(ms: Long): String {
         val s = (ms / 1000)
         val m = s / 60
@@ -156,11 +186,6 @@ fun VideoPlayer(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .alpha(alpha)
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { toggleControls() }
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -175,12 +200,26 @@ fun VideoPlayer(
                 update = { view ->
                     if (view.player !== player) view.player = player
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().alpha(alpha)
+            )
+
+            // PlayerView is an Android view and can consume raw touches, so the tap and long-press
+            // handlers live on a transparent layer above it instead of on the parent box.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { toggleControls() },
+                        onLongClick = onLongPress,
+                        hapticFeedbackEnabled = false,
+                    )
             )
 
             // Central play/pause button (visible when paused or controls shown)
             AnimatedVisibility(
-                visible = !isPlaying || controlsVisible,
+                visible = contentReady && (!isPlaying || controlsVisible),
                 enter = fadeIn(tween(200)),
                 exit = fadeOut(tween(200)),
                 modifier = Modifier.align(Alignment.Center)
@@ -252,4 +291,10 @@ fun VideoPlayer(
             }
         }
     }
+}
+
+/** ExoPlayer needs an explicit scheme; bare storage paths arrive from attachment metadata. */
+private fun playableUri(raw: String): Uri {
+    val trimmed = raw.trim()
+    return if (trimmed.startsWith("/")) Uri.fromFile(File(trimmed)) else Uri.parse(trimmed)
 }

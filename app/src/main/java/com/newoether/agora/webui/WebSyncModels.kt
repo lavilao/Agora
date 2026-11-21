@@ -163,6 +163,7 @@ internal sealed interface WebSyncEvent {
         val advanced: JsonObject? = null,
         val compact: JsonObject? = null,
         val systemPrompt: JsonObject? = null,
+        val sandboxAttachments: Boolean = false,
     ) : WebSyncEvent
 
     /**
@@ -210,6 +211,7 @@ internal data class WebConversation(
     val generating: Boolean,
     val unread: Boolean,
     val isPinned: Boolean = false,
+    val interaction: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)

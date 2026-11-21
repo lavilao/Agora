@@ -2,6 +2,9 @@ package com.newoether.agora.api.local
 
 import com.newoether.agora.api.*
 import com.newoether.agora.api.util.buildToolCallId
+import com.newoether.agora.api.util.RequestFormatException
+import com.newoether.agora.api.util.imageArtifactsForSend
+import com.newoether.agora.api.util.readableImageArtifactFile
 
 import android.content.Context
 import com.newoether.agora.R
@@ -117,12 +120,23 @@ class LocalProvider(
         // Build template messages, collecting images per-message with <__media__> markers
         val imagePaths = mutableListOf<String>()
         val localContextWindow = minOf(config.maxContextWindow, modelConfig.nCtx).coerceAtLeast(1)
-        val resolvedRequest = config.copy(maxContextWindow = localContextWindow).resolveRequest(messages)
-        val templateMessages = buildTemplateMessages(
-            resolvedRequest.messages,
-            resolvedRequest.systemPrompt,
-            imagePaths,
+        val resolvedRequest = config.copy(maxContextWindow = localContextWindow).resolveRequest(
+            messages,
+            fallbackCosts = com.newoether.agora.api.util.tokens.ContextCostModels.forModel(
+                config.modelId, LocalModelRuntime::exactTokenCountOrNull,
+            ),
         )
+        val templateMessages = try {
+            buildTemplateMessages(
+                if (config.includeImages) resolvedRequest.messages
+                else resolvedRequest.messages.map { it.copy(images = emptyList()) },
+                resolvedRequest.systemPrompt,
+                imagePaths,
+            )
+        } catch (error: RequestFormatException) {
+            emit(StreamEvent.Error(GenerationError.RequestFormat(name, error.violations.joinToString())))
+            return@runChat
+        }
         val hasImages = imagePaths.isNotEmpty()
 
         if (hasImages) {
@@ -626,8 +640,10 @@ class LocalProvider(
                 Participant.ERROR -> "user"
             }
 
-            val images = msg.images.filter { it.isNotBlank() }
-            val content = if (role == "user" && images.isNotEmpty() && imagePathsOut != null) {
+            val images = if (role == "user" && imagePathsOut != null) {
+                msg.imageArtifactsForSend().mapNotNull { readableImageArtifactFile(it)?.absolutePath }
+            } else emptyList()
+            val content = if (images.isNotEmpty() && imagePathsOut != null) {
                 imagePathsOut.addAll(images)
                 images.joinToString("\n") { "<__media__>" } + "\n" + msg.text
             } else {

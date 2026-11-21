@@ -16,8 +16,20 @@ import java.io.File
  */
 object AlpineArchitecture {
 
+    @Volatile private var archOverride: String? = null
+
+    private val resolvedArch: String by lazy { resolveAlpineArch() }
+
     /** Alpine architecture matching this process ("aarch64", "armv7", "x86_64", "x86"). */
-    val alpineArch: String = resolveAlpineArch()
+    val alpineArch: String get() = archOverride ?: resolvedArch
+
+    /**
+     * Test seam: JVM unit tests run on x86_64 while the pinned Debian/Ubuntu sources are arm64
+     * only, so the arm64 tests pin the architecture instead of the host's real one.
+     */
+    internal fun overrideForTests(arch: String?) {
+        archOverride = arch
+    }
 
     /** Pinned minirootfs download URL for [alpineArch]. */
     val rootfsUrl: String get() = profile(alpineArch).url

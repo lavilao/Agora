@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.newoether.agora.R
+import com.newoether.agora.sandbox.AlpineArchitecture
 import com.newoether.agora.sandbox.RootfsInstallPhase
 import com.newoether.agora.sandbox.SandboxDistribution
 import com.newoether.agora.sandbox.SandboxManager
@@ -19,7 +20,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +35,11 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsSandboxPresentationTest {
     @get:Rule val compose = createComposeRule()
+
+    // Debian/Ubuntu are only offered on arm64, so the JVM host must present that ABI.
+    @Before fun pinArm64() = AlpineArchitecture.overrideForTests("aarch64")
+
+    @After fun restoreArchitecture() = AlpineArchitecture.overrideForTests(null)
 
     private val debianVersion = SandboxDistribution.DEBIAN.let { "${it.displayName} ${it.versionLabel}" }
     private val selected = MutableStateFlow(SandboxDistribution.DEBIAN)

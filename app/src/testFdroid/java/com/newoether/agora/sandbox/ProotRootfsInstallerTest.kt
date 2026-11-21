@@ -9,10 +9,12 @@ import java.nio.file.Files
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -20,6 +22,11 @@ import org.junit.rules.TemporaryFolder
 class ProotRootfsInstallerTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    // The pinned sources are arm64-only (Debian/Ubuntu); the JVM host reports x86_64.
+    @Before fun pinArm64() = AlpineArchitecture.overrideForTests("aarch64")
+
+    @After fun restoreArchitecture() = AlpineArchitecture.overrideForTests(null)
 
     @Test
     fun aptConfigurationReplacesImageSourcesAndUpdatesRootHome() {

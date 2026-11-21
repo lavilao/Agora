@@ -28,4 +28,18 @@ class SandboxDistributionTest {
             assertFalse(distribution.quickPackages.contains("build-base"))
         }
     }
+
+    @Test
+    fun onlyAlpineIsSelectableWithoutAnArm64Process() {
+        try {
+            listOf("armv7", "x86_64", "x86").forEach { arch ->
+                AlpineArchitecture.overrideForTests(arch)
+                assertEquals(listOf(SandboxDistribution.ALPINE), SandboxDistribution.selectable)
+            }
+            AlpineArchitecture.overrideForTests("aarch64")
+            assertEquals(SandboxDistribution.entries, SandboxDistribution.selectable)
+        } finally {
+            AlpineArchitecture.overrideForTests(null)
+        }
+    }
 }

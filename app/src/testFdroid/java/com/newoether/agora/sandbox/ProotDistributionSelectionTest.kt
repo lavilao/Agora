@@ -23,13 +23,20 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.After
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class ProotDistributionSelectionTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    // These cases exercise arm64 userlands; the JVM host is x86_64 where they are not selectable.
+    @Before fun pinArm64() = AlpineArchitecture.overrideForTests("aarch64")
+
+    @After fun restoreArchitecture() = AlpineArchitecture.overrideForTests(null)
 
     private fun manager(
         directory: File,

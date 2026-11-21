@@ -479,9 +479,14 @@ static-prefix cache stable across a day.
 Mirage, Cactus' vision `.cact`, runs on that same prebuilt engine as the third
 model kind. It is an image-understanding model, not a chat model: `CactusChatEngine`
 routes a vision archive to `cactus_describe()` with the last user turn's image
-decoded to packed RGB, asks only for the scene, objects and OCR sections, and
-renders the structured record as transcript text (`CactusVisionTranscript`); the
-boxes, scores and masks stay in the engine JSON. Because that answer is ordinary
+decoded to packed RGB, leaves the record's sections at the engine default (scene,
+objects, regions, text, relations, events) and renders the whole record as
+transcript text (`CactusVisionTranscript`): scene fields, named objects and
+regions with their properties, the writing it read, and relations resolved from
+their ids into "subject predicate object" lines. Only geometry — boxes, masks,
+points and detection scores — stays behind in the engine JSON, and the generated
+`reasoning` trace is dropped because Cactus' own evaluation found it did not help
+a downstream reader. Because that answer is ordinary
 chat text, Mirage serves two surfaces with no provider change: a photo attached
 to a conversation with Mirage selected, and the image transcription setting,
 where selecting the Mirage model transcribes images for any chat model that

@@ -164,17 +164,46 @@ class CactusVisionTranscriptTest {
         CactusVisionTranscript.render(Json.parseToJsonElement(raw).jsonObject)
 
     @Test
-    fun `renders the scene objects and read text`() {
+    fun `renders the whole scene graph the engine returns`() {
         val text = render(
-            """{"description":"A stop sign on a pole.",
-                "objects":[{"name":"stop sign","score":0.64},{"name":"pole"}],
-                "text":[{"text":"ARRET"}],
+            """{
+                "scene":{"setting":"outdoor","surface":"asphalt","lighting":"bright"},
+                "objects":[
+                    {"id":1,"name":"stop sign","bbox":[0,0,1,1],"score":0.64,"position":"left",
+                     "description":{"color":"red","shape":"octagonal"}},
+                    {"id":2,"name":"pole","position":"center"}
+                ],
+                "regions":[{"id":3,"name":"trees","position":"background"}],
+                "text":[{"string":"ARRET","bbox":[1,2,3,4],"score":0.45}],
+                "relations":[{"subject":1,"predicate":"attached_to","object":2}],
+                "events":["a car waits"],
                 "reasoning":"inferred from the sign"}""",
         )
         assertEquals(
-            "A stop sign on a pole.\nObjects: stop sign, pole\nText in the image:\n- ARRET",
+            """
+            Scene: setting: outdoor · surface: asphalt · lighting: bright
+            Objects:
+            - stop sign (red, octagonal, left)
+            - pole (center)
+            Other regions:
+            - trees (background)
+            Text in the image:
+            - ARRET
+            Relations:
+            - stop sign attached to pole
+            Events:
+            - a car waits
+            """.trimIndent(),
             text,
         )
+    }
+
+    @Test
+    fun `keeps an unresolved relation reference instead of dropping it`() {
+        val text = render(
+            """{"relations":[{"subject":9,"predicate":"on","object":"table"}]}""",
+        )
+        assertEquals("Relations:\n- 9 on table", text)
     }
 
     @Test
@@ -182,7 +211,7 @@ class CactusVisionTranscriptTest {
         val text = render(
             """{"description":"A desk.","objects":["mug",""],"relations":[]}""",
         )
-        assertEquals("A desk.\nObjects: mug", text)
+        assertEquals("A desk.\nObjects:\n- mug", text)
     }
 }
 

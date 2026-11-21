@@ -18,8 +18,9 @@ import kotlinx.serialization.json.jsonPrimitive
  * the same prebuilt runtime as Needle 3 and Whistle. It is not a chat model:
  * the runtime describes one picture through `cactus_describe()` — an RGB
  * buffer plus JSON options — and answers with a structured record (scene
- * description, objects, OCR text, relations). [CactusChatEngine] renders that
- * record as text, which is what lets Mirage serve the app's image
+ * fields, objects and regions with their attributes, text read from the image,
+ * relations between those entities and any events). [CactusChatEngine] renders
+ * that record as text, which is what lets Mirage serve the app's image
  * transcription setting and an attached photo in a conversation.
  *
  * The engine keeps one model per kind, so a resident Mirage archive lives
@@ -77,13 +78,20 @@ internal object CactusVisionEngine {
     }
 
     /**
-     * Ask only for the parts the chat surface can present as text: the scene
-     * description, the objects it found and the writing it read. Masks and
-     * boxes carry no meaning in a transcript, so they stay out of the request.
+     * Leaves the record's sections at the engine's default, which is the whole
+     * thing: scene, objects, regions, text, relations and events. Naming a
+     * subset would drop exactly the parts the transcript now renders, and the
+     * budget below bounds the larger answer instead.
      */
     private fun optionsJson(maxTokens: Int): String =
-        "{\"sections\":[\"scene\",\"objects\",\"text\"],\"max_tokens\":" +
-            maxTokens.coerceIn(64, 1024) + "}"
+        "{\"max_tokens\":" + maxTokens.coerceIn(256, MAX_RECORD_TOKENS) + "}"
+
+    /**
+     * Ceiling for one record. Detection boxes, scores and masks dominate the
+     * raw JSON, so a busy photo needs more room than a chat turn; past this
+     * the answer costs more to decode than it adds to a transcript.
+     */
+    private const val MAX_RECORD_TOKENS = 2048
 
     private data class RgbPixels(val bytes: ByteArray, val width: Int, val height: Int)
 
@@ -160,53 +168,203 @@ internal data class MirageDescription(
 /**
  * Renders Mirage's structured record as plain transcript text.
  *
- * The record carries a scene description, the objects it found with their
- * attributes, the writing it read, and a short reasoning trace. Only those
- * human-readable parts reach the transcript: boxes, scores and masks stay in
- * the JSON, where they are of no use to a chat model or a saved transcript.
+ * The record is a small scene graph: scene fields, objects and regions with
+ * open-vocabulary names and properties, the writing read from the image,
+ * subject/predicate/object relations between those entities and any events.
+ * All of it is text a reader can use, so all of it reaches the transcript.
+ * Only geometry stays behind: boxes, masks, points and detection scores say
+ * where something is in the pixels, which no transcript consumer can use.
+ *
+ * The generated `reasoning` trace is left out on purpose. It repeats what the
+ * fields already state, and Cactus' own evaluation found it did not help a
+ * downstream reader.
  */
 internal object CactusVisionTranscript {
 
     fun render(root: JsonObject): String {
+        val objects = root.namedEntries("objects")
+        val regions = root.namedEntries("regions")
+        val names = buildMap {
+            (objects + regions).forEach { entry ->
+                val id = entry.id ?: return@forEach
+                val name = entry.name ?: return@forEach
+                put(id, name)
+            }
+        }
+
         val parts = mutableListOf<String>()
         root.stringOf("description")
             ?.takeIf { it.isNotBlank() }
             ?.let(parts::add)
 
-        val objects = root.namedEntries("objects", listOf("name", "label"))
-        if (objects.isNotEmpty()) {
-            parts.add("Objects: " + objects.joinToString(", "))
+        val scene = root.objectOf("scene")?.fields().orEmpty()
+            .ifEmpty { listOfNotNull(root.stringOf("scene")) }
+            .filter { it.isNotBlank() }
+        if (scene.isNotEmpty()) {
+            parts.add("Scene: " + scene.joinToString(" · "))
         }
-        val texts = root.namedEntries("text", listOf("text", "value", "content"))
+
+        if (objects.isNotEmpty()) {
+            parts.add("Objects:")
+            objects.mapTo(parts) { "- " + it.line() }
+        }
+        if (regions.isNotEmpty()) {
+            parts.add("Other regions:")
+            regions.mapTo(parts) { "- " + it.line() }
+        }
+
+        val texts = root.namedEntries("text", listOf("string", "text", "value", "content"))
+            .mapNotNull { it.name }
         if (texts.isNotEmpty()) {
             parts.add("Text in the image:")
-            texts.forEach { parts.add("- $it") }
+            texts.mapTo(parts) { "- $it" }
         }
-        val relations = root.namedEntries("relations", listOf("description", "label", "relation"))
+
+        val relations = root.linesOf("relations", names)
         if (relations.isNotEmpty()) {
-            parts.add("Relations: " + relations.joinToString("; "))
+            parts.add("Relations:")
+            relations.mapTo(parts) { "- $it" }
+        }
+
+        val events = root.linesOf("events", names)
+        if (events.isNotEmpty()) {
+            parts.add("Events:")
+            events.mapTo(parts) { "- $it" }
         }
         return parts.joinToString("\n")
     }
 
+    /** One object or region: its name plus the properties it was given. */
+    private data class Entry(
+        val id: String?,
+        val name: String?,
+        val traits: List<String>,
+    ) {
+        fun line(): String {
+            val label = name ?: return traits.joinToString(", ")
+            return if (traits.isEmpty()) label else "$label (${traits.joinToString(", ")})"
+        }
+    }
+
     private fun JsonObject.stringOf(key: String): String? =
-        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        (this[key] as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.content
+            ?.takeIf { it.isNotBlank() && it != "null" }
+
+    private fun JsonObject.objectOf(key: String): JsonObject? = this[key] as? JsonObject
+
+    /** `"setting: indoor"` lines from a flat object such as `scene`. */
+    private fun JsonObject.fields(): List<String> =
+        entries.mapNotNull { (key, value) ->
+            (value as? JsonPrimitive)
+                ?.takeIf { it.isString }
+                ?.content
+                ?.takeIf { it.isNotBlank() && it != "null" }
+                ?.let { "$key: $it" }
+        }
+
+    /** Property values of a nested `description`/`attributes` object. */
+    private fun JsonObject.traitValues(): List<String> =
+        entries.mapNotNull { (_, value) ->
+            (value as? JsonPrimitive)
+                ?.takeIf { it.isString }
+                ?.content
+                ?.takeIf { it.isNotBlank() && it != "null" }
+        }
+
+    private fun JsonObject.reference(key: String, names: Map<String, String>): String? {
+        val element = this[key] ?: return null
+        val raw = when (element) {
+            is JsonPrimitive -> element.content
+            is JsonObject -> element.nameOf()
+            else -> null
+        }?.takeIf { it.isNotBlank() && it != "null" } ?: return null
+        return names[raw] ?: raw
+    }
+
+    private fun JsonObject.nameOf(): String? =
+        listOf("name", "label", "string", "id").firstNotNullOfOrNull { field -> stringOf(field) }
 
     /**
-     * Names of the entries of [key], preferring the first key in [fields] that
-     * carries a non-blank string. An array of plain strings is accepted too, so
-     * a schema that flattens its entries still renders.
+     * Entities of [key]: an array of objects, or plain strings when a schema
+     * flattens its entries.
      */
-    private fun JsonObject.namedEntries(key: String, fields: List<String>): List<String> {
+    private fun JsonObject.namedEntries(key: String): List<Entry> {
         val array = this[key] as? JsonArray ?: return emptyList()
         return array.mapNotNull { element ->
             when (element) {
-                is JsonPrimitive -> element.content.takeIf { it.isNotBlank() && it != "null" }
-                is JsonObject -> fields.firstNotNullOfOrNull { field ->
-                    element.stringOf(field)?.takeIf { it.isNotBlank() }
+                is JsonPrimitive -> element.content
+                    .takeIf { it.isNotBlank() && it != "null" }
+                    ?.let { Entry(id = null, name = it, traits = emptyList()) }
+                is JsonObject -> element.entry()
+                else -> null
+            }
+        }
+    }
+
+    /** Text entries, preferring the first key in [fields] that carries a string. */
+    private fun JsonObject.namedEntries(key: String, fields: List<String>): List<Entry> {
+        val array = this[key] as? JsonArray ?: return emptyList()
+        return array.mapNotNull { element ->
+            when (element) {
+                is JsonPrimitive -> element.content
+                    .takeIf { it.isNotBlank() && it != "null" }
+                    ?.let { Entry(id = null, name = it, traits = emptyList()) }
+                is JsonObject -> {
+                    val name = fields.firstNotNullOfOrNull { field -> element.stringOf(field) }
+                    name?.let { Entry(id = null, name = it, traits = emptyList()) }
                 }
                 else -> null
             }
         }
+    }
+
+    private fun JsonObject.entry(): Entry? {
+        val traits = buildList {
+            this@entry.objectOf("description")?.traitValues()?.let(::addAll)
+            this@entry.objectOf("attributes")?.traitValues()?.let(::addAll)
+            (this@entry["attributes"] as? JsonArray)?.mapNotNullTo(this) { element ->
+                (element as? JsonPrimitive)
+                    ?.takeIf { it.isString }
+                    ?.content
+                    ?.takeIf { it.isNotBlank() && it != "null" }
+            }
+            this@entry.stringOf("position")?.let(::add)
+        }
+        val name = nameOf()
+        if (name == null && traits.isEmpty()) return null
+        val id = (this["id"] as? JsonPrimitive)?.content?.takeIf { it != "null" }
+        return Entry(id = id, name = name, traits = traits)
+    }
+
+    /**
+     * Relations and events. The engine stores them as a subject, a predicate
+     * and an object, with numeric ids pointing into [names]; resolving them
+     * here is what turns `{1, attached_to, 8}` into "wine bottle attached to
+     * chair" for a reader that never saw the ids.
+     */
+    private fun JsonObject.linesOf(key: String, names: Map<String, String>): List<String> {
+        val array = this[key] as? JsonArray ?: return emptyList()
+        return array.mapNotNull { element ->
+            when (element) {
+                is JsonPrimitive -> element.content.takeIf { it.isNotBlank() && it != "null" }
+                is JsonObject -> element.line(names)
+                else -> null
+            }
+        }
+    }
+
+    private fun JsonObject.line(names: Map<String, String>): String? {
+        val predicate = listOf("predicate", "relation", "label")
+            .firstNotNullOfOrNull { field -> stringOf(field) }
+        val subject = reference("subject", names)
+        val target = reference("object", names)
+        if (predicate != null && subject != null && target != null) {
+            return "$subject ${predicate.replace('_', ' ')} $target"
+        }
+        return nameOf()?.takeIf { it.isNotBlank() && it != "null" }
+            ?: listOf("description", "text")
+                .firstNotNullOfOrNull { field -> stringOf(field) }
     }
 }
